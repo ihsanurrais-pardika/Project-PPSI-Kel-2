@@ -17,11 +17,13 @@ import {
   Cpu,
   Layers,
   ArrowRight,
+  Check,
 } from 'lucide-react';
-import { CourseOffering, ClassRombel } from '../types';
+import { CourseOffering, ClassRombel, Lecturer } from '../types';
+import { mockLecturers } from '../data/mockData';
 
 export const FormUsulanMKPage: React.FC = () => {
-  const { addCourse, setActivePage, showToast, mockLecturers } = useApp();
+  const { addCourse, setActivePage, showToast } = useApp();
 
   const [code, setCode] = useState('SI211');
   const [name, setName] = useState('Basis Data Terdistribusi');
@@ -83,8 +85,8 @@ export const FormUsulanMKPage: React.FC = () => {
       return;
     }
 
-    const primary = mockLecturers.find(l => l.id === primaryLecturerId) || mockLecturers[0];
-    const tandems = mockLecturers.filter(l => tandemIds.includes(l.id));
+    const primary = mockLecturers.find((l: Lecturer) => l.id === primaryLecturerId) || mockLecturers[0];
+    const tandems = mockLecturers.filter((l: Lecturer) => tandemIds.includes(l.id));
 
     const specialConstraints: string[] = [];
     if (avoidFridayNoon) specialConstraints.push('Hindari Jumat Siang');
@@ -421,7 +423,7 @@ export const FormUsulanMKPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  const available = mockLecturers.find(l => l.id !== primaryLecturerId && !tandemIds.includes(l.id));
+                  const available = mockLecturers.find((l: Lecturer) => l.id !== primaryLecturerId && !tandemIds.includes(l.id));
                   if (available) {
                     setTandemIds([...tandemIds, available.id]);
                     showToast(`Dosen pendamping ${available.name} ditambahkan.`, 'info');
@@ -479,7 +481,7 @@ export const FormUsulanMKPage: React.FC = () => {
               </label>
               <div className="space-y-2">
                 {tandemIds.map((tid) => {
-                  const lec = mockLecturers.find(l => l.id === tid);
+                  const lec = mockLecturers.find((l: Lecturer) => l.id === tid);
                   if (!lec) return null;
                   return (
                     <div

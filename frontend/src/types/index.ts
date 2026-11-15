@@ -57,14 +57,15 @@ export interface Room {
   id: string;
   name: string;
   code: string;
-  building: 'Gedung FTI' | 'GKB Bersama';
+  building: 'Gedung FTI' | 'GKB Bersama' | string;
   floor: number;
   capacity: number;
   areaM2?: number;
-  type: 'Teori' | 'Teori Multimedia' | 'Teori Standar' | 'Teori Besar' | 'Lab Software' | 'Lab Hardware & IoT' | 'Studio' | 'Seminar';
+  wing?: string;
+  type: 'Teori' | 'Teori Multimedia' | 'Teori Standar' | 'Teori Besar' | 'Lab Software' | 'Lab Hardware & IoT' | 'Studio' | 'Seminar' | 'Laboratorium' | string;
   isAccessible: boolean; // Ramah disabilitas (lantai 1 / lift ready)
-  status: 'Siap Digunakan' | 'Pemeliharaan Berkala' | 'Sedang Digunakan';
-  priorityDepartment: 'Sistem Informasi' | 'Informatika' | 'Teknik Komputer' | 'Fakultas / Bersama';
+  status: 'Siap Digunakan' | 'Pemeliharaan Berkala' | 'Sedang Digunakan' | 'Tersedia' | 'Pemeliharaan' | string;
+  priorityDepartment?: 'Sistem Informasi' | 'Informatika' | 'Teknik Komputer' | 'Fakultas / Bersama' | string;
   facilities: string[];
 }
 
@@ -72,39 +73,45 @@ export interface ScheduleItem {
   id: string;
   courseCode: string;
   courseName: string;
-  classLabel: string;
+  classLabel?: string;
+  className?: string;
   sks: number;
   studentCount: number;
-  roomId: string;
+  roomId?: string;
   roomName: string;
-  building: string;
-  floor: number;
-  day: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat';
+  building?: string;
+  floor?: number;
+  day: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | string;
   sessionIndex: number; // 1 to 5
-  timeLabel: string; // e.g. "07:30 - 09:10"
-  primaryLecturer: string;
+  timeLabel?: string; // e.g. "07:30 - 09:10"
+  time?: string;
+  primaryLecturer?: string;
+  lecturerName?: string;
   tandemLecturers?: string[];
   isTandem: boolean;
-  department: 'Sistem Informasi' | 'Informatika' | 'Teknik Komputer';
-  status: 'OK' | 'Tandem' | 'Warning' | 'Bentrok';
+  department: 'Sistem Informasi' | 'Informatika' | 'Teknik Komputer' | 'SI' | 'IF' | 'TK' | string;
+  status: 'OK' | 'Tandem' | 'Warning' | 'Bentrok' | string;
   note?: string;
 }
 
 export interface ConflictItem {
   id: string;
-  type: 'Kapasitas Ruang' | 'Preferensi Jadwal' | 'Jarak / Interval' | 'Bentrok Dosen' | 'Bentrok Rombel';
-  severity: 'hard' | 'soft' | 'warning';
+  type: 'Kapasitas Ruang' | 'Preferensi Jadwal' | 'Jarak / Interval' | 'Bentrok Dosen' | 'Bentrok Rombel' | 'Hard Constraint' | 'Soft Constraint' | string;
+  severity: 'hard' | 'soft' | 'warning' | 'Tinggi' | 'Sedang' | 'Rendah' | string;
   title: string;
-  courseCode: string;
-  courseName: string;
-  classLabel: string;
-  lecturerName: string;
-  roomName: string;
-  day: string;
-  timeSlot: string;
-  details: string;
-  recommendation: string;
+  courseCode?: string;
+  courseName?: string;
+  classLabel?: string;
+  lecturerName?: string;
+  roomName?: string;
+  day?: string;
+  timeSlot?: string;
+  details?: string;
+  description?: string;
+  recommendation?: string;
   isResolved: boolean;
+  department?: string;
+  affectedCourses?: string[];
 }
 
 export interface AuditLogItem {

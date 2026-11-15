@@ -16,6 +16,7 @@ import {
   Cloud,
   SlidersHorizontal,
   HelpCircle,
+  Building2,
 } from 'lucide-react';
 import { UserRole } from '../types';
 

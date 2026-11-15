@@ -18,12 +18,26 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+interface MenuItem {
+  id: string;
+  label: string;
+  icon: any;
+  badge?: string;
+  alertBadge?: string;
+  statusBadge?: string;
+}
+
+interface MenuSection {
+  title: string;
+  items: MenuItem[];
+}
+
 export const Sidebar: React.FC = () => {
   const { activePage, setActivePage, currentUser, logout, conflicts, scheduleApprovalStatus } = useApp();
 
   const unresolvedConflictsCount = conflicts.filter(c => !c.isResolved).length;
 
-  const menuSections = [
+  const menuSections: MenuSection[] = [
     {
       title: 'UTAMA',
       items: [
