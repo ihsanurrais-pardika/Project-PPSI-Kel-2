@@ -53,7 +53,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [currentRole, setCurrentRole] = useState<UserRole>('admin');
   const [activePage, setActivePage] = useState<string>('dashboard_admin');
 
