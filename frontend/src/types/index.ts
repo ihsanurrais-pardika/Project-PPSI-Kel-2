@@ -126,3 +126,4 @@ export interface GAParameters {
   timeoutSeconds: number;
   randomSeed: number;
 }
+

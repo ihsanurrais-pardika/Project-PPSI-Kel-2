@@ -770,3 +770,4 @@ export const HeatmapRuangPage: React.FC = () => {
     </div>
   );
 };
+

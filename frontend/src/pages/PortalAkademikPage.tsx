@@ -443,3 +443,4 @@ export const PortalAkademikPage: React.FC = () => {
     </div>
   );
 };
+

@@ -4,6 +4,7 @@
   "description": "Sistem Informasi Penjadwalan Perkuliahan dan Manajemen Ruang Terintegrasi - FTI Universitas Andalas",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
+    "dev:open": "npm --prefix frontend run dev -- --open",
     "build": "npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview"
   },
