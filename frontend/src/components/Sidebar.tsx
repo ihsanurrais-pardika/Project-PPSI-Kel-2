@@ -48,8 +48,7 @@ export const Sidebar: React.FC = () => {
       title: 'PENJADWALAN TERPADU',
       items: [
         { id: 'jadwal_kuliah', label: 'Jadwal Perkuliahan', icon: Calendar },
-        { id: 'generator_jadwal', label: 'Generator Jadwal', icon: Cpu, badge: 'CP-SAT' },
-        { id: 'optimasi_ga', label: 'Optimasi Genetika (GA)', icon: Dna, badge: 'v2.4' },
+        { id: 'generator_jadwal', label: 'Generator CP-SAT & GA', icon: Cpu, badge: 'v9.8' },
         {
           id: 'validasi_konflik',
           label: 'Validasi & Konflik',
@@ -97,7 +96,7 @@ export const Sidebar: React.FC = () => {
     } else if (id === 'optimasi_ga') {
       setActivePage('generator_jadwal');
     } else if (id === 'utilisasi_heatmap') {
-      setActivePage('ketersediaan_ruang');
+      setActivePage('utilisasi_heatmap');
     } else if (id === 'audit_log') {
       setActivePage('dashboard_admin');
     } else {
@@ -109,6 +108,7 @@ export const Sidebar: React.FC = () => {
     if (activePage === 'kebutuhan_departemen' && (id === 'kebutuhan_si' || id === 'kebutuhan_if' || id === 'kebutuhan_tk')) {
       return true;
     }
+    if (activePage === 'utilisasi_heatmap' && id === 'utilisasi_heatmap') return true;
     return activePage === id;
   };
 

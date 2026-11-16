@@ -12,6 +12,7 @@ import { ValidasiKonflikPage } from './pages/ValidasiKonflikPage';
 import { ApprovalWadekPage } from './pages/ApprovalWadekPage';
 import { JadwalTerpaduPage } from './pages/JadwalTerpaduPage';
 import { PortalAkademikPage } from './pages/PortalAkademikPage';
+import { UtilisasiHeatmapPage } from './pages/UtilisasiHeatmapPage';
 
 const AppContent: React.FC = () => {
   const { isLoggedIn, activePage } = useApp();
@@ -36,8 +37,9 @@ const AppContent: React.FC = () => {
       case 'inventaris_ruang':
         return <InventarisRuangPage />;
       case 'ketersediaan_ruang':
-      case 'utilisasi_heatmap':
         return <HeatmapRuangPage />;
+      case 'utilisasi_heatmap':
+        return <UtilisasiHeatmapPage />;
       case 'generator_jadwal':
       case 'optimasi_ga':
         return <GeneratorJadwalPage />;
