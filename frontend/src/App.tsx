@@ -13,16 +13,32 @@ import { ApprovalWadekPage } from './pages/ApprovalWadekPage';
 import { JadwalTerpaduPage } from './pages/JadwalTerpaduPage';
 import { PortalAkademikPage } from './pages/PortalAkademikPage';
 import { UtilisasiHeatmapPage } from './pages/UtilisasiHeatmapPage';
+import { WadekWorkspacePage } from './pages/WadekWorkspacePage';
+import { DepartemenWorkspacePage } from './pages/DepartemenWorkspacePage';
 
 const AppContent: React.FC = () => {
-  const { isLoggedIn, activePage } = useApp();
+  const { isLoggedIn, activePage, currentRole } = useApp();
 
-  // If user is not logged in, always render the high-fidelity SSO Login Page!
+  // If user is not logged in, render the SSO Login Page
   if (!isLoggedIn) {
     return <LoginPage />;
   }
 
-  // Once authenticated, render Layout with the selected active page
+  // Wadek 1 dedicated executive workspace
+  if (currentRole === 'wadek1') {
+    return <WadekWorkspacePage />;
+  }
+
+  // Department accounts (SI, IF, TK) dedicated workspace (UC-03 & UC-04)
+  if (
+    currentRole === 'departemen_si' ||
+    currentRole === 'departemen_if' ||
+    currentRole === 'departemen_tk'
+  ) {
+    return <DepartemenWorkspacePage />;
+  }
+
+  // Standard Layout with pages for Admin and others
   const renderActivePage = () => {
     switch (activePage) {
       case 'dashboard_admin':

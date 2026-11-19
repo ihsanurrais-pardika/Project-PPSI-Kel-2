@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   Calendar,
   Cpu,
-  Dna,
   ShieldAlert,
   Boxes,
   CalendarCheck,
@@ -14,8 +13,6 @@ import {
   Globe,
   History,
   Settings,
-  LogOut,
-  Sparkles,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -33,11 +30,11 @@ interface MenuSection {
 }
 
 export const Sidebar: React.FC = () => {
-  const { activePage, setActivePage, currentUser, logout, conflicts, scheduleApprovalStatus } = useApp();
+  const { activePage, setActivePage, currentUser, conflicts, scheduleApprovalStatus } = useApp();
 
   const unresolvedConflictsCount = conflicts.filter(c => !c.isResolved).length;
 
-  const menuSections: MenuSection[] = [
+  const adminMenuSections: MenuSection[] = [
     {
       title: 'UTAMA',
       items: [
@@ -48,7 +45,7 @@ export const Sidebar: React.FC = () => {
       title: 'PENJADWALAN TERPADU',
       items: [
         { id: 'jadwal_kuliah', label: 'Jadwal Perkuliahan', icon: Calendar },
-        { id: 'generator_jadwal', label: 'Generator CP-SAT & GA', icon: Cpu, badge: 'v9.8' },
+        { id: 'generator_jadwal', label: 'Buat Jadwal Otomatis', icon: Cpu },
         {
           id: 'validasi_konflik',
           label: 'Validasi & Konflik',
@@ -62,16 +59,13 @@ export const Sidebar: React.FC = () => {
       items: [
         { id: 'inventaris_ruang', label: 'Inventaris & Spek Ruang', icon: Boxes },
         { id: 'ketersediaan_ruang', label: 'Ketersediaan Ruang', icon: CalendarCheck },
-        { id: 'utilisasi_heatmap', label: 'Utilisasi Heatmap', icon: Grid3X3 },
+        { id: 'utilisasi_heatmap', label: 'Statistik Ruang', icon: Grid3X3 },
       ],
     },
     {
       title: 'KEBUTUHAN DEPARTEMEN',
       items: [
-        { id: 'kebutuhan_si', label: 'Sistem Informasi (SI)', icon: GitBranch },
-        { id: 'kebutuhan_if', label: 'Informatika (IF)', icon: GitBranch },
-        { id: 'kebutuhan_tk', label: 'Teknik Komputer (TK)', icon: GitBranch },
-        { id: 'form_usulan_mk', label: 'Input & Preferensi MK', icon: Sparkles, badge: 'Baru' },
+        { id: 'kebutuhan_departemen', label: 'Tawaran Mata Kuliah', icon: GitBranch },
       ],
     },
     {
@@ -90,8 +84,21 @@ export const Sidebar: React.FC = () => {
     },
   ];
 
+  // WD1 receives a focused workspace for review and decision making.
+  const wadekMenuSections: MenuSection[] = [
+    {
+      title: 'TINJAUAN AKADEMIK',
+      items: [
+        { id: 'approval_wadek', label: 'Persetujuan Jadwal', icon: CheckCircle2, statusBadge: scheduleApprovalStatus === 'Disetujui' || scheduleApprovalStatus === 'Resmi' ? scheduleApprovalStatus : 'Review' },
+        { id: 'jadwal_kuliah', label: 'Jadwal Hasil Optimasi', icon: Calendar },
+        { id: 'portal_akademik', label: 'Portal Akademik', icon: Globe },
+      ],
+    },
+  ];
+  const menuSections = currentUser.role === 'wadek1' ? wadekMenuSections : adminMenuSections;
+
   const handleNavClick = (id: string) => {
-    if (id === 'kebutuhan_si' || id === 'kebutuhan_if' || id === 'kebutuhan_tk') {
+    if (id === 'kebutuhan_si' || id === 'kebutuhan_if' || id === 'kebutuhan_tk' || id === 'kebutuhan_departemen') {
       setActivePage('kebutuhan_departemen');
     } else if (id === 'optimasi_ga') {
       setActivePage('generator_jadwal');
@@ -105,6 +112,9 @@ export const Sidebar: React.FC = () => {
   };
 
   const isItemActive = (id: string) => {
+    if (id === 'kebutuhan_departemen' && (activePage === 'kebutuhan_departemen' || activePage === 'form_usulan_mk' || activePage === 'kebutuhan_si' || activePage === 'kebutuhan_if' || activePage === 'kebutuhan_tk')) {
+      return true;
+    }
     if (activePage === 'kebutuhan_departemen' && (id === 'kebutuhan_si' || id === 'kebutuhan_if' || id === 'kebutuhan_tk')) {
       return true;
     }
@@ -129,19 +139,8 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Semester pill badge */}
-      <div className="px-5 pt-3.5 pb-2">
-        <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100 text-[11px]">
-          <span className="flex items-center gap-1.5 text-blue-900 font-semibold">
-            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-            Semester Aktif
-          </span>
-          <span className="font-extrabold text-blue-700">2024/2025 GANJIL</span>
-        </div>
-      </div>
-
       {/* Navigation Sections */}
-      <nav className="flex-1 px-3 py-2 space-y-5 text-xs">
+      <nav className="flex-1 px-3 py-4 space-y-5 text-xs">
         {menuSections.map((sec, idx) => (
           <div key={idx}>
             <div className="px-3 mb-1.5 text-[10px] font-bold text-slate-400 tracking-wider">
@@ -195,33 +194,6 @@ export const Sidebar: React.FC = () => {
           </div>
         ))}
       </nav>
-
-      {/* User profile footer */}
-      <div className="p-3 border-t border-slate-100 bg-slate-50/50">
-        <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200 shadow-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-700 font-bold text-xs shrink-0">
-              {currentUser.name.charAt(0)}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-slate-800 truncate leading-tight">
-                {currentUser.name}
-              </div>
-              <div className="text-[10px] text-slate-500 truncate leading-tight">
-                {currentUser.role.toUpperCase()}
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={logout}
-            title="Keluar dari sistem"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
     </aside>
   );
 };

@@ -41,6 +41,7 @@ interface AppContextType {
   updateGAParams: (params: GAParameters) => void;
   wadekApprove: () => void;
   wadekReject: (note: string) => void;
+  reviewScheduleClass: (scheduleId: string, decision: 'Disetujui' | 'Revisi', note?: string) => void;
   publishOfficialSchedule: () => void;
   reassignRoomSchedule: (scheduleId: string, newRoomId: string, isPermanent: boolean) => void;
   cancelClassOffering: (courseId: string, classId: string, reason: string) => void;
@@ -183,8 +184,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       id: `log-${Date.now()}`,
       timestamp: 'Baru saja',
       activity: `User ${currentUser.name} melakukan logout dari sistem`,
-      description: 'Sesi token JWT dinonaktifkan',
-      category: 'ADMIN',
+      description: 'Sesi pengguna dinonaktifkan',
+      category: 'Admin',
       actorName: currentUser.name,
       actorRole: currentUser.role,
       status: 'info',
@@ -226,7 +227,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       timestamp: 'Baru saja',
       activity: `Pengajuan Kebutuhan MK ${newCourse.code} - ${newCourse.name}`,
       description: `Disimpan dengan ${newCourse.classes.length} rombel kelas, SKS: ${newCourse.sks}`,
-      category: 'DEPT-SI',
+      category: 'Usulan Prodi',
       actorName: currentUser.name,
       actorRole: currentUser.role,
       status: 'success',
@@ -305,7 +306,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       timestamp: 'Baru saja',
       activity: 'Terapkan Rekomendasi Solver (Auto-Fix)',
       description: 'Rotasi 2 slot ruangan berhasil diterapkan. Seluruh hard conflict teratasi 100%.',
-      category: 'CP-SAT SOLVER',
+      category: 'Penjadwalan',
       actorName: currentUser.name,
       actorRole: currentUser.role,
       status: 'success',
@@ -319,9 +320,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const log: AuditLogItem = {
       id: `log-${Date.now()}`,
       timestamp: 'Baru saja',
-      activity: 'Konfigurasi Parameter Algoritma Genetika diperbarui',
-      description: `Populasi: ${params.populationSize}, Cr: ${params.crossoverRate}, Mr: ${params.mutationRate}, MaxGen: ${params.maxGenerations}`,
-      category: 'GA-OPTIMIZER',
+      activity: 'Konfigurasi Parameter Algoritma diperbarui',
+      description: `Populasi: ${params.populationSize}, Cr: ${params.crossoverRate}, Mr: ${params.mutationRate}`,
+      category: 'Optimasi Jadwal',
       actorName: currentUser.name,
       actorRole: currentUser.role,
       status: 'info',
@@ -337,7 +338,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       timestamp: 'Baru saja',
       activity: 'Persetujuan & Pengesahan Draf SK Jadwal oleh Wakil Dekan I',
       description: 'Draf jadwal resmi FTI Ganjil 2024/2025 disahkan dengan tanda tangan digital BSrE.',
-      category: 'APPROVAL WADEK',
+      category: 'Pengesahan WD1',
       actorName: 'Dr. Eng. Rahmadi, M.T.',
       actorRole: 'Wakil Dekan I',
       status: 'success',
@@ -354,13 +355,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       timestamp: 'Baru saja',
       activity: 'Pengembalian Jadwal dengan Catatan Revisi oleh Wadek I',
       description: `Catatan revisi: "${note}"`,
-      category: 'APPROVAL WADEK',
+      category: 'Pengesahan WD1',
       actorName: 'Dr. Eng. Rahmadi, M.T.',
       actorRole: 'Wakil Dekan I',
       status: 'warning',
     };
     setAuditLogs([log, ...auditLogs]);
     showToast(`Draf jadwal dikembalikan ke Admin Fakultas untuk revisi: "${note}"`, 'warning');
+  };
+
+  const reviewScheduleClass = (scheduleId: string, decision: 'Disetujui' | 'Revisi', note = '') => {
+    const selected = schedule.find(item => item.id === scheduleId);
+    if (!selected) return;
+    if (decision === 'Revisi' && !note.trim()) {
+      showToast('Catatan revisi wajib diisi.', 'warning');
+      return;
+    }
+    setSchedule(schedule.map(item => item.id === scheduleId
+      ? { ...item, wd1Status: decision, wd1RevisionNote: decision === 'Revisi' ? note.trim() : '' }
+      : item));
+    const log: AuditLogItem = {
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }),
+      activity: `${decision === 'Disetujui' ? 'ACC' : 'Revisi'} kelas ${selected.courseCode} ${selected.classLabel || selected.className || ''}`.trim(),
+      description: `${selected.courseName} · ${selected.department} · ${selected.day} ${selected.timeLabel || selected.time || ''}${decision === 'Revisi' ? ` · Catatan: ${note.trim()}` : ''}`,
+      category: 'Pengesahan WD1',
+      actorName: currentUser.name,
+      actorRole: 'Wakil Dekan I',
+      status: decision === 'Disetujui' ? 'success' : 'warning',
+    };
+    setAuditLogs(previous => [log, ...previous]);
+    showToast(decision === 'Disetujui' ? 'Persetujuan kelas berhasil dicatat.' : 'Catatan revisi kelas berhasil dikirim ke Admin.', decision === 'Disetujui' ? 'success' : 'info');
   };
 
   const publishOfficialSchedule = () => {
@@ -374,7 +399,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       timestamp: 'Baru saja',
       activity: 'Publikasi Jadwal Resmi Perkuliahan FTI Semester Ganjil 2024/2025',
       description: 'Jadwal resmi diterbitkan secara live dan dapat diakses publik oleh Dosen & Mahasiswa.',
-      category: 'ADMIN',
+      category: 'Admin',
       actorName: currentUser.name,
       actorRole: currentUser.role,
       status: 'success',
@@ -407,7 +432,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       timestamp: 'Baru saja',
       activity: `Penetapan Ruang Pengganti ke ${targetRoom.name}`,
       description: `Jadwal ${scheduleId} dipindahkan ke ${targetRoom.name} (${isPermanent ? 'Permanen' : 'Sementara'})`,
-      category: 'ADMIN',
+      category: 'Admin',
       actorName: currentUser.name,
       actorRole: currentUser.role,
       status: 'info',
@@ -453,6 +478,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateGAParams,
         wadekApprove,
         wadekReject,
+        reviewScheduleClass,
         publishOfficialSchedule,
         reassignRoomSchedule,
         cancelClassOffering,

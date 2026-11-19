@@ -92,6 +92,8 @@ export interface ScheduleItem {
   department: 'Sistem Informasi' | 'Informatika' | 'Teknik Komputer' | 'SI' | 'IF' | 'TK' | string;
   status: 'OK' | 'Tandem' | 'Warning' | 'Bentrok' | string;
   note?: string;
+  wd1Status?: 'Menunggu Review' | 'Disetujui' | 'Revisi';
+  wd1RevisionNote?: string;
 }
 
 export interface ConflictItem {
@@ -119,7 +121,20 @@ export interface AuditLogItem {
   timestamp: string;
   activity: string;
   description: string;
-  category: 'GA-OPTIMIZER' | 'CP-SAT SOLVER' | 'DEPT-SI' | 'DEPT-IF' | 'DEPT-TK' | 'APPROVAL WADEK' | 'ADMIN';
+  category:
+    | 'Optimasi Jadwal'
+    | 'Penjadwalan'
+    | 'Pengesahan WD1'
+    | 'Usulan Prodi'
+    | 'Admin'
+    | 'GA-OPTIMIZER'
+    | 'CP-SAT SOLVER'
+    | 'DEPT-SI'
+    | 'DEPT-IF'
+    | 'DEPT-TK'
+    | 'APPROVAL WADEK'
+    | 'ADMIN'
+    | string;
   actorName: string;
   actorRole: string;
   status: 'success' | 'warning' | 'info';

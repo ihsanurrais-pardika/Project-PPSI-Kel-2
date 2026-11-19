@@ -166,6 +166,36 @@ export const ApprovalWadekPage: React.FC = () => {
         </div>
       </div>
 
+      {/* PRD UC-09: make the effect of GA optimization reviewable by WD1. */}
+      <section className="bg-white rounded-xl border border-slate-200 shadow-xs p-5">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">Perbandingan Kualitas Optimasi</h2>
+            <p className="text-xs text-slate-500 mt-1">Skor penalti sebelum dan sesudah Genetic Algorithm. Nilai lebih rendah menunjukkan jadwal lebih baik.</p>
+          </div>
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+            <Sparkles className="w-3.5 h-3.5" /> Penalti turun 68%
+          </span>
+        </div>
+        <div className="grid md:grid-cols-2 gap-5">
+          <div className="space-y-3">
+            <div>
+              <div className="flex justify-between text-xs mb-1.5"><span className="font-medium text-slate-600">Draf CP-SAT</span><span className="font-bold text-slate-700">312 poin</span></div>
+              <div className="h-3 rounded-full bg-slate-100 overflow-hidden"><div className="h-full w-full bg-slate-400 rounded-full" /></div>
+            </div>
+            <div>
+              <div className="flex justify-between text-xs mb-1.5"><span className="font-medium text-slate-600">Hasil optimasi GA</span><span className="font-bold text-blue-700">101 poin</span></div>
+              <div className="h-3 rounded-full bg-slate-100 overflow-hidden"><div className="h-full w-[32%] bg-blue-600 rounded-full" /></div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg bg-slate-50 border border-slate-100 p-3"><div className="text-[10px] uppercase tracking-wide text-slate-500">Preferensi dosen</div><div className="mt-1 text-lg font-bold text-slate-800">−42%</div><div className="text-[10px] text-slate-500">penalti</div></div>
+            <div className="rounded-lg bg-slate-50 border border-slate-100 p-3"><div className="text-[10px] uppercase tracking-wide text-slate-500">Beban harian</div><div className="mt-1 text-lg font-bold text-slate-800">−31%</div><div className="text-[10px] text-slate-500">penalti</div></div>
+            <div className="rounded-lg bg-slate-50 border border-slate-100 p-3"><div className="text-[10px] uppercase tracking-wide text-slate-500">Jeda antar kelas</div><div className="mt-1 text-lg font-bold text-slate-800">−25%</div><div className="text-[10px] text-slate-500">penalti</div></div>
+          </div>
+        </div>
+      </section>
+
       {/* Main Two Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Department Submissions (7 cols) */}

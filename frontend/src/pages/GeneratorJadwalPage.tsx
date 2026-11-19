@@ -84,21 +84,21 @@ export const GeneratorJadwalPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 mb-1">
             <span className="bg-blue-100 px-2 py-0.5 rounded font-mono">
-              SOLVER DUAL-ENGINE ACTIVE
+              SISTEM AKTIF
             </span>
             <span>•</span>
-            <span className="text-slate-500">Versi Runtime: CP-SAT v9.8 + GA-v2.4</span>
+            <span className="text-slate-500">Optimasi Terpadu Berjalan</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-              Mesin Otomasi Timetable FTI Unand
+              Penjadwalan Otomatis FTI UNAND
             </span>
           </div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight mt-1">
-            Generate Jadwal Kuliah & Engine Optimasi
+            Buat Jadwal Perkuliahan Otomatis
           </h1>
           <p className="text-sm text-slate-500 mt-0.5 max-w-4xl">
-            Pipeline otomatis penjadwalan cerdas mengombinasikan Google OR-Tools CP-SAT untuk kelayakan constraint mutlak (hard constraint) dan Genetic Algorithm untuk optimasi preferensi dosen serta efisiensi spasial (soft constraint).
+            Sistem penjadwalan cerdas terpadu untuk menyusun jadwal perkuliahan tanpa bentrok ruangan maupun dosen, serta memaksimalkan preferensi waktu mengajar.
           </p>
         </div>
 
@@ -108,7 +108,7 @@ export const GeneratorJadwalPage: React.FC = () => {
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-xs transition-colors"
           >
             <Settings className="w-4 h-4 text-slate-500" />
-            <span>Parameter GA</span>
+            <span>Konfigurasi Optimasi</span>
           </button>
           <button
             disabled={isRunningSolver}
@@ -116,7 +116,7 @@ export const GeneratorJadwalPage: React.FC = () => {
             className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-700 rounded-lg hover:bg-blue-800 shadow-sm transition-colors disabled:opacity-50"
           >
             <RotateCw className={`w-4 h-4 ${isRunningSolver ? 'animate-spin' : ''}`} />
-            <span>{isRunningSolver ? 'Menjalankan Solver...' : 'Jalankan Ulang Solver'}</span>
+            <span>{isRunningSolver ? 'Menjalankan Penjadwalan...' : 'Jalankan Penjadwalan Otomatis'}</span>
           </button>
         </div>
       </div>

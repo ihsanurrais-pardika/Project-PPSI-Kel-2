@@ -379,7 +379,7 @@ export const UtilisasiHeatmapPage: React.FC = () => {
         <ChevronRight className="w-3 h-3" />
         <span>Manajemen Ruangan</span>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-slate-700 font-semibold">Utilisasi Heatmap</span>
+        <span className="text-slate-700 font-semibold">Statistik Ruang</span>
       </nav>
 
       {/* ── Page Header ────────────────────────────────────────────── */}
@@ -388,7 +388,7 @@ export const UtilisasiHeatmapPage: React.FC = () => {
           <div className="flex items-center gap-2 mb-1.5">
             <BarChart3 className="w-5 h-5 text-blue-600" />
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Matriks Utilisasi Heatmap Mingguan
+              Matriks Statistik Pemakaian Ruang
             </h1>
           </div>
           <p className="text-sm text-slate-500 max-w-2xl">
