@@ -453,7 +453,7 @@ interface CariKelasPenggantiModalProps {
   allRooms: RoomDefinition[];
   dayDateMapping: Record<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat', { dateStr: string; displayDate: string }>;
   onClose: () => void;
-  showToast: (msg: string, type: string) => void;
+  showToast: (msg: string, type?: 'success' | 'info' | 'error' | 'warning' | any) => void;
 }
 
 const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
@@ -1050,7 +1050,7 @@ interface CariRuangKosongModalProps {
   dayDateMapping: Record<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat', { dateStr: string; displayDate: string }>;
   defaultDate?: string;
   onClose: () => void;
-  showToast: (msg: string, type: string) => void;
+  showToast: (msg: string, type?: 'success' | 'info' | 'error' | 'warning' | any) => void;
   onNavigateToRoom: (roomCode: string) => void;
 }
 

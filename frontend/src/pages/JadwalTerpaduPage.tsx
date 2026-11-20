@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Calendar,
@@ -264,7 +264,7 @@ interface CariRuangModalProps {
   userRole: string;
   userProdi: 'SI' | 'IF' | 'TK';
   onClose: () => void;
-  showToast: (msg: string, type: string) => void;
+  showToast: (msg: string, type?: 'success' | 'info' | 'error' | 'warning' | any) => void;
 }
 
 const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
@@ -915,22 +915,22 @@ export const JadwalTerpaduPage: React.FC = () => {
       id: s.id || `sch-${idx}`,
       courseCode: s.courseCode,
       courseName: s.courseName,
-      classLabel: s.classLabel || `Kelas ${s.className}`,
+      classLabel: s.classLabel || `Kelas ${s.className || 'A'}`,
       sks: s.sks || 3,
-      day: s.day.toUpperCase() as any,
+      day: ((s.day || 'SENIN').toUpperCase()) as 'SENIN' | 'SELASA' | 'RABU' | 'KAMIS' | 'JUMAT',
       sessionIndex: s.sessionIndex,
       timeStart: (s.timeLabel || s.time || '07:30').split(' - ')[0] || '07:30',
       timeEnd: (s.timeLabel || s.time || '09:10').split(' - ')[1] || '09:10',
-      timeLabel: s.timeLabel || s.time,
-      roomCode: (s.roomName || '').split(' ')[0],
+      timeLabel: s.timeLabel || s.time || '07:30 - 09:10',
+      roomCode: (s.roomName || '').split(' ')[0] || 'R-101',
       roomName: s.roomName,
       building: s.building || 'Gedung FTI',
       floor: s.floor || 1,
-      capacity: s.capacity || 60,
-      lecturerName: s.primaryLecturer || s.lecturerName,
+      capacity: (s as any).capacity || 60,
+      lecturerName: s.primaryLecturer || s.lecturerName || 'Dosen Pengampu',
       studentCount: s.studentCount,
-      department: (s.department === 'Informatika' ? 'IF' : s.department === 'Teknik Komputer' ? 'TK' : 'SI') as any,
-      type: 'Teori',
+      department: (s.department === 'Informatika' ? 'IF' : s.department === 'Teknik Komputer' ? 'TK' : 'SI') as 'SI' | 'IF' | 'TK',
+      type: 'Teori' as const,
     }));
   }, [rosterView, masterSchedule]);
 
