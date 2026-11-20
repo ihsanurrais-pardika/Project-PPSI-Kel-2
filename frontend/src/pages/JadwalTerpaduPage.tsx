@@ -182,7 +182,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '07:30 – 09:10',
     roomCode: 'G-203', roomName: 'Ruang G-203 (Teori Multimedia)', building: 'Gedung FTI', floor: 2, capacity: 50,
     lecturerName: 'Dr. Eng. Rahmad, M.T.', lecturerNip: '19820412 200812 1 003',
-    studentCount: 42, department: 'SI', attendanceStatus: 'Hadir (100%)', type: 'Teori',
+    studentCount: 42, department: 'SI',  type: 'Teori',
   },
   {
     id: 'mhs-2', courseCode: 'SI-3105', courseName: 'Analisis Proses Bisnis',
@@ -191,7 +191,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '09:20 – 11:00',
     roomCode: 'G-101', roomName: 'Ruang G-101 (Teori)', building: 'Gedung FTI', floor: 1, capacity: 60,
     lecturerName: 'Husnil Kamil, M.T.', lecturerNip: '19810815 200501 1 002',
-    studentCount: 49, department: 'SI', attendanceStatus: 'Hadir (100%)', type: 'Teori',
+    studentCount: 49, department: 'SI',  type: 'Teori',
   },
   {
     id: 'mhs-3', courseCode: 'SI-2102', courseName: 'Rekayasa Web Terintegrasi',
@@ -200,7 +200,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '09:20 – 11:00',
     roomCode: 'G-102', roomName: 'Ruang G-102 (Teori Besar FTI)', building: 'Gedung FTI', floor: 1, capacity: 70,
     lecturerName: 'Fikri, M.Kom', lecturerNip: '19890214 201404 1 001',
-    studentCount: 45, department: 'SI', attendanceStatus: 'Hadir (88%)', type: 'Teori',
+    studentCount: 45, department: 'SI', type: 'Teori',
   },
   {
     id: 'mhs-4', courseCode: 'PRAK-SI201', courseName: 'Praktikum Basis Data Terdistribusi',
@@ -218,7 +218,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '13:30 – 15:10',
     roomCode: 'G-204', roomName: 'Ruang G-204 (Teori Standar)', building: 'Gedung FTI', floor: 2, capacity: 55,
     lecturerName: 'Dr. Rahmi, M.Kom', lecturerNip: '19860611 201012 2 004',
-    studentCount: 48, department: 'SI', attendanceStatus: 'Hadir (100%)', type: 'Teori',
+    studentCount: 48, department: 'SI',  type: 'Teori',
   },
   {
     id: 'mhs-6', courseCode: 'UNAND-101', courseName: 'Pendidikan Pancasila & Kewarganegaraan',
@@ -227,7 +227,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '11:10 – 12:50',
     roomCode: 'GKB-101', roomName: 'GKB-101 (Teori Bersama)', building: 'GKB', floor: 1, capacity: 80,
     lecturerName: 'Tim Dosen MKU UNAND',
-    studentCount: 76, department: 'GKB', attendanceStatus: 'Hadir (100%)', type: 'Teori',
+    studentCount: 76, department: 'GKB',  type: 'Teori',
   },
   {
     id: 'mhs-7', courseCode: 'SI-3205', courseName: 'Etika Profesi & Hukum Siber',
@@ -236,7 +236,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '07:30 – 09:10',
     roomCode: 'G-101', roomName: 'Ruang G-101 (Teori)', building: 'Gedung FTI', floor: 1, capacity: 60,
     lecturerName: 'Dr. Rahmi, M.Kom', lecturerNip: '19860611 201012 2 004',
-    studentCount: 48, department: 'SI', attendanceStatus: 'Hadir (100%)', type: 'Teori',
+    studentCount: 48, department: 'SI',  type: 'Teori',
   },
 ];
 
@@ -274,6 +274,11 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
   const [step, setStep] = useState<'form' | 'results' | 'confirm'>('form');
 
   // Form fields
+  const DAY_DATE_MAP: Record<string, string> = {
+    SENIN: '2024-11-25', SELASA: '2024-11-26', RABU: '2024-11-27',
+    KAMIS: '2024-11-28', JUMAT: '2024-11-29',
+  };
+  const [formDate, setFormDate] = useState<string>(DAY_DATE_MAP[course.day] || '2024-11-25');
   const [formDay, setFormDay] = useState(course.day);
   const [formTimeStart, setFormTimeStart] = useState(course.timeStart);
   const [formTimeEnd, setFormTimeEnd] = useState(course.timeEnd);
@@ -329,8 +334,8 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
 
   const handleSearch = () => {
     // Validation (E1 flow)
-    if (!formDay) {
-      setValidationError('Hari perkuliahan wajib dipilih.');
+    if (!formDate) {
+      setValidationError('Tanggal pelaksanaan wajib diisi.');
       return;
     }
     if (!formTimeStart || !formTimeEnd) {
@@ -358,9 +363,11 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
 
   const handleConfirm = () => {
     if (!selectedRoom) return;
-    const label = userRole === 'dosen' ? 'pengajuan ruang pengganti' : 'permintaan reservasi ruang';
+    const formattedDate = formDate
+      ? new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+      : formDay;
     showToast(
-      `Berhasil! ${label.charAt(0).toUpperCase() + label.slice(1)} ${course.courseName} (${course.classLabel}) → ${selectedRoom.code} pada ${formDay}, ${formTimeStart}–${formTimeEnd} telah dikirimkan.`,
+      `Berhasil! Penyesuaian jadwal ${course.courseName} (${course.classLabel}) ke ruang ${selectedRoom.code} pada tanggal ${formattedDate} (${formTimeStart}–${formTimeEnd}) telah diajukan untuk keseluruhan semester.`,
       'success'
     );
     onClose();
@@ -482,20 +489,26 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Hari */}
+                {/* Tanggal Pelaksanaan */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Hari Perkuliahan <span className="text-red-500">*</span>
+                    Tanggal Pelaksanaan <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={formDay}
-                    onChange={(e) => { setFormDay(e.target.value as any); setValidationError(null); }}
-                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
-                  >
-                    {['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT'].map((d) => (
-                      <option key={d} value={d}>{d.charAt(0) + d.slice(1).toLowerCase()}</option>
-                    ))}
-                  </select>
+                  <input
+                    type="date"
+                    value={formDate}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormDate(val);
+                      if (val) {
+                        const d = new Date(val).getDay();
+                        const dayNames = ['', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT'];
+                        if (d >= 1 && d <= 5) setFormDay(dayNames[d] as any);
+                      }
+                      setValidationError(null);
+                    }}
+                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 font-bold"
+                  />
                 </div>
 
                 {/* Gedung */}
@@ -593,7 +606,11 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
               {/* Applied filters summary */}
               <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-bold text-slate-600">Filter aktif:</span>
-                <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold border border-blue-200">{formDay.charAt(0) + formDay.slice(1).toLowerCase()}</span>
+                {formDate && (
+                  <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold border border-blue-200">
+                    {new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                )}
                 <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold border border-blue-200">{formTimeStart} – {formTimeEnd}</span>
                 <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold border border-blue-200">Min. {formMinCapacity} kursi</span>
                 {formBuilding !== 'Semua' && (
@@ -761,8 +778,10 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
                       <div className="font-bold text-slate-500 mt-0.5">{course.day.charAt(0) + course.day.slice(1).toLowerCase()}, {course.timeLabel}</div>
                     </div>
                     <div>
-                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Waktu Pengganti</div>
-                      <div className="font-bold text-blue-700 mt-0.5">{formDay.charAt(0) + formDay.slice(1).toLowerCase()}, {formTimeStart} – {formTimeEnd}</div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Waktu Pelaksanaan Baru</div>
+                      <div className="font-bold text-blue-700 mt-0.5">
+                        {formDate && new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}, {formTimeStart} – {formTimeEnd}
+                      </div>
                     </div>
                   </div>
                   <div className="px-4 py-3">
@@ -850,6 +869,16 @@ export const JadwalTerpaduPage: React.FC = () => {
   const [rosterView, setRosterView] = useState<'dosen' | 'mahasiswa' | 'master'>(
     currentRole === 'dosen' ? 'dosen' : currentRole === 'mahasiswa' ? 'mahasiswa' : 'master'
   );
+
+  useEffect(() => {
+    if (currentRole === 'dosen') {
+      setRosterView('dosen');
+    } else if (currentRole === 'mahasiswa') {
+      setRosterView('mahasiswa');
+    }
+  }, [currentRole]);
+
+  const isDosen = (currentRole === 'dosen' || (currentRole === 'admin' && rosterView === 'dosen')) && rosterView !== 'mahasiswa';
 
   const [viewMode, setViewMode] = useState<'calendar' | 'table'>('calendar');
   const [selectedDept, setSelectedDept] = useState<'Semua' | 'SI' | 'IF' | 'TK'>('Semua');
@@ -949,7 +978,8 @@ export const JadwalTerpaduPage: React.FC = () => {
 
   // Render the action button column in both views
   const renderCourseActions = (item: PersonalCourseItem) => {
-    const showCariRuang = rosterView === 'dosen' || rosterView === 'mahasiswa';
+    // Mahasiswa HANYA melihat rute navigasi ruang (tidak dapat mengubah jadwal semester di sini)
+    // Penggantian ruang per pertemuan dilakukan di Heatmap Ruangan
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
         {/* Navigate to room */}
@@ -962,15 +992,15 @@ export const JadwalTerpaduPage: React.FC = () => {
           <span>Rute</span>
         </button>
 
-        {/* PRIMARY: Cari Kelas Pengganti */}
-        {showCariRuang && (
+        {/* PRIMARY: Ganti Jadwal Semester – HANYA UNTUK DOSEN */}
+        {isDosen && (
           <button
             onClick={() => setCariRuangTarget(item)}
             className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-white bg-[#082c78] hover:bg-blue-800 rounded-lg transition-colors shadow-xs"
-            title={rosterView === 'dosen' ? 'Cari ruang kosong untuk kelas pengganti' : 'Cari ruang kosong untuk belajar mandiri'}
+            title="Ganti jadwal keseluruhan pertemuan semester (setelah diskusi dengan mahasiswa)"
           >
             <Search className="w-3.5 h-3.5" />
-            <span>Cari Kelas Pengganti</span>
+            <span>Ganti Jadwal Semester</span>
           </button>
         )}
       </div>
@@ -981,7 +1011,7 @@ export const JadwalTerpaduPage: React.FC = () => {
     <div className="space-y-6 max-w-7xl mx-auto pb-8">
 
       {/* ── Cari Ruang Kosong Modal ── */}
-      {cariRuangTarget && (
+      {cariRuangTarget && isDosen && (
         <CariRuangKosongModal
           course={cariRuangTarget}
           userRole={rosterView}
@@ -1016,9 +1046,9 @@ export const JadwalTerpaduPage: React.FC = () => {
 
           <p className="text-xs md:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
             {rosterView === 'dosen'
-              ? 'Roster resmi pengajaran dosen terverifikasi. Klik "Cari Kelas Pengganti" pada kartu jadwal untuk mengajukan ruang pengganti saat berhalangan hadir.'
+              ? 'Roster resmi pengajaran dosen terverifikasi. Dosen dapat mengajukan perubahan jadwal keseluruhan semester setelah berdiskusi dan bersepakat dengan mahasiswa rombel.'
               : rosterView === 'mahasiswa'
-              ? 'Jadwal KRS aktif Semester Ganjil 2024/2025. Klik "Cari Kelas Pengganti" jika kelas dialihkan ke ruang lain.'
+              ? 'Jadwal KRS aktif Semester Ganjil 2024/2025 (Hanya Lihat). Mahasiswa yang ingin mencari ruang kelas pengganti per pertemuan dapat membukanya melalui menu Ketersediaan Ruang (Heatmap).'
               : 'Master jadwal perkuliahan terintegrasi seluruh departemen FTI.'}
           </p>
         </div>
@@ -1045,46 +1075,77 @@ export const JadwalTerpaduPage: React.FC = () => {
       {/* ── Mode Switcher Bar ── */}
       <div className="bg-slate-100 p-1.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-slate-200">
         <div className="flex items-center gap-1.5 text-xs">
-          <span className="font-bold text-slate-600 px-2 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-            <span>Tampilan:</span>
-          </span>
-          <div className="flex items-center bg-white p-1 rounded-xl shadow-2xs border border-slate-200">
-            <button
-              onClick={() => setRosterView('dosen')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                rosterView === 'dosen' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Dosen Pribadi</span>
-            </button>
-            <button
-              onClick={() => setRosterView('mahasiswa')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                rosterView === 'mahasiswa' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>Mahasiswa (KRS)</span>
-            </button>
-            <button
-              onClick={() => setRosterView('master')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                rosterView === 'master' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Master FTI</span>
-            </button>
-          </div>
+          {currentRole === 'admin' ? (
+            <>
+              <span className="font-bold text-slate-600 px-2 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                <span>Simulasi Tampilan Peran:</span>
+              </span>
+              <div className="flex items-center bg-white p-1 rounded-xl shadow-2xs border border-slate-200">
+                <button
+                  onClick={() => setRosterView('dosen')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    rosterView === 'dosen' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Dosen Pribadi</span>
+                </button>
+                <button
+                  onClick={() => setRosterView('mahasiswa')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    rosterView === 'mahasiswa' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>Mahasiswa (KRS)</span>
+                </button>
+                <button
+                  onClick={() => setRosterView('master')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    rosterView === 'master' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Master FTI</span>
+                </button>
+              </div>
+            </>
+          ) : currentRole === 'mahasiswa' ? (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-slate-600 px-2 flex items-center gap-1">
+                <GraduationCap className="w-4 h-4 text-blue-600" />
+                <span>Mode Tampilan:</span>
+              </span>
+              <span className="bg-white px-3 py-1.5 rounded-xl shadow-2xs border border-slate-200 font-bold text-blue-700 text-xs flex items-center gap-1.5">
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span>Kartu Rencana Studi (KRS Mahasiswa) — Hanya Lihat</span>
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-slate-600 px-2 flex items-center gap-1">
+                <User className="w-4 h-4 text-blue-600" />
+                <span>Mode Tampilan:</span>
+              </span>
+              <span className="bg-white px-3 py-1.5 rounded-xl shadow-2xs border border-slate-200 font-bold text-blue-700 text-xs flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5" />
+                <span>Jadwal Mengajar Pribadi Dosen</span>
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Quick note about the new button */}
-        {(rosterView === 'dosen' || rosterView === 'mahasiswa') && (
+        {/* Quick note about the button */}
+        {isDosen ? (
           <div className="text-xs text-slate-500 flex items-center gap-1.5 px-2">
             <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-            <span>Klik <strong className="text-blue-700">Cari Kelas Pengganti</strong> pada kartu jadwal untuk membuka pencarian ruang kosong.</span>
+            <span>Dosen dapat mengganti jadwal keseluruhan pertemuan setelah diskusi dengan mahasiswa melalui tombol <strong className="text-blue-700">Ganti Jadwal Semester</strong>.</span>
+          </div>
+        ) : (
+          <div className="text-xs text-slate-500 flex items-center gap-1.5 px-2">
+            <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span>Mahasiswa hanya dapat melihat jadwal (Hanya Lihat). Pencarian ruang kelas pengganti per pertemuan dilakukan via menu <strong>Heatmap Ruang</strong>.</span>
           </div>
         )}
       </div>
@@ -1324,15 +1385,15 @@ export const JadwalTerpaduPage: React.FC = () => {
                                   </div>
                                 )}
 
-                                {/* CTA: Cari Kelas Pengganti */}
-                                {(rosterView === 'dosen' || rosterView === 'mahasiswa') && (
+                                {/* CTA: Ganti Jadwal – HANYA Dosen (keseluruhan pertemuan semester setelah diskusi) */}
+                                {isDosen && (
                                   <div className="pt-1.5 border-t border-slate-100">
                                     <button
                                       onClick={() => setCariRuangTarget(classInSlot)}
                                       className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-bold text-white bg-[#082c78] hover:bg-blue-800 rounded-lg transition-colors"
                                     >
                                       <Search className="w-3 h-3" />
-                                      <span>Cari Kelas Pengganti</span>
+                                      <span>Ganti Jadwal Semester</span>
                                     </button>
                                   </div>
                                 )}
@@ -1436,9 +1497,9 @@ export const JadwalTerpaduPage: React.FC = () => {
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>
             {rosterView === 'dosen'
-              ? 'Jadwal mengajar telah tersinkronisasi otomatis dengan BKD FTI Unand. Gunakan "Cari Kelas Pengganti" untuk mengajukan perubahan ruang.'
+              ? 'Jadwal mengajar telah tersinkronisasi otomatis dengan BKD FTI Unand. Dosen dapat mengganti jadwal keseluruhan pertemuan semester setelah diskusi dengan mahasiswa.'
               : rosterView === 'mahasiswa'
-              ? 'Jadwal kuliah diambil dari KRS aktif. Gunakan "Cari Kelas Pengganti" jika kelas dipindah ke ruang lain.'
+              ? 'Jadwal kuliah diambil dari KRS aktif (Hanya Lihat). Untuk kelas pengganti per pertemuan, gunakan fitur Cari Kelas Pengganti di menu Heatmap.'
               : 'Master jadwal FTI telah divalidasi 100% bebas bentrok oleh Solver CP-SAT.'}
           </span>
         </div>
