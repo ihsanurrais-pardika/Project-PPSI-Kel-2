@@ -37,8 +37,8 @@ export const LoginPage: React.FC = () => {
     if (u.includes('kaprodi.si') || u.includes('dept-si') || u.includes('ricky') || u === 'si') return 'departemen_si';
     if (u.includes('kaprodi.if') || u.includes('dept-if') || u.includes('wahyudi') || u === 'if') return 'departemen_if';
     if (u.includes('kaprodi.tk') || u.includes('dept-tk') || u.includes('tati') || u === 'tk') return 'departemen_tk';
-    if (u.includes('dosen')) return 'dosen';
-    if (u.includes('mhs') || u.includes('mahasiswa') || u.includes('faris')) return 'mahasiswa';
+    if (u.includes('dosen') || u.includes('rahmad')) return 'dosen';
+    if (u.includes('mhs') || u.includes('mahasiswa') || u.includes('faris') || u.includes('student')) return 'mahasiswa';
     return 'admin';
   };
 
@@ -70,6 +70,8 @@ export const LoginPage: React.FC = () => {
         departemen_si: 'Kaprodi Sistem Informasi',
         departemen_if: 'Kaprodi Informatika',
         departemen_tk: 'Kaprodi Teknik Komputer',
+        dosen: 'Dosen Pengampu',
+        mahasiswa: 'Mahasiswa Aktif',
       };
 
       showToast(`Login SSO berhasil sebagai ${roleLabels[role] || role.toUpperCase()}`, 'success');
@@ -303,7 +305,7 @@ export const LoginPage: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => setPresetAccount('rahmad@it.unand.ac.id', 'Dosen')}
+                  onClick={() => setPresetAccount('rahmad@it.unand.ac.id', 'Dosen Pengampu')}
                   className={`p-1.5 rounded-lg border text-left font-bold transition-all ${
                     username === 'rahmad@it.unand.ac.id'
                       ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
@@ -311,7 +313,20 @@ export const LoginPage: React.FC = () => {
                   }`}
                 >
                   <div className="truncate">📚 Dosen</div>
-                  <div className="text-[9px] opacity-80 font-normal">Portal Jadwal</div>
+                  <div className="text-[9px] opacity-80 font-normal">Ruang &amp; Jadwal</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPresetAccount('faris.22@student.unand.ac.id', 'Mahasiswa Aktif')}
+                  className={`p-1.5 rounded-lg border text-left font-bold transition-all ${
+                    username === 'faris.22@student.unand.ac.id'
+                      ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="truncate">🎒 Mahasiswa</div>
+                  <div className="text-[9px] opacity-80 font-normal">Cari Ruang &amp; KRS</div>
                 </button>
               </div>
             </div>
