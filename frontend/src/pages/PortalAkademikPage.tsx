@@ -19,9 +19,9 @@ import {
 } from 'lucide-react';
 
 export const PortalAkademikPage: React.FC = () => {
-  const { setSelectedRoomForNav, setIsRoomNavModalOpen, showToast, rooms } = useApp();
+  const { setSelectedRoomForNav, setIsRoomNavModalOpen, showToast, rooms, currentRole, setActivePage } = useApp();
 
-  const [portalMode, setPortalMode] = useState<'student' | 'lecturer'>('student');
+  const [portalMode, setPortalMode] = useState<'student' | 'lecturer'>(currentRole === 'dosen' ? 'lecturer' : 'student');
   const [activeTab, setActiveTab] = useState<'today' | 'all' | 'requests'>('today');
 
   const handleOpenNav = (roomName: string) => {
@@ -137,6 +137,34 @@ export const PortalAkademikPage: React.FC = () => {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* Quick Action Banner to Room Finder */}
+      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-4 text-white shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+            <Calendar className="w-5 h-5 text-blue-200" />
+          </div>
+          <div>
+            <h3 className="font-bold text-sm text-white">
+              {portalMode === 'lecturer'
+                ? 'Layanan Mandiri Kuliah Pengganti & Cek Ruang Kosong'
+                : 'Pencarian Ruang Kosong untuk Belajar Mandiri & Diskusi'}
+            </h3>
+            <p className="text-xs text-blue-200 mt-0.5">
+              {portalMode === 'lecturer'
+                ? 'Temukan slot ruang luang real-time dan ajukan jadwal kuliah pengganti (make-up class).'
+                : 'Pantau ketersediaan ruang kelas yang sedang tidak terisi kuliah secara langsung.'}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setActivePage('ketersediaan_ruang')}
+          className="px-4 py-2 bg-white text-blue-900 hover:bg-blue-50 font-bold text-xs rounded-xl shadow-xs transition-all shrink-0 flex items-center gap-2"
+        >
+          <span>{portalMode === 'lecturer' ? 'Cari Ruang Pengganti' : 'Buka Matriks Ruang Kosong'}</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* Tabs */}

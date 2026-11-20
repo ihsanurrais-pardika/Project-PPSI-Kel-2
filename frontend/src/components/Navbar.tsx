@@ -13,7 +13,14 @@ export const Navbar: React.FC = () => {
       case 'dashboard_admin':
         return { title: 'Dashboard Utama', category: 'Ringkasan Operasional' };
       case 'jadwal_kuliah':
-        return { title: 'Jadwal Perkuliahan', category: 'Penjadwalan Terpadu' };
+        return {
+          title: currentUser.role === 'dosen'
+            ? 'Jadwal Mengajar Pribadi'
+            : currentUser.role === 'mahasiswa'
+            ? 'Jadwal Kuliah Pribadi (KRS)'
+            : 'Jadwal Perkuliahan Terpadu',
+          category: currentUser.role === 'dosen' || currentUser.role === 'mahasiswa' ? 'Portal Akademik Pribadi' : 'Penjadwalan Terpadu'
+        };
       case 'generator_jadwal':
       case 'optimasi_ga':
         return { title: 'Buat Jadwal Otomatis', category: 'Penjadwalan Terpadu' };
@@ -23,8 +30,16 @@ export const Navbar: React.FC = () => {
         return { title: 'Inventaris & Spek Ruang', category: 'Manajemen Ruangan' };
       case 'ketersediaan_ruang':
         return { title: 'Ketersediaan Ruang', category: 'Manajemen Ruangan' };
+      case 'cari_ruang':
       case 'utilisasi_heatmap':
-        return { title: 'Statistik Ruang', category: 'Manajemen Ruangan' };
+        return {
+          title: currentUser.role === 'dosen'
+            ? 'Cari Ruang Kosong & Pengganti'
+            : currentUser.role === 'mahasiswa'
+            ? 'Cari Ruang Kosong & Belajar'
+            : 'Utilisasi Heatmap Mingguan',
+          category: 'Manajemen & Layanan Ruang'
+        };
       case 'kebutuhan_departemen':
       case 'form_usulan_mk':
       case 'kebutuhan_si':
@@ -56,6 +71,10 @@ export const Navbar: React.FC = () => {
         return { label: 'Departemen IF', color: 'bg-violet-50 text-violet-700 border-violet-200' };
       case 'departemen_tk':
         return { label: 'Departemen TK', color: 'bg-purple-50 text-purple-700 border-purple-200' };
+      case 'dosen':
+        return { label: 'Dosen Pengampu', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+      case 'mahasiswa':
+        return { label: 'Mahasiswa', color: 'bg-sky-50 text-sky-700 border-sky-200' };
       default:
         return { label: role.toUpperCase(), color: 'bg-slate-100 text-slate-700 border-slate-200' };
     }

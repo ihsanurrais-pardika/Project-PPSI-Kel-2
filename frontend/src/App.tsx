@@ -53,9 +53,10 @@ const AppContent: React.FC = () => {
       case 'inventaris_ruang':
         return <InventarisRuangPage />;
       case 'ketersediaan_ruang':
+      case 'cari_ruang':
         return <HeatmapRuangPage />;
       case 'utilisasi_heatmap':
-        return <UtilisasiHeatmapPage />;
+        return currentRole === 'dosen' || currentRole === 'mahasiswa' ? <HeatmapRuangPage /> : <UtilisasiHeatmapPage />;
       case 'generator_jadwal':
       case 'optimasi_ga':
         return <GeneratorJadwalPage />;

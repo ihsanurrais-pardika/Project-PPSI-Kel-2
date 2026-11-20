@@ -13,6 +13,7 @@ import {
   Globe,
   History,
   Settings,
+  LogOut,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -30,7 +31,7 @@ interface MenuSection {
 }
 
 export const Sidebar: React.FC = () => {
-  const { activePage, setActivePage, currentUser, conflicts, scheduleApprovalStatus } = useApp();
+  const { activePage, setActivePage, currentUser, conflicts, scheduleApprovalStatus, logout } = useApp();
 
   const unresolvedConflictsCount = conflicts.filter(c => !c.isResolved).length;
 
@@ -59,7 +60,7 @@ export const Sidebar: React.FC = () => {
       items: [
         { id: 'inventaris_ruang', label: 'Inventaris & Spek Ruang', icon: Boxes },
         { id: 'ketersediaan_ruang', label: 'Ketersediaan Ruang', icon: CalendarCheck },
-        { id: 'utilisasi_heatmap', label: 'Statistik Ruang', icon: Grid3X3 },
+        { id: 'utilisasi_heatmap', label: 'Utilisasi Heatmap', icon: Grid3X3 },
       ],
     },
     {
@@ -84,6 +85,42 @@ export const Sidebar: React.FC = () => {
     },
   ];
 
+  // Dosen dedicated menu sections
+  const dosenMenuSections: MenuSection[] = [
+    {
+      title: 'PORTAL DOSEN',
+      items: [
+        { id: 'portal_akademik', label: 'Jadwal Mengajar & Presensi', icon: Globe },
+      ],
+    },
+    {
+      title: 'LAYANAN PERKULIAHAN',
+      items: [
+        { id: 'ketersediaan_ruang', label: 'Cari Ruang & Pengganti', icon: Grid3X3, badge: 'Heatmap' },
+        { id: 'jadwal_kuliah', label: 'Jadwal Mengajar Pribadi', icon: Calendar },
+        { id: 'inventaris_ruang', label: 'Inventaris & Spek Ruang', icon: Boxes },
+      ],
+    },
+  ];
+
+  // Mahasiswa dedicated menu sections
+  const mahasiswaMenuSections: MenuSection[] = [
+    {
+      title: 'PORTAL MAHASISWA',
+      items: [
+        { id: 'portal_akademik', label: 'Jadwal Kuliah & Navigasi', icon: Globe },
+      ],
+    },
+    {
+      title: 'LAYANAN KAMPUS',
+      items: [
+        { id: 'ketersediaan_ruang', label: 'Cari Ruang Kosong', icon: Grid3X3, badge: 'Live' },
+        { id: 'jadwal_kuliah', label: 'Jadwal Kuliah Pribadi (KRS)', icon: Calendar },
+        { id: 'inventaris_ruang', label: 'Denah & Fasilitas Ruang', icon: Boxes },
+      ],
+    },
+  ];
+
   // WD1 receives a focused workspace for review and decision making.
   const wadekMenuSections: MenuSection[] = [
     {
@@ -95,7 +132,15 @@ export const Sidebar: React.FC = () => {
       ],
     },
   ];
-  const menuSections = currentUser.role === 'wadek1' ? wadekMenuSections : adminMenuSections;
+
+  let menuSections = adminMenuSections;
+  if (currentUser.role === 'wadek1') {
+    menuSections = wadekMenuSections;
+  } else if (currentUser.role === 'dosen') {
+    menuSections = dosenMenuSections;
+  } else if (currentUser.role === 'mahasiswa') {
+    menuSections = mahasiswaMenuSections;
+  }
 
   const handleNavClick = (id: string) => {
     if (id === 'kebutuhan_si' || id === 'kebutuhan_if' || id === 'kebutuhan_tk' || id === 'kebutuhan_departemen') {
@@ -118,7 +163,9 @@ export const Sidebar: React.FC = () => {
     if (activePage === 'kebutuhan_departemen' && (id === 'kebutuhan_si' || id === 'kebutuhan_if' || id === 'kebutuhan_tk')) {
       return true;
     }
-    if (activePage === 'utilisasi_heatmap' && id === 'utilisasi_heatmap') return true;
+    if ((activePage === 'ketersediaan_ruang' || activePage === 'utilisasi_heatmap' || activePage === 'cari_ruang') && (id === 'ketersediaan_ruang' || id === 'utilisasi_heatmap')) {
+      return true;
+    }
     return activePage === id;
   };
 
@@ -194,6 +241,48 @@ export const Sidebar: React.FC = () => {
           </div>
         ))}
       </nav>
+
+      {/* User Profile Card at Bottom (matches screenshot) */}
+      <div className="p-3 border-t border-slate-200 bg-slate-50/70">
+        <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-700 text-white flex items-center justify-center font-bold text-xs shrink-0">
+              {currentUser.role === 'admin'
+                ? 'AD'
+                : currentUser.role === 'wadek1'
+                ? 'WD'
+                : currentUser.role === 'dosen'
+                ? 'DS'
+                : currentUser.role === 'mahasiswa'
+                ? 'MH'
+                : 'FT'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-slate-800 text-xs truncate leading-tight">
+                {currentUser.name}
+              </div>
+              <div className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
+                {currentUser.role === 'admin'
+                  ? 'Admin Penjadwal FTI'
+                  : currentUser.role === 'wadek1'
+                  ? 'Wakil Dekan I'
+                  : currentUser.role === 'dosen'
+                  ? 'Dosen Pengampu'
+                  : currentUser.role === 'mahasiswa'
+                  ? 'Mahasiswa Aktif'
+                  : 'Staf FTI'}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={logout}
+            title="Keluar / Logout SSO"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
     </aside>
   );
 };
