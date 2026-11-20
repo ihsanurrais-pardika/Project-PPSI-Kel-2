@@ -40,7 +40,7 @@ export const JadwalTerpaduPage: React.FC = () => {
     const matchesSearch =
       item.courseCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.lecturerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.lecturerName && item.lecturerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       item.roomName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDay = filterDay === 'Semua' || item.day.toUpperCase() === filterDay.toUpperCase();
     return matchesDept && matchesSearch && matchesDay;

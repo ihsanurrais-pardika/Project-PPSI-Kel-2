@@ -1,0 +1,249 @@
+// Prisma Schema untuk SIPRAMA (Sistem Informasi Penjadwalan Perkuliahan & Manajemen Ruang Terintegrasi - FTI UNAND)
+// Dokumentasi: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------
+// 1. MANAJEMEN PENGGUNA & RBAC (PRD F-01 & F-02)
+// -------------------------------------------------------------
+enum UserRole {
+  ADMIN
+  WADEK1
+  KAPRODI_SI
+  KAPRODI_IF
+  KAPRODI_TK
+  DOSEN
+  MAHASISWA
+}
+
+model User {
+  id         String   @id @default(uuid())
+  name       String   @db.VarChar(150)
+  email      String   @unique @db.VarChar(150)
+  password   String   @db.VarChar(255)
+  role       UserRole @default(MAHASISWA)
+  nipOrNim   String   @unique @db.VarChar(50)
+  department String?  @db.VarChar(100)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  auditLogs  AuditLog[]
+
+  @@map("users")
+}
+
+// -------------------------------------------------------------
+// 2. MASTER DATA RUANGAN & FASILITAS (PRD F-16 & F-17)
+// -------------------------------------------------------------
+enum RoomType {
+  TEORI
+  TEORI_MULTIMEDIA
+  TEORI_STANDAR
+  TEORI_BESAR
+  LAB_SOFTWARE
+  LAB_HARDWARE_IOT
+  SEMINAR
+}
+
+enum RoomStatus {
+  SIAP_DIGUNAKAN
+  PEMELIHARAAN_BERKALA
+  SEDANG_DIGUNAKAN
+}
+
+model Room {
+  id           String     @id @default(uuid())
+  code         String     @unique @db.VarChar(20) // Contoh: "G-101", "G-203", "LAB-SI-01"
+  name         String     @db.VarChar(100)
+  building     String     @default("Gedung FTI") @db.VarChar(100)
+  floor        Int        @default(1)
+  capacity     Int        @default(40)
+  type         RoomType   @default(TEORI)
+  isAccessible Boolean    @default(true) // Ramah disabilitas (Lantai 1 / lift ready)
+  status       RoomStatus @default(SIAP_DIGUNAKAN)
+  facilities   Json?      // Contoh: ["AC", "Proyektor", "Smart TV 75\"", "Wi-Fi Eduroam"]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  schedules    ScheduleItem[]
+
+  @@map("rooms")
+}
+
+// -------------------------------------------------------------
+// 3. MASTER DATA DOSEN & BKD (PRD F-03 & F-04)
+// -------------------------------------------------------------
+model Lecturer {
+  id          String   @id @default(uuid())
+  nip         String   @unique @db.VarChar(50)
+  name        String   @db.VarChar(150)
+  department  String   @db.VarChar(100)
+  expertise   String?  @db.VarChar(150)
+  maxSks      Int      @default(12)
+  currentSks  Int      @default(0)
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  primaryCourses   CourseOffering[] @relation("PrimaryLecturer")
+  schedules        ScheduleItem[]
+
+  @@map("lecturers")
+}
+
+// -------------------------------------------------------------
+// 4. KEBUTUHAN MATA KULIAH & ROMBEL (PRD F-03, F-04, F-14)
+// -------------------------------------------------------------
+enum CourseStatus {
+  DRAFT
+  SUBMITTED
+  VALIDATED
+  NEED_REVISION
+}
+
+model CourseOffering {
+  id                 String       @id @default(uuid())
+  code               String       @db.VarChar(20) // Contoh: "SI211", "IF202"
+  name               String       @db.VarChar(150)
+  sks                Int          @default(3)
+  theorySks          Int          @default(2)
+  practiceSks        Int          @default(1)
+  department         String       @db.VarChar(100)
+  semester           Int          @default(1)
+  curriculum         String       @default("Kurikulum OBE 2024") @db.VarChar(100)
+  isMandatory        Boolean      @default(true)
+  preferredDays      Json?        // Contoh: ["Senin", "Rabu"]
+  preferredTimeSlot  String?      @default("Sesi Pagi") @db.VarChar(50)
+  specialConstraints Json?        // Contoh: ["Hindari Jumat Siang", "Maksimal 1 Sesi / Hari"]
+  status             CourseStatus @default(DRAFT)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  primaryLecturerId  String
+  primaryLecturer    Lecturer     @relation("PrimaryLecturer", fields: [primaryLecturerId], references: [id])
+
+  classes            ClassRombel[]
+  schedules          ScheduleItem[]
+
+  @@map("course_offerings")
+}
+
+model ClassRombel {
+  id        String   @id @default(uuid())
+  name      String   @db.VarChar(50) // Contoh: "Kelas A", "Kelas B"
+  capacity  Int      @default(40)
+  enrolled  Int      @default(40)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  courseId  String
+  course    CourseOffering @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  schedules ScheduleItem[]
+
+  @@map("class_rombels")
+}
+
+// -------------------------------------------------------------
+// 5. MASTER JADWAL PERKULIAHAN TERPADU (PRD F-06, F-07, F-20)
+// -------------------------------------------------------------
+enum ScheduleStatus {
+  OK
+  TANDEM
+  WARNING
+  BENTROK
+}
+
+model ScheduleItem {
+  id           String         @id @default(uuid())
+  academicYear String         @default("2024/2025 Ganjil") @db.VarChar(50)
+  day          String         @db.VarChar(20) // "Senin", "Selasa", dll.
+  sessionIndex Int            // 1 s.d. 5
+  timeLabel    String         @db.VarChar(50) // "07:30 - 09:10"
+  isTandem     Boolean        @default(false)
+  status       ScheduleStatus @default(OK)
+  note         String?        @db.Text
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  courseId     String
+  course       CourseOffering @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  classId      String
+  classRombel  ClassRombel    @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  roomId       String
+  room         Room           @relation(fields: [roomId], references: [id])
+
+  lecturerId   String
+  lecturer     Lecturer       @relation(fields: [lecturerId], references: [id])
+
+  @@map("schedule_items")
+}
+
+// -------------------------------------------------------------
+// 6. DETEKSI & RESOLUSI KONFLIK (PRD F-08 & F-13)
+// -------------------------------------------------------------
+enum ConflictSeverity {
+  HARD
+  SOFT
+  WARNING
+}
+
+model Conflict {
+  id             String           @id @default(uuid())
+  type           String           @db.VarChar(100) // "Kapasitas Ruang", "Bentrok Dosen", dll.
+  severity       ConflictSeverity @default(HARD)
+  title          String           @db.VarChar(200)
+  details        String           @db.Text
+  recommendation String           @db.Text
+  isResolved     Boolean          @default(false)
+  resolvedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@map("conflicts")
+}
+
+// -------------------------------------------------------------
+// 7. AUDIT LOG TRANSAKSI SISTEM (PRD F-02, F-09, NF-09)
+// -------------------------------------------------------------
+model AuditLog {
+  id          String   @id @default(uuid())
+  timestamp   DateTime @default(now())
+  activity    String   @db.VarChar(200)
+  description String   @db.Text
+  category    String   @db.VarChar(50) // "CP-SAT SOLVER", "GA-OPTIMIZER", "APPROVAL WADEK", dll.
+  actorName   String   @db.VarChar(150)
+  actorRole   String   @db.VarChar(50)
+  status      String   @default("success") @db.VarChar(20)
+
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+// -------------------------------------------------------------
+// 8. PARAMETER ENGINE GA & CP-SAT (PRD F-06, F-07, NF-12)
+// -------------------------------------------------------------
+model GAParameter {
+  id             String   @id @default(uuid())
+  populationSize Int      @default(200)
+  crossoverRate  Float    @default(0.85)
+  mutationRate   Float    @default(0.05)
+  maxGenerations Int      @default(250)
+  timeoutSeconds Int      @default(30)
+  randomSeed     Int      @default(42)
+  isActive       Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+
+  @@map("ga_parameters")
+}
