@@ -1,5 +1,18 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { PenyesuaianSksModal } from '../components/PenyesuaianSksModal';
+import {
+  resolveDepartment,
+  getDepartmentLabel,
+  getDepartmentBadgeStyle,
+  DepartmentCode,
+  CAMPUS_SESSION_SLOTS,
+  STANDARD_SESSION_STARTS,
+  calculateEndTime,
+  formatTimeRange,
+  getSessionDefaultStartTime,
+  getSksBadgeStyle,
+} from '../utils/departmentHelper';
 import {
   Calendar,
   Table as TableIcon,
@@ -25,6 +38,8 @@ import {
   ChevronRight,
   Info,
   Filter,
+  Sliders,
+  Settings,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -182,7 +197,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '07:30 – 09:10',
     roomCode: 'G-203', roomName: 'Ruang G-203 (Teori Multimedia)', building: 'Gedung FTI', floor: 2, capacity: 50,
     lecturerName: 'Dr. Eng. Rahmad, M.T.', lecturerNip: '19820412 200812 1 003',
-    studentCount: 42, department: 'SI',  type: 'Teori',
+    studentCount: 42, department: 'SI', type: 'Teori',
   },
   {
     id: 'mhs-2', courseCode: 'SI-3105', courseName: 'Analisis Proses Bisnis',
@@ -191,7 +206,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '09:20 – 11:00',
     roomCode: 'G-101', roomName: 'Ruang G-101 (Teori)', building: 'Gedung FTI', floor: 1, capacity: 60,
     lecturerName: 'Husnil Kamil, M.T.', lecturerNip: '19810815 200501 1 002',
-    studentCount: 49, department: 'SI',  type: 'Teori',
+    studentCount: 49, department: 'SI', type: 'Teori',
   },
   {
     id: 'mhs-3', courseCode: 'SI-2102', courseName: 'Rekayasa Web Terintegrasi',
@@ -218,7 +233,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '13:30 – 15:10',
     roomCode: 'G-204', roomName: 'Ruang G-204 (Teori Standar)', building: 'Gedung FTI', floor: 2, capacity: 55,
     lecturerName: 'Dr. Rahmi, M.Kom', lecturerNip: '19860611 201012 2 004',
-    studentCount: 48, department: 'SI',  type: 'Teori',
+    studentCount: 48, department: 'SI', type: 'Teori',
   },
   {
     id: 'mhs-6', courseCode: 'UNAND-101', courseName: 'Pendidikan Pancasila & Kewarganegaraan',
@@ -227,7 +242,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '11:10 – 12:50',
     roomCode: 'GKB-101', roomName: 'GKB-101 (Teori Bersama)', building: 'GKB', floor: 1, capacity: 80,
     lecturerName: 'Tim Dosen MKU UNAND',
-    studentCount: 76, department: 'GKB',  type: 'Teori',
+    studentCount: 76, department: 'GKB', type: 'Teori',
   },
   {
     id: 'mhs-7', courseCode: 'SI-3205', courseName: 'Etika Profesi & Hukum Siber',
@@ -236,7 +251,7 @@ const MAHASISWA_PERSONAL_SCHEDULE: PersonalCourseItem[] = [
     timeLabel: '07:30 – 09:10',
     roomCode: 'G-101', roomName: 'Ruang G-101 (Teori)', building: 'Gedung FTI', floor: 1, capacity: 60,
     lecturerName: 'Dr. Rahmi, M.Kom', lecturerNip: '19860611 201012 2 004',
-    studentCount: 48, department: 'SI',  type: 'Teori',
+    studentCount: 48, department: 'SI', type: 'Teori',
   },
 ];
 
@@ -453,11 +468,10 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
             {(['form', 'results', 'confirm'] as const).map((s, i) => (
               <React.Fragment key={s}>
                 <div className={`flex items-center gap-1.5 ${step === s ? 'text-blue-700 font-bold' : step > s ? 'text-emerald-600 font-semibold' : 'text-slate-400'}`}>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                    step === s ? 'bg-blue-700 text-white' :
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${step === s ? 'bg-blue-700 text-white' :
                     (step === 'results' && s === 'form') || (step === 'confirm' && (s === 'form' || s === 'results')) ? 'bg-emerald-500 text-white' :
-                    'bg-slate-200 text-slate-500'
-                  }`}>
+                      'bg-slate-200 text-slate-500'
+                    }`}>
                     {(step === 'results' && s === 'form') || (step === 'confirm' && (s === 'form' || s === 'results'))
                       ? <Check className="w-3 h-3" /> : i + 1}
                   </div>
@@ -682,11 +696,10 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
                                   ♿ Aksesibel
                                 </span>
                               )}
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                room.type === 'Lab' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${room.type === 'Lab' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
                                 room.type === 'Seminar' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
-                                'bg-slate-100 text-slate-600 border border-slate-200'
-                              }`}>
+                                  'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}>
                                 {room.type}
                               </span>
                             </div>
@@ -864,6 +877,7 @@ export const JadwalTerpaduPage: React.FC = () => {
     showToast,
     rooms,
     setActivePage,
+    updateScheduleClassSksAndTime,
   } = useApp();
 
   const [rosterView, setRosterView] = useState<'dosen' | 'mahasiswa' | 'master'>(
@@ -882,23 +896,39 @@ export const JadwalTerpaduPage: React.FC = () => {
 
   const [viewMode, setViewMode] = useState<'calendar' | 'table'>('calendar');
   const [selectedDept, setSelectedDept] = useState<'Semua' | 'SI' | 'IF' | 'TK'>('Semua');
+  const [selectedSks, setSelectedSks] = useState<'Semua' | 1 | 2 | 3 | 4>('Semua');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDay, setFilterDay] = useState('Semua');
 
   // Cari Ruang Modal state
   const [cariRuangTarget, setCariRuangTarget] = useState<PersonalCourseItem | null>(null);
 
+  // Penyesuaian SKS & Jam Modal state
+  const [isAdjustSksModalOpen, setIsAdjustSksModalOpen] = useState(false);
+  const [adjustTargetClass, setAdjustTargetClass] = useState<PersonalCourseItem | null>(null);
+
   const days: Array<'SENIN' | 'SELASA' | 'RABU' | 'KAMIS' | 'JUMAT'> = [
     'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT',
   ];
 
-  const sessionColumns = [
-    { id: 1, label: 'SESI 1 (07:30 – 09:10)' },
-    { id: 2, label: 'SESI 2 (09:20 – 11:00)' },
-    { id: 3, label: 'SESI 3 (11:10 – 12:50)' },
-    { id: 4, label: 'SESI 4 (13:30 – 15:10)' },
-    { id: 5, label: 'SESI 5 (15:30 – 17:10)' },
-  ];
+  // Kolom sesi fleksibel menyesuaikan SKS yang dipilih (50 menit/SKS)
+  // Jam mulai standar kampus FTI: 07:30, 09:10, 10:00, 11:10, 13:30, 16:00
+  const sessionColumns = useMemo(() => {
+    return CAMPUS_SESSION_SLOTS.map((slot) => {
+      let timeDesc = slot.startTime;
+      if (selectedSks !== 'Semua') {
+        const endTime = calculateEndTime(slot.startTime, selectedSks);
+        timeDesc = `${slot.startTime} – ${endTime} • ${selectedSks} SKS (${selectedSks * 50}m)`;
+      } else {
+        timeDesc = `${slot.startTime} • Fleksibel SKS`;
+      }
+      return {
+        id: slot.id,
+        label: `${slot.name} (${timeDesc})`,
+        startTime: slot.startTime,
+      };
+    });
+  }, [selectedSks]);
 
   // Determine user's prodi for the room search filter
   const userProdi = useMemo<'SI' | 'IF' | 'TK'>(() => {
@@ -911,44 +941,96 @@ export const JadwalTerpaduPage: React.FC = () => {
   const currentItems: PersonalCourseItem[] = useMemo(() => {
     if (rosterView === 'dosen') return DOSEN_PERSONAL_SCHEDULE;
     if (rosterView === 'mahasiswa') return MAHASISWA_PERSONAL_SCHEDULE;
-    return masterSchedule.map((s, idx) => ({
-      id: s.id || `sch-${idx}`,
-      courseCode: s.courseCode,
-      courseName: s.courseName,
-      classLabel: s.classLabel || `Kelas ${s.className || 'A'}`,
-      sks: s.sks || 3,
-      day: ((s.day || 'SENIN').toUpperCase()) as 'SENIN' | 'SELASA' | 'RABU' | 'KAMIS' | 'JUMAT',
-      sessionIndex: s.sessionIndex,
-      timeStart: (s.timeLabel || s.time || '07:30').split(' - ')[0] || '07:30',
-      timeEnd: (s.timeLabel || s.time || '09:10').split(' - ')[1] || '09:10',
-      timeLabel: s.timeLabel || s.time || '07:30 - 09:10',
-      roomCode: (s.roomName || '').split(' ')[0] || 'R-101',
-      roomName: s.roomName,
-      building: s.building || 'Gedung FTI',
-      floor: s.floor || 1,
-      capacity: (s as any).capacity || 60,
-      lecturerName: s.primaryLecturer || s.lecturerName || 'Dosen Pengampu',
-      studentCount: s.studentCount,
-      department: (s.department === 'Informatika' ? 'IF' : s.department === 'Teknik Komputer' ? 'TK' : 'SI') as 'SI' | 'IF' | 'TK',
-      type: 'Teori' as const,
-    }));
+    return masterSchedule.map((s, idx) => {
+      const sksVal = s.sks || 2;
+      const rawStart = (s.timeLabel || s.time || '').split(' - ')[0]?.trim() || getSessionDefaultStartTime(s.sessionIndex || 1);
+      const computedEnd = calculateEndTime(rawStart, sksVal);
+      const formattedLabel = `${rawStart} - ${computedEnd}`;
+
+      return {
+        id: s.id || `sch-${idx}`,
+        courseCode: s.courseCode,
+        courseName: s.courseName,
+        classLabel: s.classLabel || `Kelas ${s.className || 'A'}`,
+        sks: sksVal,
+        day: ((s.day || 'SENIN').toUpperCase()) as 'SENIN' | 'SELASA' | 'RABU' | 'KAMIS' | 'JUMAT',
+        sessionIndex: s.sessionIndex || 1,
+        timeStart: rawStart,
+        timeEnd: computedEnd,
+        timeLabel: formattedLabel,
+        roomCode: (s.roomName || '').split(' ')[0] || 'R-101',
+        roomName: s.roomName,
+        building: s.building || 'Gedung FTI',
+        floor: s.floor || 1,
+        capacity: (s as any).capacity || 60,
+        lecturerName: s.primaryLecturer || s.lecturerName || 'Dosen Pengampu',
+        studentCount: s.studentCount,
+        department: resolveDepartment(s.department, s.courseCode),
+        type: 'Teori' as const,
+      };
+    });
   }, [rosterView, masterSchedule]);
+
+  const deptCounts = useMemo(() => {
+    return {
+      Semua: currentItems.length,
+      SI: currentItems.filter((i) => i.department === 'SI').length,
+      IF: currentItems.filter((i) => i.department === 'IF').length,
+      TK: currentItems.filter((i) => i.department === 'TK').length,
+    };
+  }, [currentItems]);
+
+  const sksCounts = useMemo(() => {
+    const deptItems = currentItems.filter(
+      (item) => selectedDept === 'Semua' || item.department === selectedDept
+    );
+    return {
+      Semua: deptItems.length,
+      1: deptItems.filter((i) => i.sks === 1).length,
+      2: deptItems.filter((i) => i.sks === 2).length,
+      3: deptItems.filter((i) => i.sks === 3).length,
+      4: deptItems.filter((i) => i.sks === 4).length,
+    };
+  }, [currentItems, selectedDept]);
 
   const filteredSchedule = useMemo(() => {
     return currentItems.filter((item) => {
       const matchesDept = selectedDept === 'Semua' || item.department === selectedDept;
+      const matchesSks = selectedSks === 'Semua' || item.sks === selectedSks;
       const matchesSearch =
         item.courseCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.lecturerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.roomName.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesDay = filterDay === 'Semua' || item.day === filterDay;
-      return matchesDept && matchesSearch && matchesDay;
+      return matchesDept && matchesSks && matchesSearch && matchesDay;
     });
-  }, [currentItems, selectedDept, searchTerm, filterDay]);
+  }, [currentItems, selectedDept, selectedSks, searchTerm, filterDay]);
 
   const totalSks = currentItems.reduce((acc, curr) => acc + curr.sks, 0);
   const totalCourses = currentItems.length;
+
+  const handleOpenAdjustSksModal = (item?: PersonalCourseItem | null) => {
+    const target = item || (filteredSchedule.length > 0 ? filteredSchedule[0] : currentItems[0]) || null;
+    setAdjustTargetClass(target);
+    setIsAdjustSksModalOpen(true);
+  };
+
+  const handleSaveAdjustSks = (
+    scheduleId: string,
+    params: {
+      sks: number;
+      day: string;
+      sessionIndex: number;
+      startTime: string;
+      endTime: string;
+      roomId?: string;
+      roomName?: string;
+    }
+  ) => {
+    updateScheduleClassSksAndTime(scheduleId, params);
+    setIsAdjustSksModalOpen(false);
+  };
 
   const handleOpenNavForRoom = (roomName: string) => {
     const foundRoom =
@@ -966,8 +1048,8 @@ export const JadwalTerpaduPage: React.FC = () => {
       rosterView === 'dosen'
         ? 'Jadwal Mengajar Pribadi Dosen FTI'
         : rosterView === 'mahasiswa'
-        ? 'Kartu Rencana Studi & Jadwal Kuliah Mahasiswa'
-        : 'Master Jadwal Perkuliahan Terpadu FTI';
+          ? 'Kartu Rencana Studi & Jadwal Kuliah Mahasiswa'
+          : 'Master Jadwal Perkuliahan Terpadu FTI';
     showToast(`Menyiapkan format cetak: ${docTitle}...`, 'info');
     window.print();
   };
@@ -978,8 +1060,6 @@ export const JadwalTerpaduPage: React.FC = () => {
 
   // Render the action button column in both views
   const renderCourseActions = (item: PersonalCourseItem) => {
-    // Mahasiswa HANYA melihat rute navigasi ruang (tidak dapat mengubah jadwal semester di sini)
-    // Penggantian ruang per pertemuan dilakukan di Heatmap Ruangan
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
         {/* Navigate to room */}
@@ -990,6 +1070,16 @@ export const JadwalTerpaduPage: React.FC = () => {
         >
           <Compass className="w-3.5 h-3.5" />
           <span>Rute</span>
+        </button>
+
+        {/* Sesuaikan SKS & Jam */}
+        <button
+          onClick={() => handleOpenAdjustSksModal(item)}
+          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
+          title="Sesuaikan bobot SKS & jam perkuliahan"
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Atur SKS</span>
         </button>
 
         {/* PRIMARY: Ganti Jadwal Semester – HANYA UNTUK DOSEN */}
@@ -1021,6 +1111,16 @@ export const JadwalTerpaduPage: React.FC = () => {
         />
       )}
 
+      {/* ── Penyesuaian SKS & Waktu Modal ── */}
+      <PenyesuaianSksModal
+        isOpen={isAdjustSksModalOpen}
+        onClose={() => setIsAdjustSksModalOpen(false)}
+        targetCourse={adjustTargetClass}
+        courses={currentItems}
+        rooms={rooms}
+        onSave={handleSaveAdjustSks}
+      />
+
       {/* ── Top Header ── */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
@@ -1029,8 +1129,8 @@ export const JadwalTerpaduPage: React.FC = () => {
               {rosterView === 'dosen'
                 ? 'JADWAL MENGAJAR PRIBADI'
                 : rosterView === 'mahasiswa'
-                ? 'KARTU RENCANA STUDI (KRS)'
-                : 'MASTER ROSTER TERPUSAT'}
+                  ? 'KARTU RENCANA STUDI (KRS)'
+                  : 'MASTER ROSTER TERPUSAT'}
             </span>
             <span>•</span>
             <span className="text-slate-500">Semester Ganjil 2024/2025</span>
@@ -1040,16 +1140,16 @@ export const JadwalTerpaduPage: React.FC = () => {
             {rosterView === 'dosen'
               ? `Jadwal Mengajar — ${currentUser.name || 'Dr. Eng. Rahmad, M.T.'}`
               : rosterView === 'mahasiswa'
-              ? `Jadwal Kuliah Pribadi — ${currentUser.name || 'Faris Alfath'}`
-              : 'Jadwal Perkuliahan Terpadu FTI'}
+                ? `Jadwal Kuliah Pribadi — ${currentUser.name || 'Faris Alfath'}`
+                : 'Jadwal Perkuliahan Terpadu FTI'}
           </h1>
 
           <p className="text-xs md:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
             {rosterView === 'dosen'
               ? 'Roster resmi pengajaran dosen terverifikasi. Dosen dapat mengajukan perubahan jadwal keseluruhan semester setelah berdiskusi dan bersepakat dengan mahasiswa rombel.'
               : rosterView === 'mahasiswa'
-              ? 'Jadwal KRS aktif Semester Ganjil 2024/2025 (Hanya Lihat). Mahasiswa yang ingin mencari ruang kelas pengganti per pertemuan dapat membukanya melalui menu Ketersediaan Ruang (Heatmap).'
-              : 'Master jadwal perkuliahan terintegrasi seluruh departemen FTI.'}
+                ? 'Jadwal KRS aktif Semester Ganjil 2024/2025 (Hanya Lihat). Mahasiswa yang ingin mencari ruang kelas pengganti per pertemuan dapat membukanya melalui menu Ketersediaan Ruang (Heatmap).'
+                : 'Master jadwal perkuliahan terintegrasi seluruh departemen FTI.'}
           </p>
         </div>
 
@@ -1084,27 +1184,24 @@ export const JadwalTerpaduPage: React.FC = () => {
               <div className="flex items-center bg-white p-1 rounded-xl shadow-2xs border border-slate-200">
                 <button
                   onClick={() => setRosterView('dosen')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    rosterView === 'dosen' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${rosterView === 'dosen' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
                 >
                   <User className="w-3.5 h-3.5" />
                   <span>Dosen Pribadi</span>
                 </button>
                 <button
                   onClick={() => setRosterView('mahasiswa')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    rosterView === 'mahasiswa' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${rosterView === 'mahasiswa' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
                 >
                   <GraduationCap className="w-3.5 h-3.5" />
                   <span>Mahasiswa (KRS)</span>
                 </button>
                 <button
                   onClick={() => setRosterView('master')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    rosterView === 'master' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${rosterView === 'master' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
                 >
                   <Layers className="w-3.5 h-3.5" />
                   <span>Master FTI</span>
@@ -1207,9 +1304,25 @@ export const JadwalTerpaduPage: React.FC = () => {
         ) : (
           <>
             <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Seksi Terjadwal</div>
-              <div className="text-2xl font-black text-slate-900 mt-1">{currentItems.length} Kelas</div>
-              <div className="text-xs text-slate-500 mt-0.5">Seluruh FTI (SI, IF, TK)</div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                {selectedDept === 'Semua' ? 'Total Seksi Terjadwal' : `Seksi Terjadwal (${selectedDept})`}
+                {selectedSks !== 'Semua' ? ` • ${selectedSks} SKS` : ''}
+              </div>
+              <div className="text-2xl font-black text-slate-900 mt-1">
+                {filteredSchedule.length} Kelas
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">
+                {selectedDept === 'Semua'
+                  ? 'Seluruh FTI (SI, IF, TK)'
+                  : selectedDept === 'SI'
+                    ? 'Departemen Sistem Informasi'
+                    : selectedDept === 'IF'
+                      ? 'Departemen Informatika'
+                      : 'Departemen Teknik Komputer'}
+                {selectedSks !== 'Semua'
+                  ? ` · Bobot ${selectedSks} SKS (${selectedSks * 50} Menit)`
+                  : ' · Seluruh Kategori SKS'}
+              </div>
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kepatuhan Jadwal</div>
@@ -1236,18 +1349,16 @@ export const JadwalTerpaduPage: React.FC = () => {
           <div className="flex items-center bg-slate-100 p-1 rounded-xl w-fit">
             <button
               onClick={() => setViewMode('calendar')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                viewMode === 'calendar' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'calendar' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
             >
               <Calendar className="w-3.5 h-3.5" />
               <span>Kalender Mingguan</span>
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                viewMode === 'table' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
             >
               <TableIcon className="w-3.5 h-3.5" />
               <span>Tabel Detail</span>
@@ -1255,21 +1366,81 @@ export const JadwalTerpaduPage: React.FC = () => {
           </div>
 
           {rosterView === 'master' && (
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-slate-500 mr-2 font-medium">Departemen:</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-slate-500 mr-1 font-medium">Departemen:</span>
               {(['Semua', 'SI', 'IF', 'TK'] as const).map((dept) => (
                 <button
                   key={dept}
                   onClick={() => setSelectedDept(dept)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
-                    selectedDept === dept ? 'bg-blue-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5 ${selectedDept === dept
+                    ? 'bg-blue-900 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                 >
-                  {dept === 'Semua' ? 'Semua' : dept === 'SI' ? 'Sistem Informasi' : dept === 'IF' ? 'Informatika' : 'Teknik Komputer'}
+                  <span>
+                    {dept === 'Semua'
+                      ? 'Semua'
+                      : dept === 'SI'
+                        ? 'Sistem Informasi'
+                        : dept === 'IF'
+                          ? 'Informatika'
+                          : 'Teknik Komputer'}
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${selectedDept === dept ? 'bg-blue-800 text-blue-100' : 'bg-slate-200 text-slate-600'
+                      }`}
+                  >
+                    {deptCounts[dept]}
+                  </span>
                 </button>
               ))}
             </div>
           )}
+        </div>
+
+        {/* ── Row 2: Filter SKS Fleksibel (1, 2, 3, 4 SKS @ 50m) + Button Sesuaikan ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 border-t border-slate-100">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs text-slate-500 mr-1 font-medium flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-blue-600" />
+              <span>Bobot SKS (50 mnt/SKS):</span>
+            </span>
+            {(['Semua', 1, 2, 3, 4] as const).map((sksVal) => {
+              const count = sksCounts[sksVal];
+              const isSelected = selectedSks === sksVal;
+              return (
+                <button
+                  key={sksVal}
+                  onClick={() => setSelectedSks(sksVal)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-blue-700 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>
+                    {sksVal === 'Semua' ? 'Semua SKS' : `${sksVal} SKS (${sksVal * 50}m)`}
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      isSelected ? 'bg-blue-800 text-blue-100' : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => handleOpenAdjustSksModal(null)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-900 hover:bg-blue-800 rounded-xl transition-all shadow-xs shrink-0"
+            title="Buka form penyesuaian jam perkuliahan & durasi SKS (50 menit/SKS)"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Sesuaikan SKS & Jam</span>
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100">
@@ -1329,7 +1500,7 @@ export const JadwalTerpaduPage: React.FC = () => {
                         </span>
                       </td>
                       {sessionColumns.map((session) => {
-                        const classInSlot = dayItems.find((item) => item.sessionIndex === session.id);
+                        const classesInSlot = dayItems.filter((item) => item.sessionIndex === session.id);
                         const isFridayBreak = day === 'JUMAT' && session.id === 2;
 
                         return (
@@ -1338,65 +1509,105 @@ export const JadwalTerpaduPage: React.FC = () => {
                               <div className="h-full min-h-[95px] rounded-xl bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center text-center p-2">
                                 <span className="text-[11px] text-slate-400 italic">Persiapan Jumat</span>
                               </div>
-                            ) : classInSlot ? (
-                              <div className="p-2.5 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2 hover:border-blue-300 transition-all">
-                                {/* Course header */}
-                                <div className="flex items-center justify-between gap-1">
-                                  <span className="font-mono text-[11px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                    {classInSlot.courseCode}
-                                  </span>
-                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                    {classInSlot.sks} SKS
-                                  </span>
-                                </div>
-
-                                {/* Course name */}
-                                <div className="font-bold text-slate-900 text-xs leading-snug">{classInSlot.courseName}</div>
-
-                                {/* Class & count */}
-                                <div className="text-[11px] text-slate-500">
-                                  {classInSlot.classLabel}
-                                  {classInSlot.studentCount ? ` • ${classInSlot.studentCount} Mhs` : ''}
-                                </div>
-
-                                {/* Room info */}
-                                <div className="flex items-center gap-1 text-[11px]">
-                                  <Building className="w-3 h-3 text-slate-400 shrink-0" />
-                                  <button
-                                    onClick={() => handleOpenNavForRoom(classInSlot.roomName)}
-                                    className="font-semibold text-blue-700 hover:underline truncate max-w-[130px]"
-                                    title="Klik untuk navigasi ruang"
+                            ) : classesInSlot.length > 0 ? (
+                              <div className="space-y-2">
+                                {classesInSlot.map((classInSlot) => (
+                                  <div
+                                    key={classInSlot.id}
+                                    className="p-2.5 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2 hover:border-blue-300 transition-all"
                                   >
-                                    {classInSlot.roomCode || classInSlot.roomName.split('(')[0].trim()}
-                                  </button>
-                                </div>
+                                    {/* Course header */}
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="font-mono text-[11px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                        {classInSlot.courseCode}
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <span
+                                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${classInSlot.department === 'SI'
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                            : classInSlot.department === 'IF'
+                                              ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                              : 'bg-purple-50 text-purple-700 border-purple-200'
+                                            }`}
+                                        >
+                                          {classInSlot.department}
+                                        </span>
+                                        <button
+                                          onClick={() => handleOpenAdjustSksModal(classInSlot)}
+                                          title="Klik untuk menyesuaikan SKS & jam perkuliahan"
+                                          className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 transition-colors"
+                                        >
+                                          {classInSlot.sks} SKS
+                                        </button>
+                                      </div>
+                                    </div>
 
-                                {/* Dosen (for mahasiswa view) */}
-                                {rosterView === 'mahasiswa' && (
-                                  <div className="text-[10px] text-slate-500 truncate">
-                                    {classInSlot.lecturerName}
-                                  </div>
-                                )}
+                                    {/* Course name */}
+                                    <div className="font-bold text-slate-900 text-xs leading-snug">
+                                      {classInSlot.courseName}
+                                    </div>
 
-                                {/* Status badge */}
-                                {classInSlot.attendanceStatus && (
-                                  <div className="text-[10px] font-semibold text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 inline-block">
-                                    {classInSlot.attendanceStatus}
-                                  </div>
-                                )}
+                                    {/* Jam & Durasi Menit */}
+                                    <div className="text-[10px] font-semibold text-slate-600 flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                      <Clock className="w-3 h-3 text-blue-600 shrink-0" />
+                                      <span className="font-mono">{classInSlot.timeLabel}</span>
+                                      <span className="text-slate-400 font-normal">({classInSlot.sks * 50}m)</span>
+                                    </div>
 
-                                {/* CTA: Ganti Jadwal – HANYA Dosen (keseluruhan pertemuan semester setelah diskusi) */}
-                                {isDosen && (
-                                  <div className="pt-1.5 border-t border-slate-100">
-                                    <button
-                                      onClick={() => setCariRuangTarget(classInSlot)}
-                                      className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-bold text-white bg-[#082c78] hover:bg-blue-800 rounded-lg transition-colors"
-                                    >
-                                      <Search className="w-3 h-3" />
-                                      <span>Ganti Jadwal Semester</span>
-                                    </button>
+                                    {/* Class & count */}
+                                    <div className="text-[11px] text-slate-500">
+                                      {classInSlot.classLabel}
+                                      {classInSlot.studentCount ? ` • ${classInSlot.studentCount} Mhs` : ''}
+                                    </div>
+
+                                    {/* Room info */}
+                                    <div className="flex items-center justify-between gap-1 text-[11px]">
+                                      <div className="flex items-center gap-1">
+                                        <Building className="w-3 h-3 text-slate-400 shrink-0" />
+                                        <button
+                                          onClick={() => handleOpenNavForRoom(classInSlot.roomName)}
+                                          className="font-semibold text-blue-700 hover:underline truncate max-w-[105px]"
+                                          title="Klik untuk navigasi ruang"
+                                        >
+                                          {classInSlot.roomCode || classInSlot.roomName.split('(')[0].trim()}
+                                        </button>
+                                      </div>
+                                      <button
+                                        onClick={() => handleOpenAdjustSksModal(classInSlot)}
+                                        className="text-[10px] font-semibold text-blue-700 hover:underline"
+                                      >
+                                        Atur SKS
+                                      </button>
+                                    </div>
+
+                                    {/* Dosen (for mahasiswa view) */}
+                                    {rosterView === 'mahasiswa' && (
+                                      <div className="text-[10px] text-slate-500 truncate">
+                                        {classInSlot.lecturerName}
+                                      </div>
+                                    )}
+
+                                    {/* Status badge */}
+                                    {classInSlot.attendanceStatus && (
+                                      <div className="text-[10px] font-semibold text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 inline-block">
+                                        {classInSlot.attendanceStatus}
+                                      </div>
+                                    )}
+
+                                    {/* CTA: Ganti Jadwal – HANYA Dosen (keseluruhan pertemuan semester setelah diskusi) */}
+                                    {isDosen && (
+                                      <div className="pt-1.5 border-t border-slate-100">
+                                        <button
+                                          onClick={() => setCariRuangTarget(classInSlot)}
+                                          className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-bold text-white bg-[#082c78] hover:bg-blue-800 rounded-lg transition-colors"
+                                        >
+                                          <Search className="w-3 h-3" />
+                                          <span>Ganti Jadwal Semester</span>
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
-                                )}
+                                ))}
                               </div>
                             ) : (
                               <div className="h-full min-h-[95px] rounded-xl border border-dashed border-slate-100 flex items-center justify-center">
@@ -1438,18 +1649,40 @@ export const JadwalTerpaduPage: React.FC = () => {
                       <div className="text-[10px] text-slate-400 font-normal">{item.timeLabel}</div>
                       <div className="text-[10px] text-blue-600 font-semibold mt-0.5">Sesi {item.sessionIndex}</div>
                     </td>
-                    <td className="p-3.5 font-mono font-bold text-blue-700">{item.courseCode}</td>
+                    <td className="p-3.5">
+                      <div className="font-mono font-bold text-blue-700">{item.courseCode}</div>
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded border inline-block mt-0.5 ${item.department === 'SI'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : item.department === 'IF'
+                            ? 'bg-sky-50 text-sky-700 border-sky-200'
+                            : 'bg-purple-50 text-purple-700 border-purple-200'
+                          }`}
+                      >
+                        {item.department === 'SI' ? 'SI' : item.department === 'IF' ? 'IF' : 'TK'}
+                      </span>
+                    </td>
                     <td className="p-3.5 font-semibold text-slate-900">
                       <div>{item.courseName}</div>
-                      <span className={`text-[10px] font-normal px-1.5 py-0.5 rounded mt-0.5 inline-block ${
-                        item.type === 'Praktikum' ? 'bg-purple-50 text-purple-700' :
+                      <span className={`text-[10px] font-normal px-1.5 py-0.5 rounded mt-0.5 inline-block ${item.type === 'Praktikum' ? 'bg-purple-50 text-purple-700' :
                         item.type === 'Seminar' ? 'bg-orange-50 text-orange-700' :
-                        'bg-sky-50 text-sky-700'
-                      }`}>{item.type}</span>
+                          'bg-sky-50 text-sky-700'
+                        }`}>{item.type}</span>
                     </td>
                     <td className="p-3.5 text-slate-700">
                       <div className="font-semibold">{item.classLabel}</div>
-                      <div className="text-[10px] text-slate-500">{item.sks} SKS</div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <button
+                          onClick={() => handleOpenAdjustSksModal(item)}
+                          className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 transition-colors"
+                          title="Klik untuk menyesuaikan SKS & jam"
+                        >
+                          {item.sks} SKS
+                        </button>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          ({item.sks * 50} Menit)
+                        </span>
+                      </div>
                     </td>
                     <td className="p-3.5">
                       <button
@@ -1499,8 +1732,8 @@ export const JadwalTerpaduPage: React.FC = () => {
             {rosterView === 'dosen'
               ? 'Jadwal mengajar telah tersinkronisasi otomatis dengan BKD FTI Unand. Dosen dapat mengganti jadwal keseluruhan pertemuan semester setelah diskusi dengan mahasiswa.'
               : rosterView === 'mahasiswa'
-              ? 'Jadwal kuliah diambil dari KRS aktif (Hanya Lihat). Untuk kelas pengganti per pertemuan, gunakan fitur Cari Kelas Pengganti di menu Heatmap.'
-              : 'Master jadwal FTI telah divalidasi 100% bebas bentrok oleh Solver CP-SAT.'}
+                ? 'Jadwal kuliah diambil dari KRS aktif (Hanya Lihat). Untuk kelas pengganti per pertemuan, gunakan fitur Cari Kelas Pengganti di menu Heatmap.'
+                : 'Master jadwal FTI telah divalidasi 100% bebas bentrok oleh Solver CP-SAT.'}
           </span>
         </div>
         <button onClick={handlePrint} className="font-bold text-blue-700 hover:underline flex items-center gap-1 shrink-0">

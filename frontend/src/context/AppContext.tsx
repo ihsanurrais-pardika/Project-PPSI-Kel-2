@@ -1,6 +1,18 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { User, UserRole, CourseOffering, Room, ScheduleItem, ConflictItem, AuditLogItem, GAParameters, ClassRombel } from '../types';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User, UserRole, CourseOffering, Room, ScheduleItem, ConflictItem, AuditLogItem, GAParameters, CPSATParameters, ClassRombel } from '../types';
 import { mockCourses, mockRooms, mockScheduleGrid, mockConflicts, mockAuditLogs, initialGAParams, mockLecturers } from '../data/mockData';
+import { apiService, BackendClassItem, AdjustClassPayload, SolverResultResponse, GenerateScheduleParams } from '../services/api';
+import { resolveDepartment } from '../utils/departmentHelper';
+
+export const initialCPSATParams: CPSATParameters = {
+  wGap: 10,
+  wPref: 4,
+  wSpread: 3,
+  wWaste: 1,
+  timeoutSeconds: 60,
+  numWorkers: 8,
+  linearizationLevel: 2,
+};
 
 interface AppContextType {
   currentUser: User;
@@ -19,6 +31,7 @@ interface AppContextType {
   conflicts: ConflictItem[];
   auditLogs: AuditLogItem[];
   gaParams: GAParameters;
+  cpsatParams: CPSATParameters;
   scheduleApprovalStatus: 'Menunggu Persetujuan' | 'Disetujui' | 'Revisi' | 'Resmi';
   wadekRevisionNote: string;
   isPublishModalOpen: boolean;
@@ -32,6 +45,18 @@ interface AppContextType {
   selectedRoomForNav: Room | null;
   setSelectedRoomForNav: (room: Room | null) => void;
 
+  // Backend API Integration State
+  backendStatus: 'connected' | 'offline' | 'checking';
+  backendClasses: BackendClassItem[];
+  isBackendLoading: boolean;
+  latestCPSATResult: SolverResultResponse | null;
+  fetchBackendClasses: () => Promise<void>;
+  adjustBackendClass: (classId: string, payload: AdjustClassPayload) => Promise<boolean>;
+  deleteBackendClass: (classId: string) => Promise<boolean>;
+  resetBackendClassesToCSV: () => Promise<void>;
+  updateCPSATParams: (params: CPSATParameters) => void;
+  runCPSATSolver: (params?: GenerateScheduleParams) => Promise<SolverResultResponse | null>;
+
   // Actions
   addCourse: (course: Partial<CourseOffering>) => void;
   updateCourse: (id: string, updated: Partial<CourseOffering>) => void;
@@ -44,6 +69,18 @@ interface AppContextType {
   reviewScheduleClass: (scheduleId: string, decision: 'Disetujui' | 'Revisi', note?: string) => void;
   publishOfficialSchedule: () => void;
   reassignRoomSchedule: (scheduleId: string, newRoomId: string, isPermanent: boolean) => void;
+  updateScheduleClassSksAndTime: (
+    scheduleId: string,
+    params: {
+      sks: number;
+      day: string;
+      sessionIndex: number;
+      startTime: string;
+      endTime: string;
+      roomId?: string;
+      roomName?: string;
+    }
+  ) => void;
   cancelClassOffering: (courseId: string, classId: string, reason: string) => void;
   addClassToCourse: (courseId: string, className: string, capacity: number) => void;
   toast: { message: string; type: 'success' | 'info' | 'error' | 'warning' } | null;
@@ -64,6 +101,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [conflicts, setConflicts] = useState<ConflictItem[]>(mockConflicts);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>(mockAuditLogs);
   const [gaParams, setGaParams] = useState<GAParameters>(initialGAParams);
+  const [cpsatParams, setCpsatParams] = useState<CPSATParameters>(initialCPSATParams);
+  
+  // Backend API Integration State
+  const [backendStatus, setBackendStatus] = useState<'connected' | 'offline' | 'checking'>('checking');
+  const [backendClasses, setBackendClasses] = useState<BackendClassItem[]>([]);
+  const [isBackendLoading, setIsBackendLoading] = useState<boolean>(false);
+  const [latestCPSATResult, setLatestCPSATResult] = useState<SolverResultResponse | null>(null);
   
   const [scheduleApprovalStatus, setScheduleApprovalStatus] = useState<'Menunggu Persetujuan' | 'Disetujui' | 'Revisi' | 'Resmi'>('Menunggu Persetujuan');
   const [wadekRevisionNote, setWadekRevisionNote] = useState<string>('');
@@ -441,6 +485,167 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showToast(`Ruang pengganti berhasil dialokasikan ke ${targetRoom.name}!`, 'success');
   };
 
+  const updateScheduleClassSksAndTime = (
+    scheduleId: string,
+    params: {
+      sks: number;
+      day: string;
+      sessionIndex: number;
+      startTime: string;
+      endTime: string;
+      roomId?: string;
+      roomName?: string;
+    }
+  ) => {
+    setSchedule(prev => prev.map(s => {
+      if (s.id === scheduleId) {
+        return {
+          ...s,
+          sks: params.sks,
+          day: params.day,
+          sessionIndex: params.sessionIndex,
+          timeLabel: `${params.startTime} - ${params.endTime}`,
+          time: `${params.startTime} - ${params.endTime}`,
+          roomId: params.roomId || s.roomId,
+          roomName: params.roomName || s.roomName,
+          note: `Disesuaikan: ${params.sks} SKS (${params.sks * 50} Menit)`
+        };
+      }
+      return s;
+    }));
+
+    const log: AuditLogItem = {
+      id: `log-${Date.now()}`,
+      timestamp: 'Baru saja',
+      activity: `Penyesuaian Fleksibel SKS & Jam (${params.sks} SKS)`,
+      description: `Jadwal ${scheduleId} disesuaikan menjadi ${params.sks} SKS (${params.startTime} - ${params.endTime}) pada hari ${params.day}.`,
+      category: 'Admin',
+      actorName: currentUser.name,
+      actorRole: currentUser.role,
+      status: 'info',
+    };
+    setAuditLogs(prev => [log, ...prev]);
+    showToast(`Jadwal berhasil disesuaikan: ${params.sks} SKS (${params.startTime} - ${params.endTime})!`, 'success');
+  };
+
+  const fetchBackendClasses = async () => {
+    setIsBackendLoading(true);
+    try {
+      const data = await apiService.getClasses();
+      setBackendClasses(data);
+      setBackendStatus('connected');
+    } catch (err) {
+      console.warn('Backend API is currently offline:', err);
+      setBackendStatus('offline');
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  const adjustBackendClass = async (classId: string, payload: AdjustClassPayload): Promise<boolean> => {
+    try {
+      const updated = await apiService.adjustClass(classId, payload);
+      setBackendClasses(prev => prev.map(c => c.id === classId ? updated : c));
+      showToast(`Kelas ${updated.course_code} (${updated.class_label}) berhasil disesuaikan!`, 'success');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal menyesuaikan kelas: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const deleteBackendClass = async (classId: string): Promise<boolean> => {
+    try {
+      await apiService.deleteClass(classId);
+      setBackendClasses(prev => prev.filter(c => c.id !== classId));
+      showToast(`Kelas ${classId} berhasil dibatalkan dari alokasi jadwal.`, 'info');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal membatalkan kelas: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const resetBackendClassesToCSV = async () => {
+    setIsBackendLoading(true);
+    try {
+      const res = await apiService.resetClassesToCSV();
+      await fetchBackendClasses();
+      showToast(`Data kelas berhasil di-reset ke CSV (${res.total_classes} kelas).`, 'success');
+    } catch (err: any) {
+      showToast(`Gagal reset ke CSV: ${err.message}`, 'error');
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  const updateCPSATParams = (params: CPSATParameters) => {
+    setCpsatParams(params);
+    showToast('Parameter solver CP-SAT berhasil disimpan.', 'success');
+  };
+
+  const runCPSATSolver = async (params?: GenerateScheduleParams): Promise<SolverResultResponse | null> => {
+    setIsBackendLoading(true);
+    try {
+      const payload: GenerateScheduleParams = {
+        w_gap: cpsatParams.wGap,
+        w_pref: cpsatParams.wPref,
+        w_spread: cpsatParams.wSpread,
+        w_waste: cpsatParams.wWaste,
+        max_time_seconds: cpsatParams.timeoutSeconds,
+        num_workers: cpsatParams.numWorkers,
+        ...params,
+      };
+      const res = await apiService.generateScheduleCPSAT(payload);
+      setLatestCPSATResult(res);
+
+      if (res.status === 'OPTIMAL' || res.status === 'FEASIBLE') {
+        const newScheduleItems: ScheduleItem[] = res.schedule.map((sc, idx) => {
+          const backendClass = backendClasses.find(b => b.id === sc.class_id || b.course_code === sc.course_code);
+          const resolvedSks = sc.sks || backendClass?.sks || (sc.duration >= 2 ? sc.duration : 2);
+          return {
+            id: `sch-${sc.class_id}-${idx}`,
+            courseCode: sc.course_code,
+            courseName: sc.course_name,
+            classLabel: sc.class_label,
+            className: sc.class_label,
+            sks: resolvedSks,
+            studentCount: sc.size,
+            roomId: sc.room_id,
+            roomName: sc.room_name,
+            building: sc.floor === 1 ? 'Gedung FTI (Lantai 1)' : 'Gedung FTI',
+            floor: sc.floor,
+            day: sc.day as any,
+            sessionIndex: (sc.start_slot_index % 6) + 1,
+            timeLabel: `${sc.start_time} - ${sc.end_time}`,
+            time: `${sc.start_time} - ${sc.end_time}`,
+            primaryLecturer: sc.lecturer_names[0] || 'Dosen Pengampu',
+            lecturerName: sc.lecturer_names.join(', '),
+            tandemLecturers: sc.lecturer_names.slice(1),
+            isTandem: sc.lecturer_names.length > 1,
+            department: resolveDepartment(sc.department, sc.course_code),
+            status: 'OK',
+            wd1Status: 'Menunggu Review',
+          };
+        });
+        setSchedule(newScheduleItems);
+        showToast(`Solver CP-SAT Selesai: Status ${res.status} dalam ${res.wall_time_seconds} detik! (${res.scheduled_classes} kelas terjadwal)`, 'success');
+      } else {
+        showToast(`Solver CP-SAT menghasilkan status ${res.status}. Periksa batasan atau diagnostik.`, 'warning');
+      }
+      return res;
+    } catch (err: any) {
+      showToast(`Gagal menjalankan solver CP-SAT: ${err.message}`, 'error');
+      return null;
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBackendClasses();
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -458,6 +663,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         conflicts,
         auditLogs,
         gaParams,
+        cpsatParams,
+        backendStatus,
+        backendClasses,
+        isBackendLoading,
+        latestCPSATResult,
+        fetchBackendClasses,
+        adjustBackendClass,
+        deleteBackendClass,
+        resetBackendClassesToCSV,
+        updateCPSATParams,
+        runCPSATSolver,
         scheduleApprovalStatus,
         wadekRevisionNote,
         isPublishModalOpen,
@@ -481,6 +697,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         reviewScheduleClass,
         publishOfficialSchedule,
         reassignRoomSchedule,
+        updateScheduleClassSksAndTime,
         cancelClassOffering,
         addClassToCourse,
         toast,

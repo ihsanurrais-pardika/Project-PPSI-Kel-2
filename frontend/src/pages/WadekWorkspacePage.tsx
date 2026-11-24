@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { resolveDepartment } from '../utils/departmentHelper';
 import {
   Activity,
   AlertTriangle,
@@ -153,11 +154,8 @@ const CalendarView: React.FC<{
   const filtered = useMemo(() => {
     let items = rows;
     if (deptFilter !== 'all') items = items.filter(r => {
-      const d = (r.department || '').toLowerCase();
-      if (deptFilter === 'SI') return d.includes('sistem informasi') || d === 'si';
-      if (deptFilter === 'IF') return d.includes('informatika') || d === 'if';
-      if (deptFilter === 'TK') return d.includes('teknik komputer') || d === 'tk';
-      return true;
+      const resolved = resolveDepartment(r.department, r.courseCode || r.code);
+      return resolved === deptFilter;
     });
     return items;
   }, [rows, deptFilter]);

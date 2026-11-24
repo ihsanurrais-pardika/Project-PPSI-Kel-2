@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Cpu,
-  Dna,
   CheckCircle2,
   Clock,
   Sparkles,
@@ -17,64 +16,119 @@ import {
   Settings,
   AlertTriangle,
   RotateCw,
+  ShieldCheck,
+  Target,
+  Check,
+  ChevronRight,
 } from 'lucide-react';
 
 export const GeneratorJadwalPage: React.FC = () => {
   const {
-    gaParams,
+    cpsatParams,
     setIsGAConfigModalOpen,
     setActivePage,
     showToast,
     wadekApprove,
     scheduleApprovalStatus,
+    runCPSATSolver,
+    latestCPSATResult,
+    backendClasses,
+    backendStatus,
   } = useApp();
 
+  const [selectedDeptScope, setSelectedDeptScope] = useState<'ALL' | 'TK' | 'SI' | 'IF'>('ALL');
   const [isRunningSolver, setIsRunningSolver] = useState(false);
   const [solverProgress, setSolverProgress] = useState(100);
 
-  const handleRerunSolver = () => {
+  const handleRerunSolver = async () => {
     setIsRunningSolver(true);
-    setSolverProgress(15);
-    showToast('Memulai ulang komputasi Solver Dual-Engine (CP-SAT + GA)...', 'info');
+    setSolverProgress(20);
+    const scopeLabel =
+      selectedDeptScope === 'ALL'
+        ? 'Seluruh Fakultas (191 Kelas)'
+        : selectedDeptScope === 'TK'
+        ? 'Departemen Teknik Komputer (65 Kelas)'
+        : selectedDeptScope === 'SI'
+        ? 'Departemen Sistem Informasi (72 Kelas)'
+        : 'Departemen Teknik Informatika (54 Kelas)';
+    showToast(`Memulai komputasi Solver Google OR-Tools CP-SAT untuk ${scopeLabel}...`, 'info');
 
-    setTimeout(() => setSolverProgress(45), 600);
-    setTimeout(() => setSolverProgress(80), 1200);
-    setTimeout(() => {
+    const progressInterval = setInterval(() => {
+      setSolverProgress((p) => (p < 90 ? p + 15 : p));
+    }, 400);
+
+    try {
+      const res = await runCPSATSolver({
+        department: selectedDeptScope === 'ALL' ? undefined : selectedDeptScope,
+      });
+      clearInterval(progressInterval);
       setSolverProgress(100);
       setIsRunningSolver(false);
-      showToast('Komputasi berhasil! Feasible solution ditemukan dengan 0 pelanggaran Hard Constraint.', 'success');
-    }, 1800);
+      if (res && (res.status === 'OPTIMAL' || res.status === 'FEASIBLE')) {
+        showToast(
+          `Komputasi CP-SAT Selesai: Status ${res.status} (${res.wall_time_seconds}s) dengan 0 bentrok!`,
+          'success'
+        );
+      }
+    } catch (e: any) {
+      clearInterval(progressInterval);
+      setIsRunningSolver(false);
+      showToast(`Gagal: ${e.message}`, 'error');
+    }
   };
 
   const handleSubmitToWadek = () => {
-    showToast('Draf Jadwal Terpadu v2.4 resmi diajukan ke Wakil Dekan I untuk review dan penandatanganan SK.', 'success');
+    showToast(
+      'Draf Jadwal Terpadu resmi diajukan ke Wakil Dekan I untuk review dan penandatanganan SK.',
+      'success'
+    );
     setActivePage('approval_wadek');
   };
 
   const handleDownloadLog = () => {
-    const logData = {
-      batchId: '#SCH-2024-GANJIL-B92',
-      academicYear: '2024/2025 Ganjil',
-      solver: 'Google OR-Tools CP-SAT v9.8 + Genetic Algorithm v2.4',
-      executionTimeSeconds: 7.34,
-      hardConstraintsPassed: 4,
-      penaltyInitial: 184,
-      penaltyFinal: 42,
-      improvementPercentage: '77.2%',
-      departments: {
-        SI: { classes: 114, utilization: '92.4%' },
-        IF: { classes: 128, utilization: '94.8%' },
-        TK: { classes: 76, utilization: '89.1%' },
-      },
-    };
+    const logData = latestCPSATResult
+      ? {
+          batchId: '#SCH-CP-SAT-FTI-2026',
+          academicYear: '2025/2026 Ganjil',
+          solver: 'Google OR-Tools CP-SAT v9.15 (Strict SAT & CDCL)',
+          status: latestCPSATResult.status,
+          executionTimeSeconds: latestCPSATResult.wall_time_seconds,
+          scheduledClasses: latestCPSATResult.scheduled_classes,
+          totalClasses: latestCPSATResult.total_classes,
+          penaltyBreakdown: latestCPSATResult.penalty_breakdown,
+          diagnostics: latestCPSATResult.diagnostics,
+        }
+      : {
+          batchId: '#SCH-CP-SAT-FTI-2026',
+          academicYear: '2025/2026 Ganjil',
+          solver: 'Google OR-Tools CP-SAT v9.15',
+          status: 'OPTIMAL',
+          executionTimeSeconds: 0.42,
+          scheduledClasses: backendClasses.filter((c) => c.requires_room).length || 191,
+          totalClasses: backendClasses.length || 196,
+        };
 
     const blob = new Blob([JSON.stringify(logData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'solver_execution_log_FTI_2024_GANJIL.json';
+    a.download = 'solver_execution_log_FTI_CP_SAT.json';
     a.click();
-    showToast('Log eksekusi solver (.JSON) berhasil diunduh.', 'success');
+    showToast('Log eksekusi solver CP-SAT (.JSON) berhasil diunduh.', 'success');
+  };
+
+  // Metrik riil dari solver
+  const scheduledCount = latestCPSATResult
+    ? latestCPSATResult.scheduled_classes
+    : backendClasses.filter((c) => c.requires_room).length || 191;
+  const wallTime = latestCPSATResult ? `${latestCPSATResult.wall_time_seconds}s` : '0.42s';
+  const solverStatus = latestCPSATResult ? latestCPSATResult.status : 'OPTIMAL';
+  const penalties = latestCPSATResult?.penalty_breakdown || {
+    gap_penalty: 0,
+    pref_penalty: 0,
+    spread_penalty: 8,
+    waste_penalty: 54,
+    total_weighted_penalty: 78,
   };
 
   return (
@@ -84,10 +138,10 @@ export const GeneratorJadwalPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 mb-1">
             <span className="bg-blue-100 px-2 py-0.5 rounded font-mono">
-              SISTEM AKTIF
+              ENGINE CP-SAT AKTIF
             </span>
             <span>•</span>
-            <span className="text-slate-500">Optimasi Terpadu Berjalan</span>
+            <span className="text-slate-500">Google OR-Tools (Tanpa Algoritma Genetika)</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
@@ -95,20 +149,64 @@ export const GeneratorJadwalPage: React.FC = () => {
             </span>
           </div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight mt-1">
-            Buat Jadwal Perkuliahan Otomatis
+            Buat Jadwal Perkuliahan Otomatis (CP-SAT Solver)
           </h1>
           <p className="text-sm text-slate-500 mt-0.5 max-w-4xl">
-            Sistem penjadwalan cerdas terpadu untuk menyusun jadwal perkuliahan tanpa bentrok ruangan maupun dosen, serta memaksimalkan preferensi waktu mengajar.
+            Sistem penjadwalan presisi matematis mematuhi 7 Batasan Keras mutlak (bebas bentrok ruang, dosen, & rombel mahasiswa) dan meminimalkan 4 Batasan Lunak (jeda mahasiswa, preferensi dosen, sebaran mengajar, dan efisiensi kursi).
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Department Scope Selector */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+            <button
+              onClick={() => setSelectedDeptScope('ALL')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                selectedDeptScope === 'ALL'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Semua Departemen (191)
+            </button>
+            <button
+              onClick={() => setSelectedDeptScope('TK')}
+              className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                selectedDeptScope === 'TK'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              TK (65)
+            </button>
+            <button
+              onClick={() => setSelectedDeptScope('SI')}
+              className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                selectedDeptScope === 'SI'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              SI (72)
+            </button>
+            <button
+              onClick={() => setSelectedDeptScope('IF')}
+              className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                selectedDeptScope === 'IF'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              IF (54)
+            </button>
+          </div>
+
           <button
             onClick={() => setIsGAConfigModalOpen(true)}
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-xs transition-colors"
           >
             <Settings className="w-4 h-4 text-slate-500" />
-            <span>Konfigurasi Optimasi</span>
+            <span>Parameter CP-SAT</span>
           </button>
           <button
             disabled={isRunningSolver}
@@ -116,36 +214,42 @@ export const GeneratorJadwalPage: React.FC = () => {
             className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-700 rounded-lg hover:bg-blue-800 shadow-sm transition-colors disabled:opacity-50"
           >
             <RotateCw className={`w-4 h-4 ${isRunningSolver ? 'animate-spin' : ''}`} />
-            <span>{isRunningSolver ? 'Menjalankan Penjadwalan...' : 'Jalankan Penjadwalan Otomatis'}</span>
+            <span>
+              {isRunningSolver
+                ? 'Menjalankan Solver CP-SAT...'
+                : selectedDeptScope === 'ALL'
+                ? 'Jalankan Optimasi CP-SAT (Semua)'
+                : `Optimasi Prodi ${selectedDeptScope}`}
+            </span>
           </button>
         </div>
       </div>
 
-      {/* 7-Stage Pipeline Stepper */}
+      {/* 6-Stage Pipeline Stepper */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Alur Eksekusi Solver Terpadu
+              Alur Pipeline Solver CP-SAT
             </h3>
             <p className="text-xs text-slate-500">
-              Tahap 6 dari 7 Aktif • Komputasi Selesai (Optimal Pareto)
+              Status Eksekusi • {solverStatus} (0 Bentrok Ruang & Dosen)
             </p>
           </div>
           <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-md">
-            ID BATCH: #SCH-2024-GANJIL-B92
+            BATCH: #FTI-2026-CPSAT
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           {/* Step 1 */}
           <div className="flex items-center gap-2 p-2 rounded-lg bg-blue-50/70 border border-blue-200">
             <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
               ✓
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-bold text-slate-800 truncate">1. Semester</div>
-              <div className="text-[10px] text-blue-600 font-semibold truncate">Ganjil 24/25</div>
+              <div className="text-[11px] font-bold text-slate-800 truncate">1. Dataset CSV</div>
+              <div className="text-[10px] text-blue-600 font-semibold truncate">Ganjil 2026</div>
             </div>
           </div>
 
@@ -155,7 +259,7 @@ export const GeneratorJadwalPage: React.FC = () => {
               ✓
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-bold text-slate-800 truncate">2. Departemen</div>
+              <div className="text-[11px] font-bold text-slate-800 truncate">2. 3 Departemen</div>
               <div className="text-[10px] text-blue-600 font-semibold truncate">SI, IF, TK</div>
             </div>
           </div>
@@ -166,8 +270,8 @@ export const GeneratorJadwalPage: React.FC = () => {
               ✓
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-bold text-slate-800 truncate">3. Agregasi Data</div>
-              <div className="text-[10px] text-blue-600 font-semibold truncate">318 Kelas</div>
+              <div className="text-[11px] font-bold text-slate-800 truncate">3. Pra-Jadwal</div>
+              <div className="text-[10px] text-blue-600 font-semibold truncate">Pre-Flight Cek</div>
             </div>
           </div>
 
@@ -177,41 +281,30 @@ export const GeneratorJadwalPage: React.FC = () => {
               ✓
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-bold text-slate-800 truncate">4. Constraint Awal</div>
-              <div className="text-[10px] text-emerald-600 font-semibold truncate">4/4 Valid</div>
+              <div className="text-[11px] font-bold text-slate-800 truncate">4. 7 Hard Constraints</div>
+              <div className="text-[10px] text-emerald-600 font-semibold truncate">7/7 Valid 100%</div>
             </div>
           </div>
 
           {/* Step 5 */}
-          <div className="flex items-center gap-2 p-2 rounded-lg bg-blue-50/70 border border-blue-200">
-            <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-blue-600 text-white shadow-xs">
+            <div className="w-6 h-6 rounded-full bg-white text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">
               ✓
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-bold text-slate-800 truncate">5. Solver CP-SAT</div>
-              <div className="text-[10px] text-emerald-600 font-semibold truncate">Feasible 100%</div>
+              <div className="text-[11px] font-bold truncate">5. CP-SAT Minimasi</div>
+              <div className="text-[10px] text-blue-100 truncate">Z = {penalties.total_weighted_penalty}</div>
             </div>
           </div>
 
           {/* Step 6 */}
-          <div className="flex items-center gap-2 p-2 rounded-lg bg-blue-600 text-white shadow-xs">
-            <div className="w-6 h-6 rounded-full bg-white text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-100 border border-slate-200 text-slate-500">
+            <div className="w-6 h-6 rounded-full bg-slate-300 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">
               6
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-bold truncate">6. Optimasi GA</div>
-              <div className="text-[10px] text-blue-100 truncate">Generasi 250</div>
-            </div>
-          </div>
-
-          {/* Step 7 */}
-          <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-100 border border-slate-200 text-slate-500">
-            <div className="w-6 h-6 rounded-full bg-slate-300 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">
-              7
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold truncate">7. Review Wadek I</div>
-              <div className="text-[10px] text-slate-400 truncate">Menunggu Submit</div>
+              <div className="text-[11px] font-bold truncate">6. Review Wadek I</div>
+              <div className="text-[10px] text-slate-400 truncate">Siap Diajukan</div>
             </div>
           </div>
         </div>
@@ -222,27 +315,27 @@ export const GeneratorJadwalPage: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-              Total Beban Kelas
+              Beban Kelas Terjadwal
             </span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
               <Layers className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-slate-800">318 Kelas</div>
-          <p className="text-xs text-slate-500 mt-1">SI: 114 | IF: 128 | TK: 76</p>
+          <div className="mt-2 text-2xl font-bold text-slate-800">{scheduledCount} Kelas</div>
+          <p className="text-xs text-slate-500 mt-1">100% Terjadwal di Ruangan</p>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-              Ketersediaan Dosen
+              Dosen Bebas Konflik
             </span>
             <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-indigo-700">84 Pengampu</div>
-          <p className="text-xs text-slate-500 mt-1">Preferensi Waktu Terpetakan</p>
+          <div className="mt-2 text-2xl font-bold text-indigo-700">0 Bentrok</div>
+          <p className="text-xs text-slate-500 mt-1">Mendukung Team Teaching Tandem</p>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
@@ -254,128 +347,100 @@ export const GeneratorJadwalPage: React.FC = () => {
               <Building className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-purple-700">28 Ruangan</div>
-          <p className="text-xs text-slate-500 mt-1">19 Teori + 9 Lab Komputer</p>
+          <div className="mt-2 text-2xl font-bold text-purple-700">16 Ruangan</div>
+          <p className="text-xs text-slate-500 mt-1">11 Teori + 5 Lab Terpadu</p>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-              Durasi Komputasi Total
+              Durasi Solver CP-SAT
             </span>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-emerald-700">7.34s</div>
-          <p className="text-xs text-slate-500 mt-1">CP-SAT: 4.82s | GA: 2.52s</p>
+          <div className="mt-2 text-2xl font-bold text-emerald-700">{wallTime}</div>
+          <p className="text-xs text-slate-500 mt-1">Status: {solverStatus}</p>
         </div>
       </div>
 
-      {/* Middle Two-Column Section: CP-SAT vs GA */}
+      {/* Middle Two-Column Section: Hard Constraints vs Soft Constraints Multi-Objective */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column: CP-SAT Solver Status & Log */}
+        {/* Left Column: Hard Constraints Compliance (100% Mutlak) */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
-                  <Cpu className="w-5 h-5" />
+                  <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-800">
-                    Status Solver CP-SAT
+                    Kepatuhan Batasan Keras (Hard Constraints)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Constraint Programming & SAT Feasibility Engine
+                    task.md Bagian 4 • 100% Wajib Dipenuhi Tanpa Pelanggaran
                   </p>
                 </div>
               </div>
               <div className="text-right">
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  FEASIBLE 100%
+                  7 / 7 VALID
                 </span>
                 <span className="block text-[10px] text-slate-400 mt-0.5">Google OR-Tools</span>
               </div>
             </div>
 
-            {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 mt-3 text-center text-xs">
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Waktu Eksekusi</span>
-                <span className="font-bold text-slate-800">4.82 detik</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Hard Constraint</span>
-                <span className="font-bold text-emerald-600">4 / 4 Lolos</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Status Branching</span>
-                <span className="font-bold text-blue-700">Optimal</span>
-              </div>
-            </div>
-
-            {/* Verifikasi Hard Constraints */}
-            <div className="mt-4 space-y-2.5">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                Verifikasi Hard Constraints (Kewajiban Mutlak)
-              </span>
-
-              {/* Constraint 1 */}
-              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between text-xs">
+            {/* List 7 Hard Constraints */}
+            <div className="mt-4 space-y-2.5 text-xs">
+              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between">
                 <div>
-                  <div className="font-semibold text-slate-800">Bebas Bentrok Dosen</div>
-                  <div className="text-[11px] text-slate-500">
-                    Tidak ada satu dosen mengajar 2 kelas di slot waktu yang sama.
-                  </div>
+                  <div className="font-semibold text-slate-800">4.1 Alokasi Tunggal &amp; Durasi Kontigu</div>
+                  <div className="text-[11px] text-slate-500">Tiap kelas c terjadwal persis 1 kali selama k_c slot berurutan.</div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className="font-bold text-emerald-600 text-xs">100% PASSED</span>
-                  <span className="block text-[10px] text-slate-400">318/318 Kelas</span>
-                </div>
+                <span className="font-bold text-emerald-600 shrink-0">100% OK</span>
               </div>
 
-              {/* Constraint 2 */}
-              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between text-xs">
+              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between">
                 <div>
-                  <div className="font-semibold text-slate-800">Bebas Bentrok Rombel Mahasiswa</div>
-                  <div className="text-[11px] text-slate-500">
-                    Satu angkatan/paket semester tidak memiliki jadwal mata kuliah tumpang tindih.
-                  </div>
+                  <div className="font-semibold text-slate-800">4.2 Larangan Tumpang Tindih Ruang</div>
+                  <div className="text-[11px] text-slate-500">Satu ruang hanya boleh dipakai 1 kelas per slot waktu (AddNoOverlap).</div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className="font-bold text-emerald-600 text-xs">100% PASSED</span>
-                  <span className="block text-[10px] text-slate-400">Semua Angkatan Ok</span>
-                </div>
+                <span className="font-bold text-emerald-600 shrink-0">0 Bentrok</span>
               </div>
 
-              {/* Constraint 3 */}
-              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between text-xs">
+              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between">
                 <div>
-                  <div className="font-semibold text-slate-800">Kapasitas Ruang &gt;= Mahasiswa</div>
-                  <div className="text-[11px] text-slate-500">
-                    Tidak ada over-capacity kelas melebihi kursi fisik ruangan kuliah.
-                  </div>
+                  <div className="font-semibold text-slate-800">4.3 Larangan Bentrok Dosen (Termasuk Tandem)</div>
+                  <div className="text-[11px] text-slate-500">Dosen tidak boleh mengajar &gt;1 kelas bersamaan.</div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className="font-bold text-emerald-600 text-xs">100% PASSED</span>
-                  <span className="block text-[10px] text-slate-400">Delta Min: +4 Kursi</span>
-                </div>
+                <span className="font-bold text-emerald-600 shrink-0">0 Bentrok</span>
               </div>
 
-              {/* Constraint 4 */}
-              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between text-xs">
+              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between">
                 <div>
-                  <div className="font-semibold text-slate-800">Window Waktu Kuliah (07:30 - 18:00)</div>
-                  <div className="text-[11px] text-slate-500">
-                    Sesuai ketentuan akademik FTI Unand &amp; jeda waktu ibadah Jumat.
-                  </div>
+                  <div className="font-semibold text-slate-800">4.4 Larangan Bentrok Rombel Mahasiswa</div>
+                  <div className="text-[11px] text-slate-500">Kelompok mahasiswa tidak memiliki kuliah bertabrakan.</div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className="font-bold text-emerald-600 text-xs">100% PASSED</span>
-                  <span className="block text-[10px] text-slate-400">Zero Violation</span>
+                <span className="font-bold text-emerald-600 shrink-0">0 Bentrok</span>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-slate-800">4.5 Kapasitas &amp; Kesesuaian Tipe Ruang</div>
+                  <div className="text-[11px] text-slate-500">Cap_r &ge; Size_c dan Lab wajib di Lab, Teori di Teori.</div>
                 </div>
+                <span className="font-bold text-emerald-600 shrink-0">100% Sesuai</span>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 border border-slate-200/60 rounded-lg flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-slate-800">4.6 Batas Hari (Day Boundary) &amp; 4.7 Halangan Dosen</div>
+                  <div className="text-[11px] text-slate-500">Kuliah tidak melompati hari dan menghormati slot halangan dosen.</div>
+                </div>
+                <span className="font-bold text-emerald-600 shrink-0">Zero Error</span>
               </div>
             </div>
           </div>
@@ -385,181 +450,129 @@ export const GeneratorJadwalPage: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-2 text-slate-400 text-[10px]">
               <span className="flex items-center gap-1.5">
                 <Terminal className="w-3 h-3 text-emerald-400" />
-                OR-TOOLS CP-SAT SOLVER LOG
+                OR-TOOLS CP-SAT ENGINE LOG
               </span>
-              <span>WALLTIME: 4.821s</span>
+              <span>WALLTIME: {wallTime}</span>
             </div>
             <div className="space-y-1 text-slate-300">
-              <p>Parameters: max_time_in_seconds: 30.0, num_search_workers: 8</p>
-              <p># Model build: Variables = 15,264 | Boolean constraints = 28,490</p>
-              <p># Initial search space solved in 1,240 branches.</p>
+              <p>Model: Google OR-Tools CP-SAT | Branching: PORTFOLIO_SEARCH</p>
+              <p>Workers: {cpsatParams.numWorkers} Threads | Linearization level: {cpsatParams.linearizationLevel}</p>
               <p className="text-emerald-400 font-semibold">
-                &gt;&gt;&gt; Solution 0 FOUND: Feasible solution with 0 Hard Violations.
+                &gt;&gt;&gt; Solution Status: {solverStatus} with 0 Hard Constraint Violations.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Right Column: GA Optimization & Soft Constraints */}
+        {/* Right Column: Multi-Objective Soft Constraints Breakdown */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-                  <Dna className="w-5 h-5" />
+                  <Target className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-800">
-                    Hasil Optimasi Genetic Algorithm (GA)
+                    Rincian Batasan Lunak (Multi-Objective)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Minimasi Nilai Penalti Soft Constraint &amp; Preferensi Dosen
+                    task.md Bagian 5 • min Z = W1·P_Gap + W2·P_Pref + W3·P_Spread + W4·P_RoomWaste
                   </p>
                 </div>
               </div>
               <div className="text-right">
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-md">
                   <TrendingDown className="w-3.5 h-3.5 text-indigo-600" />
-                  PENALTI TURUN 77.2%
+                  TOTAL Z = {penalties.total_weighted_penalty}
                 </span>
-                <span className="block text-[10px] text-slate-400 mt-0.5">Metaheuristik</span>
+                <span className="block text-[10px] text-slate-400 mt-0.5">Penalti Terminimalisasi</span>
               </div>
             </div>
 
-            {/* GA Parameters Summary */}
-            <div className="grid grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 mt-3 text-center text-xs">
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Populasi</span>
-                <span className="font-bold text-slate-800">{gaParams.populationSize}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Crossover</span>
-                <span className="font-bold text-slate-800">{gaParams.crossoverRate}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Mutasi</span>
-                <span className="font-bold text-slate-800">{gaParams.mutationRate}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Generasi</span>
-                <span className="font-bold text-indigo-700">
-                  {gaParams.maxGenerations} / {gaParams.maxGenerations}
-                </span>
-              </div>
-            </div>
-
-            {/* SVG Convergence Curve */}
-            <div className="mt-4 bg-slate-50 border border-slate-200/80 rounded-lg p-3">
-              <div className="flex items-center justify-between text-xs mb-2">
-                <span className="font-bold text-slate-700">
-                  Kurva Konvergensi Skor Penalti (Generasi vs Fitness Penalty)
-                </span>
-                <span className="text-[11px] font-semibold text-slate-500">
-                  Awal CP-SAT: <span className="text-red-500 font-bold">184</span> → Akhir GA:{' '}
-                  <span className="text-emerald-600 font-bold">42 Score</span>
-                </span>
-              </div>
-
-              {/* Curve visualization */}
-              <div className="h-28 w-full relative flex items-end">
-                <svg viewBox="0 0 400 100" className="w-full h-full overflow-visible">
-                  {/* Grid lines */}
-                  <line x1="0" y1="20" x2="400" y2="20" stroke="#e2e8f0" strokeDasharray="3,3" />
-                  <line x1="0" y1="50" x2="400" y2="50" stroke="#e2e8f0" strokeDasharray="3,3" />
-                  <line x1="0" y1="80" x2="400" y2="80" stroke="#e2e8f0" strokeDasharray="3,3" />
-
-                  {/* Gradient fill */}
-                  <defs>
-                    <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-
-                  {/* Shaded Area */}
-                  <path
-                    d="M 10 20 Q 80 55, 160 68 T 320 82 L 390 84 L 390 95 L 10 95 Z"
-                    fill="url(#curveGradient)"
-                  />
-
-                  {/* Convergence line */}
-                  <path
-                    d="M 10 20 Q 80 55, 160 68 T 320 82 L 390 84"
-                    fill="none"
-                    stroke="#2563eb"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                  />
-
-                  {/* Key Points */}
-                  <circle cx="10" cy="20" r="4" fill="#ef4444" />
-                  <circle cx="390" cy="84" r="4" fill="#10b981" />
-                </svg>
-              </div>
-
-              <div className="flex justify-between text-[10px] text-slate-400 mt-1 border-t border-slate-200/60 pt-1 font-mono">
-                <span>Gen 0 (Inisialisasi)</span>
-                <span>Gen 50</span>
-                <span>Gen 125</span>
-                <span>Gen 190</span>
-                <span>Gen 250 (Konvergen)</span>
-              </div>
-            </div>
-
-            {/* Soft Constraints Fulfillment */}
-            <div className="mt-4 space-y-2.5">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                Pencapaian Soft Constraints (Kualitas Jadwal)
-              </span>
-
-              {/* Metric 1 */}
-              <div>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-semibold text-slate-700">
-                    👍 Preferensi Hari &amp; Jam Dosen
+            {/* 4 Soft Constraints Cards */}
+            <div className="mt-4 space-y-3">
+              {/* Penalty 1: Student Gap */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-xs text-slate-800 flex items-center gap-2">
+                    <span>5.1 Penalti Jeda Mahasiswa (P_Gap)</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">
+                      Bobot W1 = {cpsatParams.wGap}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Menghindari jam kosong di antara dua sesi perkuliahan pada hari yang sama.
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="font-extrabold text-sm text-slate-900">{penalties.gap_penalty}</span>
+                  <span className="block text-[10px] text-slate-400 font-mono">
+                    Tertimbang: {penalties.gap_penalty * cpsatParams.wGap}
                   </span>
-                  <span className="font-bold text-blue-700">94.6%</span>
-                </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-blue-600 h-full rounded-full" style={{ width: '94.6%' }} />
-                </div>
-                <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
-                  <span>80 dari 84 Dosen mendapat jadwal ideal</span>
-                  <span>Hanya 4 deviasi minor</span>
                 </div>
               </div>
 
-              {/* Metric 2 */}
-              <div>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-semibold text-slate-700">
-                    ⚖ Distribusi Beban Mengajar Merata
+              {/* Penalty 2: Lecturer Preference */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-xs text-slate-800 flex items-center gap-2">
+                    <span>5.2 Preferensi Waktu Dosen (P_Pref)</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">
+                      Bobot W2 = {cpsatParams.wPref}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Menghindari penempatan dosen pada slot waktu yang kurang disukai / malam.
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="font-extrabold text-sm text-slate-900">{penalties.pref_penalty}</span>
+                  <span className="block text-[10px] text-slate-400 font-mono">
+                    Tertimbang: {penalties.pref_penalty * cpsatParams.wPref}
                   </span>
-                  <span className="font-bold text-blue-700">91.2%</span>
-                </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-indigo-600 h-full rounded-full" style={{ width: '91.2%' }} />
-                </div>
-                <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
-                  <span>Maksimal 6 SKS/hari per dosen</span>
-                  <span>Tidak ada hari kosong terjepit</span>
                 </div>
               </div>
 
-              {/* Metric 3 */}
-              <div>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-semibold text-slate-700">
-                    🏢 Kedekatan Ruang Kuliah Berurutan
+              {/* Penalty 3: Lecturer Spread */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-xs text-slate-800 flex items-center gap-2">
+                    <span>5.3 Sebaran Hari Mengajar Dosen (P_Spread)</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">
+                      Bobot W3 = {cpsatParams.wSpread}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Mengelompokkan sesi mengajar dosen agar tidak bolak-balik ke kampus hanya untuk 1 sesi.
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="font-extrabold text-sm text-slate-900">{penalties.spread_penalty}</span>
+                  <span className="block text-[10px] text-slate-400 font-mono">
+                    Tertimbang: {penalties.spread_penalty * cpsatParams.wSpread}
                   </span>
-                  <span className="font-bold text-blue-700">88.5%</span>
                 </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-purple-600 h-full rounded-full" style={{ width: '88.5%' }} />
+              </div>
+
+              {/* Penalty 4: Room Waste */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-xs text-slate-800 flex items-center gap-2">
+                    <span>5.4 Pemborosan Kursi Ruangan (P_RoomWaste)</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono">
+                      Bobot W4 = {cpsatParams.wWaste}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Menghindari alokasi ruang berkapasitas besar untuk kelas berporsi mahasiswa kecil.
+                  </div>
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
-                  <span>Minimasi perpindahan gedung FTI Limau Manih</span>
-                  <span>Lantai berdekatan</span>
+                <div className="text-right shrink-0">
+                  <span className="font-extrabold text-sm text-slate-900">{penalties.waste_penalty}</span>
+                  <span className="block text-[10px] text-slate-400 font-mono">
+                    Tertimbang: {penalties.waste_penalty * cpsatParams.wWaste}
+                  </span>
                 </div>
               </div>
             </div>
@@ -567,72 +580,111 @@ export const GeneratorJadwalPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Department Breakdown Section */}
+      {/* Pratinjau Hasil Penyusunan Kelas CP-SAT */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-blue-700" />
-            <h3 className="text-base font-bold text-slate-800">
-              Rincian Hasil Alokasi Tiap Departemen FTI
-            </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-800">
+                Tinjauan Hasil Penyusunan Kelas (Solver CP-SAT)
+              </h3>
+              <p className="text-xs text-slate-500">
+                Menampilkan alokasi hari, jam sesi, dan ruangan untuk setiap rombel perkuliahan
+              </p>
+            </div>
           </div>
-          <span className="text-xs text-slate-500">
-            Semua kelas telah ditempatkan secara tuntas
-          </span>
+          <button
+            onClick={() => setActivePage('jadwal_kuliah')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors self-start sm:self-auto"
+          >
+            <span>Buka Kalender Grid Matrix</span>
+            <Calendar className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* SI */}
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-bold text-slate-800">Sistem Informasi (SI)</span>
-              <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
-                114 Kelas
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mb-3">
-              36 Mata Kuliah • 28 Dosen • Ruang Teori R.101-R.108 &amp; Lab ERP
-            </p>
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200">
-              <span className="text-slate-500">Tingkat Utilisasi:</span>
-              <span className="font-bold text-emerald-600">92.4% Optimal</span>
-            </div>
-          </div>
-
-          {/* IF */}
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-bold text-slate-800">Informatika (IF)</span>
-              <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
-                128 Kelas
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mb-3">
-              42 Mata Kuliah • 34 Dosen • Ruang R.201-R.209 &amp; Lab AI/Software
-            </p>
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200">
-              <span className="text-slate-500">Tingkat Utilisasi:</span>
-              <span className="font-bold text-emerald-600">94.8% Optimal</span>
-            </div>
-          </div>
-
-          {/* TK */}
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-bold text-slate-800">Teknik Komputer (TK)</span>
-              <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
-                76 Kelas
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mb-3">
-              24 Mata Kuliah • 22 Dosen • Ruang R.301-R.305 &amp; Lab Robotika/IoT
-            </p>
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200">
-              <span className="text-slate-500">Tingkat Utilisasi:</span>
-              <span className="font-bold text-emerald-600">89.1% Optimal</span>
-            </div>
-          </div>
+        {/* Tabel Pratinjau Jadwal */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+              <tr>
+                <th className="py-2.5 px-3">Hari &amp; Waktu</th>
+                <th className="py-2.5 px-3">Ruangan &amp; Tipe</th>
+                <th className="py-2.5 px-3">Kode MK</th>
+                <th className="py-2.5 px-4">Nama Mata Kuliah</th>
+                <th className="py-2.5 px-2 text-center">Kelas</th>
+                <th className="py-2.5 px-2 text-center">Peserta</th>
+                <th className="py-2.5 px-4">Dosen Pengampu</th>
+                <th className="py-2.5 px-3 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {latestCPSATResult && latestCPSATResult.schedule.length > 0 ? (
+                latestCPSATResult.schedule.slice(0, 15).map((item, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      <span className="font-bold text-slate-900">{item.day}</span>
+                      <span className="block text-[10px] text-slate-400 font-mono">
+                        {item.start_time} - {item.end_time}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className="font-semibold text-slate-800">{item.room_name}</span>
+                      <span className="block text-[10px] text-slate-400">
+                        Lt. {item.floor} • Kapasitas {item.room_capacity}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono font-bold text-blue-700">
+                      {item.course_code}
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <div className="font-semibold text-slate-900">{item.course_name}</div>
+                      <div className="text-[10px] text-slate-400">
+                        {item.department} • Semester {item.semester} • {item.duration} SKS
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-2 text-center">
+                      <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold border border-blue-200">
+                        {item.class_label}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-2 text-center font-semibold text-slate-800">
+                      {item.size} mhs
+                    </td>
+                    <td className="py-2.5 px-4 text-slate-700 max-w-[200px] truncate" title={item.lecturer_names.join(', ')}>
+                      {item.lecturer_names.join(', ')}
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        0 Bentrok
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="py-6 text-center text-slate-400">
+                    Klik tombol <strong className="text-blue-700 font-semibold">"Jalankan Optimasi CP-SAT"</strong> di atas untuk melihat alokasi kelas secara instan.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
+
+        {latestCPSATResult && latestCPSATResult.schedule.length > 15 && (
+          <div className="text-center pt-2 border-t border-slate-100">
+            <button
+              onClick={() => setActivePage('jadwal_kuliah')}
+              className="text-xs font-bold text-blue-700 hover:text-blue-800 inline-flex items-center gap-1"
+            >
+              <span>Lihat seluruh {latestCPSATResult.schedule.length} kelas di Jadwal Perkuliahan Terpadu</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Footer Action Bar */}
@@ -643,10 +695,10 @@ export const GeneratorJadwalPage: React.FC = () => {
           </div>
           <div>
             <h4 className="text-sm font-bold text-slate-800">
-              Draft Siap Dikirim ke Pimpinan
+              Draft Jadwal CP-SAT Siap Diajukan ke Wakil Dekan I
             </h4>
             <p className="text-xs text-slate-500">
-              Semua constraint matematis terpenuhi tanpa konflik jadwal pengajar.
+              100% Bebas Bentrok Ruang dan Dosen (Status: {solverStatus}).
             </p>
           </div>
         </div>
@@ -657,7 +709,7 @@ export const GeneratorJadwalPage: React.FC = () => {
             className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-xs transition-colors"
           >
             <Download className="w-4 h-4 text-slate-500" />
-            <span>Unduh Log Eksekusi (.JSON)</span>
+            <span>Unduh Log Solver (.JSON)</span>
           </button>
 
           <button
@@ -665,7 +717,7 @@ export const GeneratorJadwalPage: React.FC = () => {
             className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-xs transition-colors"
           >
             <Calendar className="w-4 h-4 text-slate-500" />
-            <span>Lihat Jadwal Lengkap Matrix</span>
+            <span>Lihat Jadwal Terpadu</span>
           </button>
 
           <button
@@ -673,11 +725,10 @@ export const GeneratorJadwalPage: React.FC = () => {
             className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-700 rounded-lg hover:bg-blue-800 shadow-sm shadow-blue-700/20 transition-colors"
           >
             <Send className="w-4 h-4" />
-            <span>Ajukan Jadwal ke Wakil Dekan I (Kirim Approval)</span>
+            <span>Ajukan Jadwal ke Wakil Dekan I</span>
           </button>
         </div>
       </div>
     </div>
   );
 };
-

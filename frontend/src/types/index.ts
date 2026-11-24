@@ -149,3 +149,13 @@ export interface GAParameters {
   randomSeed: number;
 }
 
+export interface CPSATParameters {
+  wGap: number;
+  wPref: number;
+  wSpread: number;
+  wWaste: number;
+  timeoutSeconds: number;
+  numWorkers: number;
+  linearizationLevel: number;
+}
+
