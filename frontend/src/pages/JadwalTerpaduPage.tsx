@@ -264,7 +264,11 @@ interface CariRuangModalProps {
   userRole: string;
   userProdi: 'SI' | 'IF' | 'TK';
   onClose: () => void;
+<<<<<<< HEAD
+  showToast: (msg: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
+=======
   showToast: (msg: string, type?: 'success' | 'info' | 'error' | 'warning' | any) => void;
+>>>>>>> ce5c90bbfec368c899256357ec3ea55269405424
 }
 
 const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
@@ -453,11 +457,10 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
             {(['form', 'results', 'confirm'] as const).map((s, i) => (
               <React.Fragment key={s}>
                 <div className={`flex items-center gap-1.5 ${step === s ? 'text-blue-700 font-bold' : step > s ? 'text-emerald-600 font-semibold' : 'text-slate-400'}`}>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                    step === s ? 'bg-blue-700 text-white' :
-                    (step === 'results' && s === 'form') || (step === 'confirm' && (s === 'form' || s === 'results')) ? 'bg-emerald-500 text-white' :
-                    'bg-slate-200 text-slate-500'
-                  }`}>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${step === s ? 'bg-blue-700 text-white' :
+                      (step === 'results' && s === 'form') || (step === 'confirm' && (s === 'form' || s === 'results')) ? 'bg-emerald-500 text-white' :
+                        'bg-slate-200 text-slate-500'
+                    }`}>
                     {(step === 'results' && s === 'form') || (step === 'confirm' && (s === 'form' || s === 'results'))
                       ? <Check className="w-3 h-3" /> : i + 1}
                   </div>
@@ -682,11 +685,10 @@ const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({
                                   ♿ Aksesibel
                                 </span>
                               )}
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                room.type === 'Lab' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                                room.type === 'Seminar' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
-                                'bg-slate-100 text-slate-600 border border-slate-200'
-                              }`}>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${room.type === 'Lab' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                  room.type === 'Seminar' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                                    'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}>
                                 {room.type}
                               </span>
                             </div>
@@ -917,11 +919,25 @@ export const JadwalTerpaduPage: React.FC = () => {
       courseName: s.courseName,
       classLabel: s.classLabel || `Kelas ${s.className || 'A'}`,
       sks: s.sks || 3,
+<<<<<<< HEAD
+      day: (s.day ? s.day.toUpperCase() : 'SENIN') as 'SENIN' | 'SELASA' | 'RABU' | 'KAMIS' | 'JUMAT',
+=======
       day: ((s.day || 'SENIN').toUpperCase()) as 'SENIN' | 'SELASA' | 'RABU' | 'KAMIS' | 'JUMAT',
+>>>>>>> ce5c90bbfec368c899256357ec3ea55269405424
       sessionIndex: s.sessionIndex,
       timeStart: (s.timeLabel || s.time || '07:30').split(' - ')[0] || '07:30',
       timeEnd: (s.timeLabel || s.time || '09:10').split(' - ')[1] || '09:10',
       timeLabel: s.timeLabel || s.time || '07:30 - 09:10',
+<<<<<<< HEAD
+      roomCode: (s.roomName || '').split(' ')[0],
+      roomName: s.roomName,
+      building: s.building || 'Gedung FTI',
+      floor: s.floor || 1,
+      capacity: s.capacity || 60,
+      lecturerName: s.primaryLecturer || s.lecturerName || 'Dosen Pengampu',
+      studentCount: s.studentCount,
+      department: (s.department === 'Informatika' || s.department === 'IF' ? 'IF' : s.department === 'Teknik Komputer' || s.department === 'TK' ? 'TK' : 'SI') as 'SI' | 'IF' | 'TK' | 'GKB',
+=======
       roomCode: (s.roomName || '').split(' ')[0] || 'R-101',
       roomName: s.roomName,
       building: s.building || 'Gedung FTI',
@@ -930,6 +946,7 @@ export const JadwalTerpaduPage: React.FC = () => {
       lecturerName: s.primaryLecturer || s.lecturerName || 'Dosen Pengampu',
       studentCount: s.studentCount,
       department: (s.department === 'Informatika' ? 'IF' : s.department === 'Teknik Komputer' ? 'TK' : 'SI') as 'SI' | 'IF' | 'TK',
+>>>>>>> ce5c90bbfec368c899256357ec3ea55269405424
       type: 'Teori' as const,
     }));
   }, [rosterView, masterSchedule]);
@@ -966,8 +983,8 @@ export const JadwalTerpaduPage: React.FC = () => {
       rosterView === 'dosen'
         ? 'Jadwal Mengajar Pribadi Dosen FTI'
         : rosterView === 'mahasiswa'
-        ? 'Kartu Rencana Studi & Jadwal Kuliah Mahasiswa'
-        : 'Master Jadwal Perkuliahan Terpadu FTI';
+          ? 'Kartu Rencana Studi & Jadwal Kuliah Mahasiswa'
+          : 'Master Jadwal Perkuliahan Terpadu FTI';
     showToast(`Menyiapkan format cetak: ${docTitle}...`, 'info');
     window.print();
   };
@@ -1029,8 +1046,8 @@ export const JadwalTerpaduPage: React.FC = () => {
               {rosterView === 'dosen'
                 ? 'JADWAL MENGAJAR PRIBADI'
                 : rosterView === 'mahasiswa'
-                ? 'KARTU RENCANA STUDI (KRS)'
-                : 'MASTER ROSTER TERPUSAT'}
+                  ? 'KARTU RENCANA STUDI (KRS)'
+                  : 'MASTER ROSTER TERPUSAT'}
             </span>
             <span>•</span>
             <span className="text-slate-500">Semester Ganjil 2024/2025</span>
@@ -1040,16 +1057,21 @@ export const JadwalTerpaduPage: React.FC = () => {
             {rosterView === 'dosen'
               ? `Jadwal Mengajar — ${currentUser.name || 'Dr. Eng. Rahmad, M.T.'}`
               : rosterView === 'mahasiswa'
-              ? `Jadwal Kuliah Pribadi — ${currentUser.name || 'Faris Alfath'}`
-              : 'Jadwal Perkuliahan Terpadu FTI'}
+                ? `Jadwal Kuliah Pribadi — ${currentUser.name || 'Faris Alfath'}`
+                : 'Jadwal Perkuliahan Terpadu FTI'}
           </h1>
 
           <p className="text-xs md:text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
             {rosterView === 'dosen'
               ? 'Roster resmi pengajaran dosen terverifikasi. Dosen dapat mengajukan perubahan jadwal keseluruhan semester setelah berdiskusi dan bersepakat dengan mahasiswa rombel.'
               : rosterView === 'mahasiswa'
+<<<<<<< HEAD
+                ? 'Jadwal KRS aktif Semester Ganjil 2024/2025. Klik "Cari Kelas Pengganti" jika kelas dialihkan ke ruang lain.'
+                : 'Master jadwal perkuliahan terintegrasi seluruh departemen FTI.'}
+=======
               ? 'Jadwal KRS aktif Semester Ganjil 2024/2025 (Hanya Lihat). Mahasiswa yang ingin mencari ruang kelas pengganti per pertemuan dapat membukanya melalui menu Ketersediaan Ruang (Heatmap).'
               : 'Master jadwal perkuliahan terintegrasi seluruh departemen FTI.'}
+>>>>>>> ce5c90bbfec368c899256357ec3ea55269405424
           </p>
         </div>
 
@@ -1075,6 +1097,38 @@ export const JadwalTerpaduPage: React.FC = () => {
       {/* ── Mode Switcher Bar ── */}
       <div className="bg-slate-100 p-1.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-slate-200">
         <div className="flex items-center gap-1.5 text-xs">
+<<<<<<< HEAD
+          <span className="font-bold text-slate-600 px-2 flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+            <span>Tampilan:</span>
+          </span>
+          <div className="flex items-center bg-white p-1 rounded-xl shadow-2xs border border-slate-200">
+            <button
+              onClick={() => setRosterView('dosen')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${rosterView === 'dosen' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Dosen Pribadi</span>
+            </button>
+            <button
+              onClick={() => setRosterView('mahasiswa')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${rosterView === 'mahasiswa' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>Mahasiswa (KRS)</span>
+            </button>
+            <button
+              onClick={() => setRosterView('master')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${rosterView === 'master' ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Master FTI</span>
+            </button>
+          </div>
+=======
           {currentRole === 'admin' ? (
             <>
               <span className="font-bold text-slate-600 px-2 flex items-center gap-1">
@@ -1134,6 +1188,7 @@ export const JadwalTerpaduPage: React.FC = () => {
               </span>
             </div>
           )}
+>>>>>>> ce5c90bbfec368c899256357ec3ea55269405424
         </div>
 
         {/* Quick note about the button */}
@@ -1236,18 +1291,16 @@ export const JadwalTerpaduPage: React.FC = () => {
           <div className="flex items-center bg-slate-100 p-1 rounded-xl w-fit">
             <button
               onClick={() => setViewMode('calendar')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                viewMode === 'calendar' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'calendar' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
             >
               <Calendar className="w-3.5 h-3.5" />
               <span>Kalender Mingguan</span>
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                viewMode === 'table' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
             >
               <TableIcon className="w-3.5 h-3.5" />
               <span>Tabel Detail</span>
@@ -1261,9 +1314,8 @@ export const JadwalTerpaduPage: React.FC = () => {
                 <button
                   key={dept}
                   onClick={() => setSelectedDept(dept)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
-                    selectedDept === dept ? 'bg-blue-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${selectedDept === dept ? 'bg-blue-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                 >
                   {dept === 'Semua' ? 'Semua' : dept === 'SI' ? 'Sistem Informasi' : dept === 'IF' ? 'Informatika' : 'Teknik Komputer'}
                 </button>
@@ -1441,11 +1493,10 @@ export const JadwalTerpaduPage: React.FC = () => {
                     <td className="p-3.5 font-mono font-bold text-blue-700">{item.courseCode}</td>
                     <td className="p-3.5 font-semibold text-slate-900">
                       <div>{item.courseName}</div>
-                      <span className={`text-[10px] font-normal px-1.5 py-0.5 rounded mt-0.5 inline-block ${
-                        item.type === 'Praktikum' ? 'bg-purple-50 text-purple-700' :
-                        item.type === 'Seminar' ? 'bg-orange-50 text-orange-700' :
-                        'bg-sky-50 text-sky-700'
-                      }`}>{item.type}</span>
+                      <span className={`text-[10px] font-normal px-1.5 py-0.5 rounded mt-0.5 inline-block ${item.type === 'Praktikum' ? 'bg-purple-50 text-purple-700' :
+                          item.type === 'Seminar' ? 'bg-orange-50 text-orange-700' :
+                            'bg-sky-50 text-sky-700'
+                        }`}>{item.type}</span>
                     </td>
                     <td className="p-3.5 text-slate-700">
                       <div className="font-semibold">{item.classLabel}</div>
@@ -1499,8 +1550,13 @@ export const JadwalTerpaduPage: React.FC = () => {
             {rosterView === 'dosen'
               ? 'Jadwal mengajar telah tersinkronisasi otomatis dengan BKD FTI Unand. Dosen dapat mengganti jadwal keseluruhan pertemuan semester setelah diskusi dengan mahasiswa.'
               : rosterView === 'mahasiswa'
+<<<<<<< HEAD
+                ? 'Jadwal kuliah diambil dari KRS aktif. Gunakan "Cari Kelas Pengganti" jika kelas dipindah ke ruang lain.'
+                : 'Master jadwal FTI telah divalidasi 100% bebas bentrok oleh Solver CP-SAT.'}
+=======
               ? 'Jadwal kuliah diambil dari KRS aktif (Hanya Lihat). Untuk kelas pengganti per pertemuan, gunakan fitur Cari Kelas Pengganti di menu Heatmap.'
               : 'Master jadwal FTI telah divalidasi 100% bebas bentrok oleh Solver CP-SAT.'}
+>>>>>>> ce5c90bbfec368c899256357ec3ea55269405424
           </span>
         </div>
         <button onClick={handlePrint} className="font-bold text-blue-700 hover:underline flex items-center gap-1 shrink-0">

@@ -2242,6 +2242,309 @@ export const HeatmapRuangPage: React.FC = () => {
         </div>
       </div>
 
+<<<<<<< HEAD
+      {/* ── Slide-over Drawer: Cari Ruang Kosong / Cari Kelas Pengganti ─── */}
+      {isDrawerOpen && (() => {
+        // Compute available rooms for drawer
+        const drawerTimeStart = instantTimeStart;
+        const drawerTimeEnd = instantTimeEnd;
+
+        const timeToMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+        const SESSION_INDICES: Record<string, number[]> = {
+          'sesi1': [1], 'sesi2': [2], 'sesi3': [3], 'sesi4': [4], 'sesi5': [5],
+        };
+        const SESSION_TIMES = [
+          { key: 'sesi1', start: '07:30', end: '09:10' },
+          { key: 'sesi2', start: '09:20', end: '11:00' },
+          { key: 'sesi3', start: '11:10', end: '12:50' },
+          { key: 'sesi4', start: '13:30', end: '15:10' },
+          { key: 'sesi5', start: '15:30', end: '17:10' },
+        ];
+
+        const reqStart = timeToMin(drawerTimeStart);
+        const reqEnd = timeToMin(drawerTimeEnd);
+        const conflictingSessions = SESSION_TIMES
+          .filter(s => reqStart < timeToMin(s.end) && reqEnd > timeToMin(s.start))
+          .map(s => s.key);
+
+        const drawerAvailableRooms = drawerSearchDone ? visibleRooms.filter((room) => {
+          if (instantBuilding !== 'Semua' && room.building !== instantBuilding) return false;
+          if (instantAccessibility && !(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204')) return false;
+          if (room.capacity < instantMinCap) return false;
+          const daySched = room.schedules[instantDay] || {};
+          const hasConflict = conflictingSessions.some(sk => !!(daySched as any)[sk]);
+          if (hasConflict) return false;
+          // For replacement mode: skip the original room
+          if (drawerMode === 'cari_pengganti' && drawerCourseContext && room.code === drawerCourseContext.roomName) return false;
+          return true;
+        }) : [];
+
+        const handleDrawerSearch = () => {
+          const start = timeToMin(drawerTimeStart);
+          const end = timeToMin(drawerTimeEnd);
+          if (!instantDay) { setDrawerValidationError('Hari perkuliahan wajib dipilih.'); return; }
+          if (!drawerTimeStart || !drawerTimeEnd) { setDrawerValidationError('Jam mulai dan jam selesai wajib diisi.'); return; }
+          if (end <= start) { setDrawerValidationError('Jam selesai harus lebih akhir dari jam mulai.'); return; }
+          if (end - start < 30) { setDrawerValidationError('Durasi minimal pencarian ruang adalah 30 menit.'); return; }
+          setDrawerValidationError(null);
+          setDrawerSearchDone(true);
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 overflow-hidden">
+            <div onClick={() => { setIsDrawerOpen(false); setDrawerSearchDone(false); }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200" />
+            <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+              <div className="w-screen max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+
+                {/* Drawer Header */}
+                <div className={`p-5 border-b border-slate-100 flex items-center justify-between ${drawerMode === 'cari_pengganti' ? 'bg-blue-50' : 'bg-emerald-50'}`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${drawerMode === 'cari_pengganti' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      <Search className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 leading-tight">
+                        {drawerMode === 'cari_pengganti' ? 'Cari Kelas Pengganti' : 'Cari Ruang Kosong'}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {drawerMode === 'cari_pengganti'
+                          ? `Ruang alternatif untuk: ${drawerCourseContext?.name} (${drawerCourseContext?.classLabel})`
+                          : `Pencarian ruang kosong umum — Prodi ${activeProdiView === 'ALL' ? 'Semua' : activeProdiView} & GKB`}
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => { setIsDrawerOpen(false); setDrawerSearchDone(false); }} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Context banner for replacement mode */}
+                {drawerMode === 'cari_pengganti' && drawerCourseContext && (
+                  <div className="px-5 py-3 bg-blue-50 border-b border-blue-100">
+                    <p className="text-[11px] font-bold text-blue-700 uppercase tracking-wider mb-1.5">Kelas yang Akan Digantikan</p>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <div className="text-slate-400 text-[10px] font-semibold">Kode MK</div>
+                        <div className="font-mono font-black text-blue-800">{drawerCourseContext.code}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400 text-[10px] font-semibold">Kelas</div>
+                        <div className="font-bold text-slate-800">{drawerCourseContext.classLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-400 text-[10px] font-semibold">Ruang Semula</div>
+                        <div className="font-bold text-slate-500 line-through">{drawerCourseContext.roomName}</div>
+                      </div>
+                      <div className="col-span-3">
+                        <div className="text-slate-400 text-[10px] font-semibold">Waktu Semula</div>
+                        <div className="font-semibold text-slate-700">{drawerCourseContext.sessionTime} • {drawerCourseContext.enrolled}/{drawerCourseContext.capacity} Mhs</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+                  {/* Validation Error (E1) */}
+                  {drawerValidationError && (
+                    <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                      <div>
+                        <div className="font-bold">Masukan Tidak Valid</div>
+                        <div className="mt-0.5">{drawerValidationError}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Filter Form */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                    <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Filter className="w-3.5 h-3.5" />
+                      <span>Kriteria Pencarian {drawerSearchDone && <span className="text-emerald-600 ml-1 normal-case font-semibold">(Klik Cari ulang jika diubah)</span>}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hari <span className="text-red-500">*</span></label>
+                        <select
+                          value={instantDay}
+                          onChange={e => {
+                            const newDay = e.target.value as keyof typeof dayDateMapping;
+                            setInstantDay(newDay);
+                            setInstantDate(dayDateMapping[newDay]?.dateStr || '2024-11-25');
+                            setDrawerSearchDone(false);
+                            setDrawerValidationError(null);
+                          }}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500"
+                        >
+                          {(['Senin','Selasa','Rabu','Kamis','Jumat'] as Array<keyof typeof dayDateMapping>).map(d => (
+                            <option key={d} value={d}>
+                              {d} ({dayDateMapping[d]?.displayDate})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Tanggal Pelaksanaan <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={instantDate}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setInstantDate(val);
+                            if (val) {
+                              const d = new Date(val).getDay();
+                              if (d === 1) setInstantDay('Senin');
+                              else if (d === 2) setInstantDay('Selasa');
+                              else if (d === 3) setInstantDay('Rabu');
+                              else if (d === 4) setInstantDay('Kamis');
+                              else if (d === 5) setInstantDay('Jumat');
+                            }
+                            setDrawerSearchDone(false);
+                            setDrawerValidationError(null);
+                          }}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Jam Mulai <span className="text-red-500">*</span></label>
+                        <input type="time" value={instantTimeStart} onChange={e => { setInstantTimeStart(e.target.value); setDrawerSearchDone(false); setDrawerValidationError(null); }}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Jam Selesai <span className="text-red-500">*</span></label>
+                        <input type="time" value={instantTimeEnd} onChange={e => { setInstantTimeEnd(e.target.value); setDrawerSearchDone(false); setDrawerValidationError(null); }}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Kapasitas Min.</label>
+                        <input type="number" value={instantMinCap} onChange={e => { setInstantMinCap(Number(e.target.value)); setDrawerSearchDone(false); }} min={1} max={150}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Gedung</label>
+                        <select value={instantBuilding} onChange={e => { setInstantBuilding(e.target.value as any); setDrawerSearchDone(false); }}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500">
+                          <option value="Semua">Semua Gedung</option>
+                          <option value="Gedung FTI">Gedung FTI</option>
+                          <option value="GKB">GKB Bersama</option>
+                        </select>
+                      </div>
+                      <div className="col-span-2 pt-1">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                          <input type="checkbox" checked={instantAccessibility} onChange={e => { setInstantAccessibility(e.target.checked); setDrawerSearchDone(false); }} className="rounded" />
+                          <span>Ramah Disabilitas (Lantai 1 / Akses Kursi Roda)</span>
+                        </label>
+                      </div>
+                    </div>
+                    <button onClick={handleDrawerSearch}
+                      className={`w-full py-2 text-xs font-bold text-white rounded-lg transition-colors flex items-center justify-center gap-1.5 ${drawerMode === 'cari_pengganti' ? 'bg-[#082c78] hover:bg-blue-800' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                      <Search className="w-3.5 h-3.5" />
+                      <span>Cari Ruang {drawerMode === 'cari_pengganti' ? 'Pengganti' : 'Kosong'}</span>
+                    </button>
+                  </div>
+
+                  {/* Results */}
+                  {drawerSearchDone && (
+                    <div className="space-y-3">
+                      {drawerAvailableRooms.length === 0 ? (
+                        /* A1: No available rooms */
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center space-y-2">
+                          <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
+                          <div className="font-bold text-slate-800 text-sm">Tidak Ada Ruang Kosong</div>
+                          <p className="text-xs text-slate-500">
+                            Tidak ditemukan ruang yang tersedia pada <strong>{instantDay}, {instantTimeStart}–{instantTimeEnd}</strong> dengan kapasitas minimal {instantMinCap} kursi.
+                          </p>
+                          <div className="text-xs text-slate-500">
+                            Saran: ubah hari, jam, atau kurangi kapasitas minimum.
+                          </div>
+                          <button onClick={() => setDrawerSearchDone(false)} className="text-xs text-blue-700 hover:underline font-semibold flex items-center gap-1 mx-auto">
+                            <RefreshCw className="w-3 h-3" /> Ubah Kriteria
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between text-xs text-slate-500">
+                            <span>Ditemukan <strong className="text-slate-800">{drawerAvailableRooms.length} ruang</strong> yang tersedia</span>
+                            <button onClick={() => setDrawerSearchDone(false)} className="flex items-center gap-1 text-slate-500 hover:text-blue-700 font-semibold">
+                              <RefreshCw className="w-3 h-3" /><span>Ubah</span>
+                            </button>
+                          </div>
+                          {drawerAvailableRooms.map((room) => (
+                            <div key={room.id} className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs hover:border-blue-300 transition-colors">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <h4 className="text-sm font-black text-slate-800 font-mono">{room.code}</h4>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${room.dept === 'GKB' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-sky-50 text-sky-800 border-sky-200'}`}>
+                                      {room.dept === 'GKB' ? 'GKB Bersama' : `Prodi ${room.dept}`}
+                                    </span>
+                                    {(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204') && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">♿</span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-0.5">{room.name} • Lt. {room.floor}</p>
+                                  <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
+                                    <span className="flex items-center gap-1"><Building className="w-3 h-3" />{room.building}</span>
+                                    <span className={`font-semibold flex items-center gap-1 ${room.capacity >= instantMinCap ? 'text-emerald-700' : 'text-amber-600'}`}>
+                                      <Users className="w-3 h-3" />{room.capacity} Kursi
+                                      {room.capacity >= instantMinCap && <Check className="w-3 h-3" />}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-500">
+                                    <Clock className="w-3 h-3" />
+                                    <span>Tersedia: <strong>{instantDay} ({instantDate})</strong>, {instantTimeStart}–{instantTimeEnd}</span>
+                                  </div>
+                                  <div className="mt-1.5 flex flex-wrap gap-1">
+                                    {room.facilities.slice(0, 2).map(f => (
+                                      <span key={f} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{f}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col gap-1.5 shrink-0">
+                                  <button onClick={() => handleAllocateInstant(room.code)}
+                                    className={`px-3 py-1.5 text-xs font-bold text-white rounded-lg transition-colors ${drawerMode === 'cari_pengganti' ? 'bg-[#082c78] hover:bg-blue-800' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                    {drawerMode === 'cari_pengganti' ? 'Pilih Ruang' : 'Gunakan'}
+                                  </button>
+                                  <button onClick={() => handleOpenNavForRoom(room.code)}
+                                    className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1 justify-center">
+                                    <Compass className="w-3 h-3" /><span>Rute</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Info scope */}
+                  {!drawerSearchDone && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-start gap-2 text-xs text-blue-700">
+                      <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>Pencarian dibatasi pada ruang <strong>Prodi {activeProdiView === 'ALL' ? 'Semua' : activeProdiView}</strong> dan <strong>GKB Bersama</strong> sesuai hak akses Anda.</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Drawer Footer */}
+                <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end">
+                  <button onClick={() => { setIsDrawerOpen(false); setDrawerSearchDone(false); }}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors">
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+=======
+>>>>>>> ce5c90bbfec368c899256357ec3ea55269405424
       {/* ── Modal 1: Pengajuan Ruang Pengganti (Khusus Dosen) ─────────── */}
       {selectedSlotForBooking && currentRole === 'dosen' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">

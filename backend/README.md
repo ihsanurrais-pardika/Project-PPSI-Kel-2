@@ -8,15 +8,32 @@
 
 ```
 backend/
-├── models.py       # Definisi Data Model (Room, Lecturer, CourseClass, TimeSlot)
-├── generator.py    # Mesin Generator CP-SAT & Formulasi 6 Hard Constraints
-├── run_demo.py     # Skrip Eksekusi Simulasi Terminal
-└── README.md       # Dokumentasi Teknis
+├── models.py          # Definisi Data Model (Room, Lecturer, CourseClass, TimeSlot, ScheduleConstraint)
+├── generator.py       # Mesin Generator CP-SAT & Dynamic Constraint Solver
+├── run_demo.py        # Skrip Eksekusi Simulasi Terminal
+├── requirements.txt   # Daftar dependensi Python (ortools, fastapi, dll)
+└── README.md          # Dokumentasi Teknis
 ```
 
 ---
 
-## 2. Hard Constraints yang Diterapkan
+## 2. Instalasi Dependensi
+
+Sebelum menjalankan skrip backend, pastikan library **Google OR-Tools** telah terinstal di Python:
+
+```powershell
+pip install -r backend/requirements.txt
+```
+
+Atau instal `ortools` langsung:
+
+```powershell
+pip install ortools
+```
+
+---
+
+## 3. Hard Constraints yang Diterapkan
 
 1. **Penugasan Tunggal (*Exact Assignment*):** Setiap kelas terjadwal tepat 1 kali pada 1 ruang dan 1 slot waktu.
 2. **Anti-Bentrok Ruangan:** 1 ruangan pada 1 slot waktu hanya boleh diisi maksimal 1 kelas.
@@ -27,10 +44,17 @@ backend/
 
 ---
 
-## 3. Cara Menjalankan di Terminal
+## 4. Cara Menjalankan Simulasi di Terminal
 
 Jalankan perintah berikut di root proyek:
 
 ```powershell
 python backend/run_demo.py
+```
+
+Atau dari dalam folder `backend`:
+
+```powershell
+cd backend
+python run_demo.py
 ```
