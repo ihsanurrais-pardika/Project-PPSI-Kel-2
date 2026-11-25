@@ -1298,7 +1298,7 @@ export const HeatmapRuangPage: React.FC = () => {
                         <select
                           value={instantDay}
                           onChange={e => {
-                            const newDay = e.target.value as any;
+                            const newDay = e.target.value as keyof typeof dayDateMapping;
                             setInstantDay(newDay);
                             setInstantDate(dayDateMapping[newDay]?.dateStr || '2024-11-25');
                             setDrawerSearchDone(false);
@@ -1306,9 +1306,9 @@ export const HeatmapRuangPage: React.FC = () => {
                           }}
                           className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500"
                         >
-                          {['Senin','Selasa','Rabu','Kamis','Jumat'].map(d => (
+                          {(['Senin','Selasa','Rabu','Kamis','Jumat'] as Array<keyof typeof dayDateMapping>).map(d => (
                             <option key={d} value={d}>
-                              {d} ({dayDateMapping[d as any]?.displayDate})
+                              {d} ({dayDateMapping[d]?.displayDate})
                             </option>
                           ))}
                         </select>
