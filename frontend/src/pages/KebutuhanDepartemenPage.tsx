@@ -32,14 +32,13 @@ import { BackendClassItem, AdjustClassPayload } from '../services/api';
 
 export const KebutuhanDepartemenPage: React.FC = () => {
   const {
-    courses,
     backendClasses,
+    backendCourses,
     backendStatus,
-    isBackendLoading,
+    addBackendClass,
     adjustBackendClass,
     deleteBackendClass,
     resetBackendClassesToCSV,
-    fetchBackendClasses,
     setActivePage,
     showToast,
   } = useApp();
@@ -180,6 +179,54 @@ export const KebutuhanDepartemenPage: React.FC = () => {
     }
   };
 
+  const handleSelectCoursePreset = (kodeMk: string) => {
+    const found = backendCourses.find((c) => c.kode_mk === kodeMk);
+    if (!found) return;
+    setNewClassForm((prev) => ({
+      ...prev,
+      course_code: found.kode_mk,
+      name: found.nama_mk,
+      semester: found.semester_paket,
+      sks: found.sks,
+      room_type_needed: found.jenis_mk.toLowerCase().includes('praktikum') ? 'Lab' : 'Teori',
+      requires_room: !found.jenis_mk.toLowerCase().includes('non-ruang'),
+    }));
+  };
+
+  const handleCreateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = newClassForm.course_code.trim().toUpperCase();
+    const name = newClassForm.name.trim();
+    const label = newClassForm.class_label.trim() || 'A';
+    if (!code || !name) {
+      showToast('Kode mata kuliah dan nama mata kuliah wajib diisi.', 'warning');
+      return;
+    }
+    const ok = await addBackendClass({
+      id: `${code}-${label}`,
+      course_code: code,
+      department: activeDeptTab,
+      semester: Number(newClassForm.semester) || 1,
+      name,
+      class_label: label,
+      sks: Number(newClassForm.sks) || 2,
+      enrolled_count: Number(newClassForm.enrolled_count) || 40,
+      enrolled_is_estimated: false,
+      room_type_needed: newClassForm.room_type_needed || 'Teori',
+      is_mandatory: true,
+      is_elective: false,
+      rombel_key: newClassForm.rombel_key.trim() || `${activeDeptTab}-S${newClassForm.semester}-${label}`,
+      requires_room: newClassForm.requires_room,
+      requires_accessibility: false,
+      is_transition_course: false,
+      lecturer_ids: [],
+      lecturer_names: newClassForm.lecturer_names.split(',').map((s) => s.trim()).filter(Boolean),
+    });
+    if (ok) {
+      setIsAddClassModalOpen(false);
+    }
+  };
+
   const handleExportCSV = (scope: 'dept' | 'pure' | 'filtered' = 'dept') => {
     let target = filteredClasses;
     let filename = `classes_${activeDeptTab.toLowerCase()}_terfilter.csv`;
@@ -245,11 +292,18 @@ export const KebutuhanDepartemenPage: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">
-            Data terhubung langsung dengan engine CP-SAT dari berkas <span className="font-mono font-bold text-slate-700">classes_fti_ganjil_2026-v2.csv</span> (In-Memory, Tanpa Database). Admin dapat menyesuaikan kuota, rombel, tipe ruang, maupun membatalkan kelas sebelum penjadwalan terpadu.
+            Data terhubung langsung dengan database MySQL (<span className="font-mono font-bold text-slate-700">siprama_db</span>) &amp; engine CP-SAT. Admin dapat menambah kelas baru, menyesuaikan kuota, SKS, tipe ruang, maupun menghapus kelas sebelum penjadwalan otomatis.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setIsAddClassModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Tambah Kelas ({activeDeptTab})
+          </button>
           <button
             onClick={resetBackendClassesToCSV}
             title="Reset seluruh penyesuaian kembali ke file CSV awal"
@@ -295,7 +349,7 @@ export const KebutuhanDepartemenPage: React.FC = () => {
           </div>
           <div>
             <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              TOTAL KELAS DI DALAM CSV
+              TOTAL KELAS DI DATABASE
             </div>
             <div className="text-2xl font-black text-slate-900">{backendClasses.length} Kelas</div>
           </div>
@@ -795,6 +849,134 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Tambah Kelas Baru (Simpan ke MySQL) */}
+      {isAddClassModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-900">
+                  Tambah Kelas Baru — Departemen {activeDeptTab}
+                </h3>
+                <p className="text-xs text-slate-500">Pilih mata kuliah dari database atau input kode baru.</p>
+              </div>
+              <button onClick={() => setIsAddClassModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateClass} className="space-y-3 text-xs">
+              {backendCourses.length > 0 && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Pilih dari Master Mata Kuliah (MySQL)</label>
+                  <select
+                    value={newClassForm.course_code}
+                    onChange={(e) => handleSelectCoursePreset(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
+                  >
+                    <option value="">-- Pilih Mata Kuliah atau ketik manual di bawah --</option>
+                    {backendCourses.map((mk) => (
+                      <option key={mk.id_mk} value={mk.kode_mk}>
+                        [{mk.kode_prodi}] {mk.kode_mk} — {mk.nama_mk} ({mk.sks} SKS)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Kode MK *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newClassForm.course_code}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, course_code: e.target.value })}
+                    placeholder="Contoh: DSI61101"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Label Kelas *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newClassForm.class_label}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, class_label: e.target.value })}
+                    placeholder="A, B, C, Shift 1"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Nama Mata Kuliah *</label>
+                <input
+                  type="text"
+                  required
+                  value={newClassForm.name}
+                  onChange={(e) => setNewClassForm({ ...newClassForm, name: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Semester</label>
+                  <select
+                    value={newClassForm.semester}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, semester: Number(e.target.value) })}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                      <option key={s} value={s}>Semester {s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">SKS</label>
+                  <select
+                    value={newClassForm.sks}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, sks: Number(e.target.value) })}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300"
+                  >
+                    {[1, 2, 3, 4].map((s) => (
+                      <option key={s} value={s}>{s} SKS</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Kuota Mhs</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={150}
+                    value={newClassForm.enrolled_count}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, enrolled_count: Number(e.target.value) || 40 })}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddClassModalOpen(false)}
+                  className="px-3.5 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl"
+                >
+                  Simpan ke Database
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -71,10 +71,14 @@ export interface Room {
 
 export interface ScheduleItem {
   id: string;
+  jadwalId?: number;
+  dbRuangId?: number;
   courseCode: string;
   courseName: string;
   classLabel?: string;
   className?: string;
+  semester?: number;
+  rombelKey?: string;
   sks: number;
   studentCount: number;
   roomId?: string;
@@ -88,11 +92,13 @@ export interface ScheduleItem {
   time?: string;
   primaryLecturer?: string;
   lecturerName?: string;
+  lecturerNames?: string[];
   tandemLecturers?: string[];
   isTandem: boolean;
   department: 'Sistem Informasi' | 'Informatika' | 'Teknik Komputer' | 'SI' | 'IF' | 'TK' | string;
   status: 'OK' | 'Tandem' | 'Warning' | 'Bentrok' | string;
   note?: string;
+  isManualEdited?: boolean;
   wd1Status?: 'Menunggu Review' | 'Disetujui' | 'Revisi';
   wd1RevisionNote?: string;
 }

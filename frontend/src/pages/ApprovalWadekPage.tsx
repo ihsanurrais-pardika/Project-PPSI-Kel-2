@@ -17,21 +17,37 @@ import {
 
 export const ApprovalWadekPage: React.FC = () => {
   const {
+    currentRole,
     scheduleApprovalStatus,
     wadekApprove,
     wadekReject,
     wadekRevisionNote,
     setIsPublishModalOpen,
+    submitScheduleToWadek,
     showToast,
     setActivePage,
+    backendClasses,
+    backendCourses,
+    rooms,
+    schedule,
+    latestCPSATResult,
   } = useApp();
 
   const [revisionNote, setRevisionNote] = useState(
-    wadekRevisionNote || 'Harap pastikan Lab Basis Data tidak bentrok dengan praktikum TK.'
+    wadekRevisionNote || 'Harap pastikan kapasitas ruang dan jadwal tidak bentrok.'
   );
   const [showRevisionModal, setShowRevisionModal] = useState(false);
 
+  const isWadekRole = currentRole === 'wadek1';
+  const totalMk = backendCourses.length || new Set(schedule.map((s) => s.courseCode)).size;
+  const totalKelas = backendClasses.length || schedule.length;
+  const versionLabel = latestCPSATResult?.version_number ? `Versi #${latestCPSATResult.version_number}` : 'Draf Terbaru';
+
   const handleApprove = () => {
+    if (!isWadekRole) {
+      showToast('Otorisasi persetujuan hanya dapat dilakukan dari akun Wakil Dekan I (Wadek1@it.unand.ac.id).', 'warning');
+      return;
+    }
     wadekApprove();
     setIsPublishModalOpen(true);
   };
@@ -88,11 +104,56 @@ export const ApprovalWadekPage: React.FC = () => {
               Wakil Dekan I (Akademik)
             </span>
             <span className="text-[10px] font-semibold text-blue-600 block">
-              STATUS: SIKLUS EVALUASI FINAL
+              STATUS: {scheduleApprovalStatus.toUpperCase()} ({versionLabel})
             </span>
           </div>
         </div>
       </div>
+
+      {!isWadekRole && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-xs text-blue-900 space-y-1">
+            <div className="font-bold">
+              Mode Pantau Admin • {versionLabel} ({latestCPSATResult?.tahap || 'DRAFT_ADMIN'} / {scheduleApprovalStatus})
+            </div>
+            <p className="text-blue-800">
+              {scheduleApprovalStatus === 'Revisi' && wadekRevisionNote
+                ? `Catatan Revisi dari Wadek I: "${wadekRevisionNote}"`
+                : latestCPSATResult?.tahap === 'DRAFT_ADMIN'
+                ? 'Draf hasil CP-SAT belum dikirim ke Wakil Dekan I. Klik tombol di kanan untuk mengirim ke Wadek I agar bisa direview.'
+                : scheduleApprovalStatus === 'Disetujui'
+                ? 'Wakil Dekan I sudah menyetujui jadwal ini. Anda sekarang dapat menerbitkan jadwal resmi.'
+                : scheduleApprovalStatus === 'Resmi'
+                ? 'Jadwal resmi sudah dipublikasikan dan dapat dilihat oleh Dosen & Mahasiswa.'
+                : 'Draf sudah berada di antrean Review Wakil Dekan I. Login sebagai Wadek I (Wadek1@it.unand.ac.id) untuk melakukan ACC atau revisi.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {latestCPSATResult?.tahap === 'DRAFT_ADMIN' && (
+              <button
+                onClick={() => void submitScheduleToWadek()}
+                className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-lg"
+              >
+                Kirim ke Wadek I Sekarang
+              </button>
+            )}
+            {scheduleApprovalStatus === 'Disetujui' && (
+              <button
+                onClick={() => setIsPublishModalOpen(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg"
+              >
+                Publikasikan Jadwal Resmi
+              </button>
+            )}
+            <button
+              onClick={() => setActivePage('jadwal_kuliah')}
+              className="px-3 py-2 bg-white hover:bg-slate-50 text-blue-800 border border-blue-200 text-xs font-semibold rounded-lg"
+            >
+              Lihat Kalender Jadwal
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Section 1: Ringkasan Audit Kelayakan Jadwal (KPI Eksekutif) */}
       <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs p-4 space-y-3">
@@ -119,7 +180,7 @@ export const ApprovalWadekPage: React.FC = () => {
               <FileText className="w-3.5 h-3.5" />
             </div>
             <div className="mt-2">
-              <span className="text-2xl font-black text-slate-800">142</span>
+              <span className="text-2xl font-black text-slate-800">{totalMk}</span>
               <span className="text-xs font-semibold text-slate-500 ml-1">MK</span>
             </div>
             <div className="mt-2">
@@ -138,11 +199,11 @@ export const ApprovalWadekPage: React.FC = () => {
               <Layers className="w-3.5 h-3.5" />
             </div>
             <div className="mt-2">
-              <span className="text-2xl font-black text-slate-800">318</span>
-              <span className="text-xs font-semibold text-slate-500 ml-1">Kelas Aktif</span>
+              <span className="text-2xl font-black text-slate-800">{totalKelas}</span>
+              <span className="text-xs font-semibold text-slate-500 ml-1">Kelas ({schedule.length} Terjadwal)</span>
             </div>
             <p className="text-[10px] text-slate-400 mt-2">
-              Terdistribusi di 14 Ruang FTI
+              Terdistribusi di {rooms.length} Ruang FTI
             </p>
           </div>
 
@@ -595,21 +656,41 @@ export const ApprovalWadekPage: React.FC = () => {
 
             {/* 3 Main Action Buttons */}
             <div className="space-y-2 pt-1">
-              <button
-                onClick={handleApprove}
-                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Setujui &amp; Sahkan SK Jadwal</span>
-              </button>
+              {isWadekRole ? (
+                <>
+                  <button
+                    disabled={scheduleApprovalStatus === 'Disetujui' || scheduleApprovalStatus === 'Resmi'}
+                    onClick={handleApprove}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Setujui &amp; Sahkan SK Jadwal</span>
+                  </button>
 
-              <button
-                onClick={() => setShowRevisionModal(true)}
-                className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs rounded-lg border border-blue-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Kembalikan dengan Catatan Revisi</span>
-              </button>
+                  <button
+                    onClick={() => setShowRevisionModal(true)}
+                    className="w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs rounded-lg border border-blue-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Kembalikan dengan Catatan Revisi</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  disabled={scheduleApprovalStatus !== 'Disetujui'}
+                  onClick={() => setIsPublishModalOpen(true)}
+                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>
+                    {scheduleApprovalStatus === 'Resmi'
+                      ? 'Sudah Dipublikasikan Resmi'
+                      : scheduleApprovalStatus === 'Disetujui'
+                      ? 'Publikasikan Jadwal Resmi'
+                      : 'Menunggu ACC Wakil Dekan I'}
+                  </span>
+                </button>
+              )}
 
               <button
                 onClick={handlePrint}

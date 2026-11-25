@@ -109,14 +109,14 @@ def run():
     # Cek apakah fastapi dan uvicorn terinstall
     try:
         import uvicorn
-        from main import app as fastapi_app
+        from app.main import app as fastapi_app
         if fastapi_app is not None:
             print("=" * 60)
-            print("🚀 Menjalankan SIPRAMA Backend menggunakan FastAPI + Uvicorn")
+            print("🚀 Menjalankan SIPRAMA Backend Terpadu (MySQL + CP-SAT + Auth)")
             print(f"📡 Server URL: http://localhost:{port}")
             print(f"📖 Dokumentasi API Swagger: http://localhost:{port}/docs")
             print("=" * 60)
-            uvicorn.run("main:app", host=host, port=port, reload=True)
+            uvicorn.run("app.main:app", host="127.0.0.1", port=port, reload=True, app_dir=BASE_DIR)
             return
     except ImportError:
         pass

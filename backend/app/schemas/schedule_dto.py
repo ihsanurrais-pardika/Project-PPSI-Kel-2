@@ -21,6 +21,7 @@ class ScheduledClassOutput(BaseModel):
     room_capacity: int
     room_type: str
     floor: int
+    building: Optional[str] = None
     day: str
     start_slot_index: int
     end_slot_index: int
@@ -29,6 +30,9 @@ class ScheduledClassOutput(BaseModel):
     slot_ids: List[str]
     lecturer_names: List[str]
     group_names: List[str]
+    jadwal_id: Optional[int] = None
+    db_kelas_id: Optional[int] = None
+    db_ruang_id: Optional[int] = None
 
 
 class PenaltyBreakdown(BaseModel):
@@ -57,3 +61,10 @@ class SolverResultOutput(BaseModel):
     penalty_breakdown: PenaltyBreakdown
     schedule: List[ScheduledClassOutput]
     diagnostics: Optional[DiagnosticsOutput] = None
+    version_id: Optional[int] = None
+    version_number: Optional[int] = None
+    tahap: Optional[str] = None
+    status_versi: Optional[str] = None
+    approval_status: Optional[str] = None
+    revision_note: Optional[str] = None
+    semester_label: Optional[str] = None

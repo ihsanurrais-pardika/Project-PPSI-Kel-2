@@ -1,9 +1,31 @@
 /**
- * Layanan Komunikasi API Backend SIPRAMA FTI UNAND (Google OR-Tools CP-SAT).
- * Tanpa Database & Tanpa Algoritma Genetika.
+ * Layanan Komunikasi API Backend SIPRAMA FTI UNAND (MySQL + Google OR-Tools CP-SAT).
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+async function parseError(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json();
+    if (data && typeof data.detail === 'string') return data.detail;
+    if (data && data.detail && typeof data.detail.message === 'string') return data.detail.message;
+  } catch {
+    // ignore
+  }
+  return `${fallback}: ${res.statusText}`;
+}
+
+export interface BackendCourseItem {
+  id_mk: number;
+  kode_mk: string;
+  nama_mk: string;
+  sks: number;
+  semester_paket: number;
+  jenis_mk: string;
+  lintas_prodi: boolean;
+  kode_prodi: string;
+  nama_prodi: string;
+}
 
 export interface BackendClassItem {
   id: string;
@@ -40,11 +62,26 @@ export interface AdjustClassPayload {
 
 export interface BackendRoom {
   id: string;
+  db_ruang_id?: number;
+  code?: string;
   name: string;
+  raw_name?: string;
+  building?: string;
+  gedung_code?: string;
   capacity: number;
   room_type: string;
   floor: number;
+  department?: string;
   features: string[];
+}
+
+export interface RoomPayload {
+  code?: string;
+  name?: string;
+  building?: string;
+  floor?: number;
+  capacity?: number;
+  kode_prodi?: string;
 }
 
 export interface BackendSlot {
@@ -70,6 +107,7 @@ export interface ScheduledClassResult {
   room_capacity: number;
   room_type: string;
   floor: number;
+  building?: string;
   day: string;
   start_slot_index: number;
   end_slot_index: number;
@@ -78,6 +116,9 @@ export interface ScheduledClassResult {
   slot_ids: string[];
   lecturer_names: string[];
   group_names: string[];
+  jadwal_id?: number;
+  db_kelas_id?: number;
+  db_ruang_id?: number;
 }
 
 export interface SolverResultResponse {
@@ -101,6 +142,13 @@ export interface SolverResultResponse {
     unassigned_classes: string[];
     conflict_notes: string[];
   };
+  version_id?: number;
+  version_number?: number;
+  tahap?: string;
+  status_versi?: string;
+  approval_status?: 'Menunggu Persetujuan' | 'Disetujui' | 'Revisi' | 'Resmi';
+  revision_note?: string;
+  semester_label?: string;
 }
 
 export interface GenerateScheduleParams {
@@ -114,10 +162,26 @@ export interface GenerateScheduleParams {
   num_workers?: number;
 }
 
+export interface WorkflowResponse {
+  message: string;
+  version_id: number;
+  version_number: number;
+  tahap: string;
+  status_versi: string;
+  approval_status: 'Menunggu Persetujuan' | 'Disetujui' | 'Revisi' | 'Resmi';
+  revision_note?: string;
+}
+
 export const apiService = {
-  async checkHealth(): Promise<{ status: string; engine: string; total_classes: number }> {
+  async checkHealth(): Promise<{ status: string; engine: string; database?: string; total_classes: number; total_rooms: number }> {
     const res = await fetch(`${API_BASE_URL}/api/health`);
-    if (!res.ok) throw new Error(`Health check failed: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Health check failed'));
+    return res.json();
+  },
+
+  async getCourses(): Promise<BackendCourseItem[]> {
+    const res = await fetch(`${API_BASE_URL}/api/courses`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat daftar mata kuliah'));
     return res.json();
   },
 
@@ -135,7 +199,7 @@ export const apiService = {
 
     const url = `${API_BASE_URL}/api/classes${query.toString() ? '?' + query.toString() : ''}`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch classes: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat daftar kelas'));
     return res.json();
   },
 
@@ -145,7 +209,7 @@ export const apiService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error(`Failed to adjust class: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memperbarui kelas'));
     return res.json();
   },
 
@@ -153,7 +217,7 @@ export const apiService = {
     const res = await fetch(`${API_BASE_URL}/api/classes/${encodeURIComponent(classId)}`, {
       method: 'DELETE',
     });
-    if (!res.ok) throw new Error(`Failed to delete class: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menghapus kelas'));
     return res.json();
   },
 
@@ -163,7 +227,7 @@ export const apiService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(classItem),
     });
-    if (!res.ok) throw new Error(`Failed to add class: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menambah kelas'));
     return res.json();
   },
 
@@ -171,19 +235,47 @@ export const apiService = {
     const res = await fetch(`${API_BASE_URL}/api/classes/reset-csv`, {
       method: 'POST',
     });
-    if (!res.ok) throw new Error(`Failed to reset classes: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal sinkronisasi ulang dari CSV'));
     return res.json();
   },
 
   async getRooms(): Promise<BackendRoom[]> {
     const res = await fetch(`${API_BASE_URL}/api/rooms`);
-    if (!res.ok) throw new Error(`Failed to fetch rooms: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat data ruang'));
+    return res.json();
+  },
+
+  async createRoom(payload: RoomPayload): Promise<BackendRoom> {
+    const res = await fetch(`${API_BASE_URL}/api/rooms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menambah ruang'));
+    return res.json();
+  },
+
+  async updateRoom(roomId: string, payload: RoomPayload): Promise<BackendRoom> {
+    const res = await fetch(`${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memperbarui ruang'));
+    return res.json();
+  },
+
+  async deleteRoom(roomId: string): Promise<{ message: string; room_id: string }> {
+    const res = await fetch(`${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menghapus ruang'));
     return res.json();
   },
 
   async getSlots(): Promise<BackendSlot[]> {
     const res = await fetch(`${API_BASE_URL}/api/slots`);
-    if (!res.ok) throw new Error(`Failed to fetch slots: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat slot waktu'));
     return res.json();
   },
 
@@ -193,13 +285,94 @@ export const apiService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
-    if (!res.ok) throw new Error(`Failed to generate schedule: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menjalankan solver CP-SAT'));
     return res.json();
   },
 
   async getLatestSchedule(): Promise<SolverResultResponse | null> {
     const res = await fetch(`${API_BASE_URL}/api/schedule/latest`);
-    if (!res.ok) throw new Error(`Failed to fetch latest schedule: ${res.statusText}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat jadwal terbaru'));
+    return res.json();
+  },
+
+  async submitScheduleToWadek(versionId?: number): Promise<WorkflowResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/schedule/submit-wadek`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version_id: versionId ?? null }),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal mengirim draf ke Wadek I'));
+    return res.json();
+  },
+
+  async sendWadekDecision(approved: boolean, note = '', versionId?: number): Promise<WorkflowResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/schedule/wadek-decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved, note, version_id: versionId ?? null }),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menyimpan keputusan Wadek I'));
+    return res.json();
+  },
+
+  async publishSchedule(versionId?: number): Promise<WorkflowResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/schedule/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version_id: versionId ?? null }),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menerbitkan jadwal resmi'));
+    return res.json();
+  },
+
+  async updateScheduleItem(
+    jadwalId: number | string,
+    payload: {
+      day?: string;
+      start_time?: string;
+      end_time?: string;
+      room_id?: number | string;
+      sks?: number;
+      reason?: string;
+      actor_role?: string;
+      actor_email?: string;
+    }
+  ): Promise<{
+    message: string;
+    jadwal_id: number | string;
+    day?: string;
+    start_time?: string;
+    end_time?: string;
+    room_id?: number | string;
+    room_name?: string;
+  }> {
+    const res = await fetch(`${API_BASE_URL}/api/schedule/items/${jadwalId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memperbarui slot jadwal'));
+    return res.json();
+  },
+
+  async swapScheduleItems(payload: {
+    jadwal_id_a: number | string;
+    jadwal_id_b: number | string;
+    a_sks?: number;
+    reason?: string;
+    actor_role?: string;
+    actor_email?: string;
+  }): Promise<{
+    message: string;
+    a: { day: string; start_time: string; end_time: string; room_id: string | number; room_name: string };
+    b: { day: string; start_time: string; end_time: string; room_id: string | number; room_name: string };
+  }> {
+    const res = await fetch(`${API_BASE_URL}/api/schedule/swap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menukar posisi dua jadwal'));
     return res.json();
   },
 };

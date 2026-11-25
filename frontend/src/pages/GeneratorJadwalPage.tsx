@@ -28,29 +28,36 @@ export const GeneratorJadwalPage: React.FC = () => {
     setIsGAConfigModalOpen,
     setActivePage,
     showToast,
-    wadekApprove,
     scheduleApprovalStatus,
     runCPSATSolver,
+    submitScheduleToWadek,
     latestCPSATResult,
     backendClasses,
-    backendStatus,
   } = useApp();
 
   const [selectedDeptScope, setSelectedDeptScope] = useState<'ALL' | 'TK' | 'SI' | 'IF'>('ALL');
   const [isRunningSolver, setIsRunningSolver] = useState(false);
   const [solverProgress, setSolverProgress] = useState(100);
 
+  const activeClasses = backendClasses.filter((c) => c.requires_room);
+  const scopeCounts = {
+    ALL: activeClasses.length || 191,
+    TK: activeClasses.filter((c) => c.department.toUpperCase() === 'TK').length,
+    SI: activeClasses.filter((c) => c.department.toUpperCase() === 'SI').length,
+    IF: activeClasses.filter((c) => c.department.toUpperCase() === 'IF').length,
+  };
+
   const handleRerunSolver = async () => {
     setIsRunningSolver(true);
     setSolverProgress(20);
     const scopeLabel =
       selectedDeptScope === 'ALL'
-        ? 'Seluruh Fakultas (191 Kelas)'
+        ? `Seluruh Fakultas (${scopeCounts.ALL} Kelas)`
         : selectedDeptScope === 'TK'
-        ? 'Departemen Teknik Komputer (65 Kelas)'
+        ? `Departemen Teknik Komputer (${scopeCounts.TK} Kelas)`
         : selectedDeptScope === 'SI'
-        ? 'Departemen Sistem Informasi (72 Kelas)'
-        : 'Departemen Teknik Informatika (54 Kelas)';
+        ? `Departemen Sistem Informasi (${scopeCounts.SI} Kelas)`
+        : `Departemen Teknik Informatika (${scopeCounts.IF} Kelas)`;
     showToast(`Memulai komputasi Solver Google OR-Tools CP-SAT untuk ${scopeLabel}...`, 'info');
 
     const progressInterval = setInterval(() => {
@@ -77,12 +84,11 @@ export const GeneratorJadwalPage: React.FC = () => {
     }
   };
 
-  const handleSubmitToWadek = () => {
-    showToast(
-      'Draf Jadwal Terpadu resmi diajukan ke Wakil Dekan I untuk review dan penandatanganan SK.',
-      'success'
-    );
-    setActivePage('approval_wadek');
+  const handleSubmitToWadek = async () => {
+    const ok = await submitScheduleToWadek();
+    if (ok) {
+      setActivePage('approval_wadek');
+    }
   };
 
   const handleDownloadLog = () => {
@@ -167,7 +173,7 @@ export const GeneratorJadwalPage: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Semua Departemen (191)
+              Semua Departemen ({scopeCounts.ALL})
             </button>
             <button
               onClick={() => setSelectedDeptScope('TK')}
@@ -177,7 +183,7 @@ export const GeneratorJadwalPage: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              TK (65)
+              TK ({scopeCounts.TK})
             </button>
             <button
               onClick={() => setSelectedDeptScope('SI')}
@@ -187,7 +193,7 @@ export const GeneratorJadwalPage: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              SI (72)
+              SI ({scopeCounts.SI})
             </button>
             <button
               onClick={() => setSelectedDeptScope('IF')}
@@ -197,7 +203,7 @@ export const GeneratorJadwalPage: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              IF (54)
+              IF ({scopeCounts.IF})
             </button>
           </div>
 

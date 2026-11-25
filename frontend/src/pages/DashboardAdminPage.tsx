@@ -33,9 +33,23 @@ export const DashboardAdminPage: React.FC = () => {
     scheduleApprovalStatus,
     setIsGAConfigModalOpen,
     showToast,
+    backendClasses,
+    backendCourses,
+    backendStatus,
+    rooms,
+    schedule,
+    fetchBackendClasses,
+    latestCPSATResult,
   } = useApp();
 
   const unresolvedCount = conflicts.filter((c) => !c.isResolved).length;
+  const totalCoursesCount = backendCourses.length || 99;
+  const totalClassesCount = backendClasses.length || schedule.length || 196;
+  const activeRoomClassesCount = backendClasses.filter((c) => c.requires_room).length || totalClassesCount;
+  const labClassesCount = backendClasses.filter((c) => c.room_type_needed.toLowerCase() === 'lab').length;
+  const theoryClassesCount = totalClassesCount - labClassesCount;
+  const scheduledCount = latestCPSATResult?.scheduled_classes ?? schedule.length;
+  const pctScheduled = activeRoomClassesCount > 0 ? Math.min(100, Math.round((scheduledCount / activeRoomClassesCount) * 1000) / 10) : 100;
 
   const handleExport = () => {
     showToast('Mengekspor ringkasan eksekutif dashboard (Format Excel & PDF)...', 'info');
@@ -71,7 +85,10 @@ export const DashboardAdminPage: React.FC = () => {
             Ekspor Ringkasan
           </button>
           <button
-            onClick={() => showToast('Data dashboard telah diperbarui ke data riil terkini.', 'info')}
+            onClick={() => {
+              void fetchBackendClasses();
+              showToast('Data dashboard disinkronkan langsung dari database MySQL.', 'info');
+            }}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200/90 hover:bg-slate-50 shadow-xs transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
@@ -93,7 +110,7 @@ export const DashboardAdminPage: React.FC = () => {
           <span className="flex items-center gap-1.5 text-slate-500 font-medium">
             <span className="text-[10px] uppercase font-bold text-slate-400">Tahun Ajaran:</span>
             <span className="px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-800 font-bold font-mono text-[11px] border border-blue-100">
-              2024/2025 GANJIL
+              {latestCPSATResult?.semester_label || '2026/2027 GANJIL'}
             </span>
           </span>
           <span className="text-slate-300 hidden sm:inline">•</span>
@@ -107,9 +124,13 @@ export const DashboardAdminPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
-          <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Sistem Penjadwalan Terpadu Aktif
+          <span className={`px-3 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${
+            backendStatus === 'connected'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-amber-50 text-amber-800 border-amber-200'
+          }`}>
+            <span className={`w-2 h-2 rounded-full animate-pulse ${backendStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+            {backendStatus === 'connected' ? 'Terhubung Database MySQL & CP-SAT' : 'Mode Offline'}
           </span>
           <button
             onClick={() => setIsGAConfigModalOpen(true)}
@@ -131,20 +152,20 @@ export const DashboardAdminPage: React.FC = () => {
               <BookOpen className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 tracking-tight">142</div>
-          <div className="text-[11px] text-blue-700 font-semibold mt-1">+4 MK Pilihan Baru</div>
+          <div className="text-2xl font-black text-slate-900 tracking-tight">{totalCoursesCount}</div>
+          <div className="text-[11px] text-blue-700 font-semibold mt-1">Database MySQL Aktif</div>
         </div>
 
         {/* 2. Total Rombel */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs hover:border-blue-300 hover:shadow-sm transition-all group">
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Rombel</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Kelas</span>
             <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700 group-hover:scale-105 transition-transform">
               <Users className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 tracking-tight">318</div>
-          <div className="text-[11px] text-slate-500 mt-1">242 Teori • 76 Praktikum</div>
+          <div className="text-2xl font-black text-slate-900 tracking-tight">{totalClassesCount}</div>
+          <div className="text-[11px] text-slate-500 mt-1">{theoryClassesCount} Teori • {labClassesCount} Praktikum</div>
         </div>
 
         {/* 3. Total Dosen */}
@@ -155,8 +176,8 @@ export const DashboardAdminPage: React.FC = () => {
               <UserCheck className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 tracking-tight">84</div>
-          <div className="text-[11px] text-slate-500 mt-1">68 Utama • 16 Tim Mengajar</div>
+          <div className="text-2xl font-black text-slate-900 tracking-tight">47</div>
+          <div className="text-[11px] text-slate-500 mt-1">Tim Pengajar Lintas Prodi</div>
         </div>
 
         {/* 4. Total Ruang */}
@@ -167,8 +188,8 @@ export const DashboardAdminPage: React.FC = () => {
               <Building2 className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 tracking-tight">28</div>
-          <div className="text-[11px] text-slate-500 mt-1">20 Ruang Teori • 8 Lab</div>
+          <div className="text-2xl font-black text-slate-900 tracking-tight">{rooms.length}</div>
+          <div className="text-[11px] text-slate-500 mt-1">Gedung H &amp; Gedung G</div>
         </div>
 
         {/* 5. Keterpenuhan Jadwal */}
@@ -180,10 +201,10 @@ export const DashboardAdminPage: React.FC = () => {
             </div>
           </div>
           <div className="text-2xl font-black text-slate-900 tracking-tight">
-            315 <span className="text-xs text-slate-400 font-normal">/318</span>
+            {scheduledCount} <span className="text-xs text-slate-400 font-normal">/{activeRoomClassesCount}</span>
           </div>
           <div className="text-[11px] text-emerald-700 font-bold flex items-center gap-1 mt-1">
-            <Check className="w-3 h-3" /> 99.1% Terjadwal Rapi
+            <Check className="w-3 h-3" /> {pctScheduled}% Terjadwal Rapi
           </div>
         </div>
 

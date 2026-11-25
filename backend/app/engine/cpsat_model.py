@@ -94,11 +94,11 @@ class CPSATSchedulerModel:
         """
         Batasan 4.5:
         1. Kapasitas: Cap_r >= Size_c
-        2. Kesesuaian tipe: Kelas Lab wajib di Lab, Kelas Teori di Teori
+        2. Kesesuaian tipe: Kelas Lab wajib di Lab, Kelas Teori di Teori (ruang 'Umum' mendukung keduanya)
         """
         if room.capacity < course.size:
             return False
-        if course.room_type != room.room_type:
+        if room.room_type != "Umum" and course.room_type != room.room_type:
             return False
         return True
 

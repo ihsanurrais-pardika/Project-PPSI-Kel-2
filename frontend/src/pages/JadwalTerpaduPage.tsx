@@ -40,6 +40,7 @@ import {
   Filter,
   Sliders,
   Settings,
+  ArrowLeftRight,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -878,6 +879,7 @@ export const JadwalTerpaduPage: React.FC = () => {
     rooms,
     setActivePage,
     updateScheduleClassSksAndTime,
+    swapScheduleItems,
   } = useApp();
 
   const [rosterView, setRosterView] = useState<'dosen' | 'mahasiswa' | 'master'>(
@@ -889,9 +891,13 @@ export const JadwalTerpaduPage: React.FC = () => {
       setRosterView('dosen');
     } else if (currentRole === 'mahasiswa') {
       setRosterView('mahasiswa');
+    } else if (currentRole !== 'admin') {
+      setRosterView('master');
     }
   }, [currentRole]);
 
+  const isAdmin = currentRole === 'admin';
+  const canAdminEditMaster = isAdmin && rosterView === 'master';
   const isDosen = (currentRole === 'dosen' || (currentRole === 'admin' && rosterView === 'dosen')) && rosterView !== 'mahasiswa';
 
   const [viewMode, setViewMode] = useState<'calendar' | 'table'>('calendar');
@@ -903,9 +909,21 @@ export const JadwalTerpaduPage: React.FC = () => {
   // Cari Ruang Modal state
   const [cariRuangTarget, setCariRuangTarget] = useState<PersonalCourseItem | null>(null);
 
-  // Penyesuaian SKS & Jam Modal state
+  // Penyesuaian & Tukar Jadwal Manual (khusus Admin)
   const [isAdjustSksModalOpen, setIsAdjustSksModalOpen] = useState(false);
-  const [adjustTargetClass, setAdjustTargetClass] = useState<PersonalCourseItem | null>(null);
+  const [adjustTargetId, setAdjustTargetId] = useState<string | null>(null);
+  const [pickedOpponentId, setPickedOpponentId] = useState<string | null>(null);
+  const [previewOpponentId, setPreviewOpponentId] = useState<string | null>(null);
+  const [isPickingFromGrid, setIsPickingFromGrid] = useState(false);
+
+  useEffect(() => {
+    if (!canAdminEditMaster && isAdjustSksModalOpen) {
+      setIsAdjustSksModalOpen(false);
+      setIsPickingFromGrid(false);
+      setPickedOpponentId(null);
+      setPreviewOpponentId(null);
+    }
+  }, [canAdminEditMaster, isAdjustSksModalOpen]);
 
   const days: Array<'SENIN' | 'SELASA' | 'RABU' | 'KAMIS' | 'JUMAT'> = [
     'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT',
@@ -943,8 +961,9 @@ export const JadwalTerpaduPage: React.FC = () => {
     if (rosterView === 'mahasiswa') return MAHASISWA_PERSONAL_SCHEDULE;
     return masterSchedule.map((s, idx) => {
       const sksVal = s.sks || 2;
-      const rawStart = (s.timeLabel || s.time || '').split(' - ')[0]?.trim() || getSessionDefaultStartTime(s.sessionIndex || 1);
-      const computedEnd = calculateEndTime(rawStart, sksVal);
+      const parts = (s.timeLabel || s.time || '').split(' - ').map((x) => x.trim()).filter(Boolean);
+      const rawStart = parts[0] || getSessionDefaultStartTime(s.sessionIndex || 1);
+      const computedEnd = parts[1] || calculateEndTime(rawStart, sksVal);
       const formattedLabel = `${rawStart} - ${computedEnd}`;
 
       return {
@@ -958,7 +977,7 @@ export const JadwalTerpaduPage: React.FC = () => {
         timeStart: rawStart,
         timeEnd: computedEnd,
         timeLabel: formattedLabel,
-        roomCode: (s.roomName || '').split(' ')[0] || 'R-101',
+        roomCode: (s.roomName || '').split('(')[0].trim() || 'R-101',
         roomName: s.roomName,
         building: s.building || 'Gedung FTI',
         floor: s.floor || 1,
@@ -1011,12 +1030,32 @@ export const JadwalTerpaduPage: React.FC = () => {
   const totalCourses = currentItems.length;
 
   const handleOpenAdjustSksModal = (item?: PersonalCourseItem | null) => {
+    if (!canAdminEditMaster) {
+      showToast('Hanya Admin yang diizinkan mengubah atau menukar jadwal secara manual.', 'error');
+      return;
+    }
     const target = item || (filteredSchedule.length > 0 ? filteredSchedule[0] : currentItems[0]) || null;
-    setAdjustTargetClass(target);
+    if (isAdjustSksModalOpen && isPickingFromGrid && target && adjustTargetId && target.id !== adjustTargetId) {
+      setPickedOpponentId(target.id);
+      setPreviewOpponentId(target.id);
+      setIsPickingFromGrid(false);
+      return;
+    }
+    setAdjustTargetId(target ? target.id : null);
+    setPickedOpponentId(null);
+    setPreviewOpponentId(null);
+    setIsPickingFromGrid(false);
     setIsAdjustSksModalOpen(true);
   };
 
-  const handleSaveAdjustSks = (
+  const handleCloseAdjustDrawer = () => {
+    setIsAdjustSksModalOpen(false);
+    setIsPickingFromGrid(false);
+    setPickedOpponentId(null);
+    setPreviewOpponentId(null);
+  };
+
+  const handleSaveAdjustSks = async (
     scheduleId: string,
     params: {
       sks: number;
@@ -1026,10 +1065,18 @@ export const JadwalTerpaduPage: React.FC = () => {
       endTime: string;
       roomId?: string;
       roomName?: string;
+      reason?: string;
     }
-  ) => {
-    updateScheduleClassSksAndTime(scheduleId, params);
-    setIsAdjustSksModalOpen(false);
+  ): Promise<boolean> => {
+    return updateScheduleClassSksAndTime(scheduleId, params);
+  };
+
+  const handleSwapScheduleItems = async (
+    scheduleIdA: string,
+    scheduleIdB: string,
+    params?: { aSks?: number; reason?: string }
+  ): Promise<boolean> => {
+    return swapScheduleItems(scheduleIdA, scheduleIdB, params);
   };
 
   const handleOpenNavForRoom = (roomName: string) => {
@@ -1072,15 +1119,21 @@ export const JadwalTerpaduPage: React.FC = () => {
           <span>Rute</span>
         </button>
 
-        {/* Sesuaikan SKS & Jam */}
-        <button
-          onClick={() => handleOpenAdjustSksModal(item)}
-          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
-          title="Sesuaikan bobot SKS & jam perkuliahan"
-        >
-          <Sliders className="w-3.5 h-3.5" />
-          <span>Atur SKS</span>
-        </button>
+        {/* Edit / Tukar Jadwal Manual – HANYA ADMIN */}
+        {canAdminEditMaster && (
+          <button
+            onClick={() => handleOpenAdjustSksModal(item)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
+            title="Ubah jadwal manual atau tukar posisi dengan kelas lain"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            <span>
+              {isAdjustSksModalOpen && isPickingFromGrid && item.id !== adjustTargetId
+                ? 'Pilih Lawan'
+                : 'Ubah / Tukar'}
+            </span>
+          </button>
+        )}
 
         {/* PRIMARY: Ganti Jadwal Semester – HANYA UNTUK DOSEN */}
         {isDosen && (
@@ -1111,14 +1164,25 @@ export const JadwalTerpaduPage: React.FC = () => {
         />
       )}
 
-      {/* ── Penyesuaian SKS & Waktu Modal ── */}
+      {/* ── Panel Edit & Tukar Jadwal Manual (Khusus Admin) ── */}
       <PenyesuaianSksModal
-        isOpen={isAdjustSksModalOpen}
-        onClose={() => setIsAdjustSksModalOpen(false)}
-        targetCourse={adjustTargetClass}
-        courses={currentItems}
+        isOpen={isAdjustSksModalOpen && canAdminEditMaster}
+        onClose={handleCloseAdjustDrawer}
+        isAdmin={isAdmin}
+        targetCourseId={adjustTargetId}
+        schedule={masterSchedule}
         rooms={rooms}
+        pickedOpponentId={pickedOpponentId}
+        isPickingFromGrid={isPickingFromGrid}
+        onTogglePickFromGrid={(active) => setIsPickingFromGrid(active)}
+        onTargetCourseChange={(id) => {
+          setAdjustTargetId(id);
+          setPickedOpponentId(null);
+          setPreviewOpponentId(null);
+        }}
+        onPreviewOpponentChange={(id) => setPreviewOpponentId(id)}
         onSave={handleSaveAdjustSks}
+        onSwap={handleSwapScheduleItems}
       />
 
       {/* ── Top Header ── */}
@@ -1222,19 +1286,26 @@ export const JadwalTerpaduPage: React.FC = () => {
           ) : (
             <div className="flex items-center gap-2 text-xs">
               <span className="font-bold text-slate-600 px-2 flex items-center gap-1">
-                <User className="w-4 h-4 text-blue-600" />
+                {rosterView === 'dosen' ? <User className="w-4 h-4 text-blue-600" /> : <Layers className="w-4 h-4 text-blue-600" />}
                 <span>Mode Tampilan:</span>
               </span>
               <span className="bg-white px-3 py-1.5 rounded-xl shadow-2xs border border-slate-200 font-bold text-blue-700 text-xs flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5" />
-                <span>Jadwal Mengajar Pribadi Dosen</span>
+                {rosterView === 'dosen' ? <User className="w-3.5 h-3.5" /> : <Layers className="w-3.5 h-3.5" />}
+                <span>{rosterView === 'dosen' ? 'Jadwal Mengajar Pribadi Dosen' : 'Master Jadwal FTI — Hanya Lihat'}</span>
               </span>
             </div>
           )}
         </div>
 
         {/* Quick note about the button */}
-        {isDosen ? (
+        {canAdminEditMaster ? (
+          <div className="text-xs text-slate-600 flex items-center gap-1.5 px-2">
+            <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>
+              Admin dapat memindahkan atau menukar posisi jadwal melalui tombol <strong className="text-blue-800">Ubah / Tukar</strong>. Perubahan hanya tersimpan jika bebas bentrok.
+            </span>
+          </div>
+        ) : isDosen ? (
           <div className="text-xs text-slate-500 flex items-center gap-1.5 px-2">
             <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" />
             <span>Dosen dapat mengganti jadwal keseluruhan pertemuan setelah diskusi dengan mahasiswa melalui tombol <strong className="text-blue-700">Ganti Jadwal Semester</strong>.</span>
@@ -1242,7 +1313,7 @@ export const JadwalTerpaduPage: React.FC = () => {
         ) : (
           <div className="text-xs text-slate-500 flex items-center gap-1.5 px-2">
             <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>Mahasiswa hanya dapat melihat jadwal (Hanya Lihat). Pencarian ruang kelas pengganti per pertemuan dilakukan via menu <strong>Heatmap Ruang</strong>.</span>
+            <span>Tampilan jadwal bersifat hanya lihat (read-only). Hanya Admin yang memiliki hak ubah dan tukar jadwal master.</span>
           </div>
         )}
       </div>
@@ -1431,14 +1502,16 @@ export const JadwalTerpaduPage: React.FC = () => {
             })}
           </div>
 
-          <button
-            onClick={() => handleOpenAdjustSksModal(null)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-900 hover:bg-blue-800 rounded-xl transition-all shadow-xs shrink-0"
-            title="Buka form penyesuaian jam perkuliahan & durasi SKS (50 menit/SKS)"
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>Sesuaikan SKS & Jam</span>
-          </button>
+          {canAdminEditMaster && (
+            <button
+              onClick={() => handleOpenAdjustSksModal(null)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-[#082c78] hover:bg-blue-900 rounded-xl transition-all shadow-xs shrink-0"
+              title="Ubah jadwal secara manual atau tukar jadwal antar kelas tanpa bentrok"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+              <span>Ubah / Tukar Jadwal</span>
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100">
@@ -1503,17 +1576,43 @@ export const JadwalTerpaduPage: React.FC = () => {
 
                         return (
                           <td key={session.id} className="p-2 border-r border-slate-200 align-top min-h-[110px]">
-                            {isFridayBreak ? (
+                            {isFridayBreak && classesInSlot.length === 0 ? (
                               <div className="h-full min-h-[95px] rounded-xl bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center text-center p-2">
                                 <span className="text-[11px] text-slate-400 italic">Persiapan Jumat</span>
                               </div>
                             ) : classesInSlot.length > 0 ? (
                               <div className="space-y-2">
-                                {classesInSlot.map((classInSlot) => (
+                                {classesInSlot.map((classInSlot) => {
+                                  const isEditingTarget = isAdjustSksModalOpen && adjustTargetId === classInSlot.id;
+                                  const isSwapCandidate = isAdjustSksModalOpen && previewOpponentId === classInSlot.id;
+                                  const canPickClick = canAdminEditMaster && isAdjustSksModalOpen && isPickingFromGrid && !isEditingTarget;
+                                  return (
                                   <div
                                     key={classInSlot.id}
-                                    className="p-2.5 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2 hover:border-blue-300 transition-all"
+                                    onClick={canPickClick ? () => handleOpenAdjustSksModal(classInSlot) : undefined}
+                                    className={`p-2.5 rounded-xl border bg-white shadow-2xs space-y-2 transition-all ${
+                                      isEditingTarget
+                                        ? 'ring-2 ring-blue-600 border-blue-500 bg-blue-50/30'
+                                        : isSwapCandidate
+                                          ? 'ring-2 ring-amber-500 border-amber-400 bg-amber-50/40'
+                                          : canPickClick
+                                            ? 'border-amber-300 cursor-pointer hover:ring-2 hover:ring-amber-400 hover:bg-amber-50/30'
+                                            : 'border-slate-200 hover:border-blue-300'
+                                    }`}
                                   >
+                                    {(isEditingTarget || isSwapCandidate) && (
+                                      <div className="flex justify-end">
+                                        <span
+                                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                            isEditingTarget
+                                              ? 'bg-blue-700 text-white'
+                                              : 'bg-amber-500 text-white'
+                                          }`}
+                                        >
+                                          {isEditingTarget ? 'Sedang Diatur' : 'Target Tukar'}
+                                        </span>
+                                      </div>
+                                    )}
                                     {/* Course header */}
                                     <div className="flex items-center justify-between gap-1">
                                       <span className="font-mono text-[11px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
@@ -1530,13 +1629,9 @@ export const JadwalTerpaduPage: React.FC = () => {
                                         >
                                           {classInSlot.department}
                                         </span>
-                                        <button
-                                          onClick={() => handleOpenAdjustSksModal(classInSlot)}
-                                          title="Klik untuk menyesuaikan SKS & jam perkuliahan"
-                                          className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 transition-colors"
-                                        >
+                                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                                           {classInSlot.sks} SKS
-                                        </button>
+                                        </span>
                                       </div>
                                     </div>
 
@@ -1563,19 +1658,28 @@ export const JadwalTerpaduPage: React.FC = () => {
                                       <div className="flex items-center gap-1">
                                         <Building className="w-3 h-3 text-slate-400 shrink-0" />
                                         <button
-                                          onClick={() => handleOpenNavForRoom(classInSlot.roomName)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenNavForRoom(classInSlot.roomName);
+                                          }}
                                           className="font-semibold text-blue-700 hover:underline truncate max-w-[105px]"
                                           title="Klik untuk navigasi ruang"
                                         >
                                           {classInSlot.roomCode || classInSlot.roomName.split('(')[0].trim()}
                                         </button>
                                       </div>
-                                      <button
-                                        onClick={() => handleOpenAdjustSksModal(classInSlot)}
-                                        className="text-[10px] font-semibold text-blue-700 hover:underline"
-                                      >
-                                        Atur SKS
-                                      </button>
+                                      {canAdminEditMaster && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenAdjustSksModal(classInSlot);
+                                          }}
+                                          className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-800 hover:text-blue-950 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200 transition-colors"
+                                        >
+                                          <ArrowLeftRight className="w-2.5 h-2.5" />
+                                          <span>{canPickClick ? 'Pilih Lawan' : 'Ubah / Tukar'}</span>
+                                        </button>
+                                      )}
                                     </div>
 
                                     {/* Dosen (for mahasiswa view) */}
@@ -1605,7 +1709,8 @@ export const JadwalTerpaduPage: React.FC = () => {
                                       </div>
                                     )}
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             ) : (
                               <div className="h-full min-h-[95px] rounded-xl border border-dashed border-slate-100 flex items-center justify-center">
@@ -1640,8 +1745,20 @@ export const JadwalTerpaduPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredSchedule.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                {filteredSchedule.map((item) => {
+                  const isEditingTarget = isAdjustSksModalOpen && adjustTargetId === item.id;
+                  const isSwapCandidate = isAdjustSksModalOpen && previewOpponentId === item.id;
+                  return (
+                  <tr
+                    key={item.id}
+                    className={`transition-colors ${
+                      isEditingTarget
+                        ? 'bg-blue-50/70'
+                        : isSwapCandidate
+                          ? 'bg-amber-50/70'
+                          : 'hover:bg-slate-50'
+                    }`}
+                  >
                     <td className="p-3.5 font-bold text-slate-800">
                       <div>{item.day.charAt(0) + item.day.slice(1).toLowerCase()}</div>
                       <div className="text-[10px] text-slate-400 font-normal">{item.timeLabel}</div>
@@ -1670,13 +1787,9 @@ export const JadwalTerpaduPage: React.FC = () => {
                     <td className="p-3.5 text-slate-700">
                       <div className="font-semibold">{item.classLabel}</div>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <button
-                          onClick={() => handleOpenAdjustSksModal(item)}
-                          className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 transition-colors"
-                          title="Klik untuk menyesuaikan SKS & jam"
-                        >
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                           {item.sks} SKS
-                        </button>
+                        </span>
                         <span className="text-[10px] text-slate-500 font-medium">
                           ({item.sks * 50} Menit)
                         </span>
@@ -1715,7 +1828,8 @@ export const JadwalTerpaduPage: React.FC = () => {
                     </td>
                     <td className="p-3.5">{renderCourseActions(item)}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

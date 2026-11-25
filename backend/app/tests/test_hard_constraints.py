@@ -298,6 +298,36 @@ class TestHardConstraints:
         assert schedules["c_practicum"].room_id == "r_lab"
         assert schedules["c_practicum"].room_type == RoomType.LAB.value
 
+    def test_room_umum_accepts_teori_and_lab(self):
+        """Ruang umum ('Umum') mendukung kelas Teori maupun Lab selama kapasitas mencukupi."""
+        slots = create_slots(["Senin"], slots_per_day=3)
+        rooms = [Room(id="r_umum", name="H-1.7", capacity=50, room_type="Umum")]
+        lecturers = [
+            Lecturer(id="d1", name="Dr. A", department="SI"),
+            Lecturer(id="d2", name="Dr. B", department="IF"),
+        ]
+        groups = [
+            StudentGroup(id="g1", name="SI-1", department="SI", semester=1),
+            StudentGroup(id="g2", name="IF-1", department="IF", semester=1),
+        ]
+        courses = [
+            CourseClass(
+                id="c_teori", code="DSI101", name="Konsep SI", class_label="A",
+                department="SI", semester=1, size=40, duration=1,
+                lecturer_ids=["d1"], group_ids=["g1"], room_type=RoomType.TEORI.value,
+            ),
+            CourseClass(
+                id="c_lab", code="DIF105", name="Praktikum", class_label="Shift 1",
+                department="IF", semester=1, size=30, duration=1,
+                lecturer_ids=["d2"], group_ids=["g2"], room_type=RoomType.LAB.value,
+            ),
+        ]
+        result = CPSATSchedulerService(config=SolverConfig(max_time_in_seconds=5.0)).solve(
+            courses, rooms, slots, lecturers, groups
+        )
+        assert result.status in ("OPTIMAL", "FEASIBLE")
+        assert result.scheduled_classes == 2
+
     def test_day_boundary_constraint_4_6(self):
         """
         Batasan 4.6: Kelas berdurasi > 1 slot tidak boleh terpotong melewati batas hari.

@@ -53,11 +53,11 @@ class ScheduleDiagnostics:
                 f"total daya tampung ruangan ({total_room_slot_hours} slot-jam)."
             )
 
-        # Cek per Tipe Ruang (Teori vs Lab)
+        # Cek per Tipe Ruang (Teori vs Lab, termasuk ruang 'Umum' yang fleksibel)
         theory_courses = [c for c in courses if c.room_type == RoomType.TEORI.value]
         lab_courses = [c for c in courses if c.room_type == RoomType.LAB.value]
-        theory_rooms = [r for r in rooms if r.room_type == RoomType.TEORI.value]
-        lab_rooms = [r for r in rooms if r.room_type == RoomType.LAB.value]
+        theory_rooms = [r for r in rooms if r.room_type in (RoomType.TEORI.value, "Umum")]
+        lab_rooms = [r for r in rooms if r.room_type in (RoomType.LAB.value, "Umum")]
 
         theory_demand = sum(c.duration for c in theory_courses)
         theory_supply = len(theory_rooms) * len(slots)
@@ -80,7 +80,7 @@ class ScheduleDiagnostics:
             eligible_rooms = [
                 r
                 for r in rooms
-                if r.room_type == c.room_type and r.capacity >= c.size
+                if (r.room_type == c.room_type or r.room_type == "Umum") and r.capacity >= c.size
             ]
             if not eligible_rooms:
                 msg = (

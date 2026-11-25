@@ -21,6 +21,14 @@ from app.engine.domain_models import (
 )
 from app.engine.scheduler import CPSATSchedulerService
 from app.schemas.schedule_dto import SolverResultOutput
+from app.engine.manual_schedule import (
+    ScheduleConflictException,
+    evaluate_move_conflicts,
+    evaluate_swap_conflicts,
+    minutes_to_hhmm,
+    normalize_day_name,
+    parse_time_to_minutes,
+)
 
 
 class ClassItem(BaseModel):
@@ -374,6 +382,167 @@ class InMemoryDataStore:
 
         self.latest_schedule_result = result
         return result
+
+    def _build_schedule_snapshot(self) -> List[Dict[str, Any]]:
+        if not self.latest_schedule_result or not self.latest_schedule_result.schedule:
+            return []
+        snapshot: List[Dict[str, Any]] = []
+        for idx, sc in enumerate(self.latest_schedule_result.schedule):
+            cls = self.classes.get(sc.class_id)
+            snapshot.append(
+                {
+                    "item_id": sc.class_id,
+                    "jadwal_id": sc.jadwal_id if sc.jadwal_id is not None else idx + 1,
+                    "course_code": sc.course_code,
+                    "course_name": sc.course_name,
+                    "class_label": sc.class_label,
+                    "student_count": sc.size,
+                    "room_id": str(sc.room_id),
+                    "room_name": sc.room_name,
+                    "room_capacity": int(sc.room_capacity),
+                    "day": normalize_day_name(sc.day),
+                    "start_min": parse_time_to_minutes(sc.start_time),
+                    "end_min": parse_time_to_minutes(sc.end_time),
+                    "lecturer_names": list(sc.lecturer_names or []),
+                    "rombel_key": (sc.group_names[0] if sc.group_names else (cls.rombel_key if cls else "")),
+                    "is_mandatory": (cls.is_mandatory if cls else True),
+                    "sks": int(sc.sks or 2),
+                }
+            )
+        return snapshot
+
+    def _find_schedule_entry(self, item_key: str):
+        if not self.latest_schedule_result:
+            return None
+        key_str = str(item_key)
+        for idx, sc in enumerate(self.latest_schedule_result.schedule):
+            jid = str(sc.jadwal_id) if sc.jadwal_id is not None else str(idx + 1)
+            if sc.class_id == key_str or jid == key_str:
+                return sc
+        return None
+
+    def update_schedule_item(
+        self,
+        jadwal_id: str,
+        day: Optional[str] = None,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        room_id: Optional[str] = None,
+        sks: Optional[int] = None,
+        reason: Optional[str] = None,
+        actor_role: Optional[str] = "admin",
+        actor_email: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if actor_role and actor_role.strip().lower() not in ("admin", "superadmin"):
+            raise PermissionError("Hanya Admin yang diizinkan mengubah jadwal secara manual.")
+        sc = self._find_schedule_entry(str(jadwal_id))
+        if not sc:
+            return None
+
+        snapshot = self._build_schedule_snapshot()
+        target = next((it for it in snapshot if it["item_id"] == sc.class_id), None)
+        if not target:
+            return None
+
+        new_day = normalize_day_name(day or target["day"])
+        new_start_min = parse_time_to_minutes(start_time) if start_time else int(target["start_min"])
+        if end_time:
+            new_end_min = parse_time_to_minutes(end_time)
+        elif sks is not None:
+            new_end_min = new_start_min + max(1, int(sks)) * 50
+        else:
+            new_end_min = new_start_min + max(50, int(target["end_min"]) - int(target["start_min"]))
+
+        room_obj = next((r for r in self.rooms if str(r.id) == str(room_id or sc.room_id) or r.name == str(room_id)), None)
+        if not room_obj:
+            raise ValueError(f"Ruangan dengan ID {room_id} tidak ditemukan.")
+
+        conflicts = evaluate_move_conflicts(
+            target=target,
+            target_day=new_day,
+            target_start_min=new_start_min,
+            target_end_min=new_end_min,
+            target_room_id=room_obj.id,
+            target_room_name=room_obj.name,
+            target_room_capacity=room_obj.capacity,
+            items=snapshot,
+            ignore_ids={sc.class_id},
+        )
+        if conflicts:
+            raise ScheduleConflictException(conflicts[0]["reason"], conflicts)
+
+        sc.day = new_day
+        sc.start_time = minutes_to_hhmm(new_start_min)
+        sc.end_time = minutes_to_hhmm(new_end_min)
+        sc.room_id = room_obj.id
+        sc.room_name = room_obj.name
+        sc.room_capacity = room_obj.capacity
+        sc.floor = room_obj.floor
+        if sks is not None:
+            sc.sks = int(sks)
+
+        return {
+            "message": "Jadwal kelas berhasil diperbarui tanpa bentrok.",
+            "jadwal_id": sc.class_id,
+            "day": sc.day,
+            "start_time": sc.start_time,
+            "end_time": sc.end_time,
+            "room_id": sc.room_id,
+            "room_name": sc.room_name,
+        }
+
+    def swap_schedule_items(
+        self,
+        jadwal_id_a: str,
+        jadwal_id_b: str,
+        a_sks: Optional[int] = None,
+        reason: Optional[str] = None,
+        actor_role: Optional[str] = "admin",
+        actor_email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if actor_role and actor_role.strip().lower() not in ("admin", "superadmin"):
+            raise PermissionError("Hanya Admin yang diizinkan melakukan pertukaran jadwal.")
+        sc_a = self._find_schedule_entry(str(jadwal_id_a))
+        sc_b = self._find_schedule_entry(str(jadwal_id_b))
+        if not sc_a or not sc_b:
+            raise LookupError("Salah satu jadwal yang akan ditukar tidak ditemukan.")
+        if sc_a.class_id == sc_b.class_id:
+            raise ValueError("Pilih dua kelas berbeda untuk ditukar jadwalnya.")
+
+        snapshot = self._build_schedule_snapshot()
+        item_a = next((it for it in snapshot if it["item_id"] == sc_a.class_id), None)
+        item_b = next((it for it in snapshot if it["item_id"] == sc_b.class_id), None)
+        assert item_a is not None and item_b is not None
+
+        swap_eval = evaluate_swap_conflicts(item_a, item_b, snapshot, a_sks_override=a_sks)
+        if not swap_eval["is_safe"]:
+            raise ScheduleConflictException(swap_eval["all_conflicts"][0]["reason"], swap_eval["all_conflicts"])
+
+        a_new = swap_eval["a_new"]
+        b_new = swap_eval["b_new"]
+        orig_room_a = (sc_a.room_id, sc_a.room_name, sc_a.room_capacity, sc_a.floor)
+        orig_room_b = (sc_b.room_id, sc_b.room_name, sc_b.room_capacity, sc_b.floor)
+
+        sc_a.day = a_new["day"]
+        sc_a.start_time = a_new["start_time"]
+        sc_a.end_time = a_new["end_time"]
+        sc_a.room_id, sc_a.room_name, sc_a.room_capacity, sc_a.floor = orig_room_b
+        if a_sks is not None:
+            sc_a.sks = int(a_sks)
+
+        sc_b.day = b_new["day"]
+        sc_b.start_time = b_new["start_time"]
+        sc_b.end_time = b_new["end_time"]
+        sc_b.room_id, sc_b.room_name, sc_b.room_capacity, sc_b.floor = orig_room_a
+
+        return {
+            "message": (
+                f"Pertukaran jadwal {sc_a.course_name} ({sc_a.class_label}) "
+                f"dan {sc_b.course_name} ({sc_b.class_label}) berhasil disimpan."
+            ),
+            "a": a_new,
+            "b": b_new,
+        }
 
 
 # Singleton instance
