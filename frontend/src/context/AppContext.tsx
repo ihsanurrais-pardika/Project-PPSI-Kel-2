@@ -21,7 +21,7 @@ interface AppContextType {
   activePage: string;
   setActivePage: (page: string) => void;
   isLoggedIn: boolean;
-  login: (role?: UserRole) => void;
+  login: (role?: UserRole, customUser?: User) => void;
   logout: () => void;
   
   // Data State
@@ -134,17 +134,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       case 'admin':
         return {
           id: 'u-admin',
-          name: 'Dr. Eng. Ir. Administrator',
-          email: 'alghifari@it.unand.ac.id',
+          name: 'Admin',
+          email: 'admin@it.unand.ac.id',
           role: 'admin',
-          nipOrNim: '19850123 201012 1 001',
+          nipOrNim: '12345678',
           department: 'Konsol Operasional Akademik FTI',
         };
       case 'wadek1':
         return {
           id: 'u-wadek1',
           name: 'Dr. Eng. Rahmadi, M.T.',
-          email: 'rahmadi@it.unand.ac.id',
+          email: 'Wadek1@it.unand.ac.id',
           role: 'wadek1',
           nipOrNim: '19750312 200212 1 002',
           department: 'Wakil Dekan I (Bidang Akademik)',
@@ -153,7 +153,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return {
           id: 'u-dept-si',
           name: 'Ricky Akbar, M.Kom.',
-          email: 'kaprodi.si@it.unand.ac.id',
+          email: 'kadepsi@it.unand.ac.id',
           role: 'departemen_si',
           nipOrNim: '19840915 200812 1 002',
           department: 'Departemen Sistem Informasi',
@@ -162,7 +162,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return {
           id: 'u-dept-if',
           name: 'Dr. Ir. Wahyudi, S.T., M.T.',
-          email: 'kaprodi.if@it.unand.ac.id',
+          email: 'kadepif@it.unand.ac.id',
           role: 'departemen_if',
           nipOrNim: '19760724 200212 1 001',
           department: 'Departemen Informatika',
@@ -171,7 +171,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return {
           id: 'u-dept-tk',
           name: 'Dr. Eng. Tati Erlina, M.IT.',
-          email: 'kaprodi.tk@it.unand.ac.id',
+          email: 'kadeptekkom@it.unand.ac.id',
           role: 'departemen_tk',
           nipOrNim: '19790412 200604 2 001',
           department: 'Departemen Teknik Komputer',
@@ -180,7 +180,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return {
           id: 'u-dosen',
           name: 'Dr. Eng. Rahmad, M.T.',
-          email: 'rahmad@it.unand.ac.id',
+          email: 'dosen@it.unand.ac.id',
           role: 'dosen',
           nipOrNim: '19820412 200812 1 003',
           department: 'Departemen Sistem Informasi',
@@ -188,8 +188,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       case 'mahasiswa':
         return {
           id: 'u-mhs',
-          name: 'Faris Alfath',
-          email: 'faris.22@student.unand.ac.id',
+          name: 'Ihsan',
+          email: 'ihsan@gmail.com',
           role: 'mahasiswa',
           nipOrNim: '2211522001',
           department: 'Sistem Informasi (BP 22)',
@@ -197,10 +197,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const currentUser = getUserForRole(currentRole);
+  const [currentUser, setCurrentUser] = useState<User>(getUserForRole('admin'));
 
-  const handleRoleChange = (newRole: UserRole) => {
+  const handleRoleChange = (newRole: UserRole, customUser?: User) => {
     setCurrentRole(newRole);
+    const userToSet = customUser || getUserForRole(newRole);
+    setCurrentUser(userToSet);
+
     if (newRole === 'wadek1') {
       setActivePage('approval_wadek');
     } else if (newRole === 'dosen' || newRole === 'mahasiswa') {
@@ -210,13 +213,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } else {
       setActivePage('dashboard_admin');
     }
-    showToast(`Beralih ke peran: ${getUserForRole(newRole).name} (${newRole.toUpperCase()})`, 'info');
+    showToast(`Beralih ke peran: ${userToSet.name} (${newRole.toUpperCase()})`, 'info');
   };
 
-  const login = (role?: UserRole) => {
+  const login = (role?: UserRole, customUser?: User) => {
     setIsLoggedIn(true);
     if (role) {
-      handleRoleChange(role);
+      handleRoleChange(role, customUser);
     } else {
       setActivePage('dashboard_admin');
       showToast('Autentikasi SSO Berhasil. Selamat datang di SIPRAMA FTI UNAND', 'success');

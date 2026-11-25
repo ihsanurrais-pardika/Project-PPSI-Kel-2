@@ -13,12 +13,12 @@ export const GAConfigModal: React.FC = () => {
 
   const validate = () => {
     const errs: Record<string, string> = {};
-    if (form.wGap < 0) errs.wGap = 'Bobot penalti jeda mahasiswa harus ≥ 0';
-    if (form.wPref < 0) errs.wPref = 'Bobot penalti preferensi dosen harus ≥ 0';
-    if (form.wSpread < 0) errs.wSpread = 'Bobot penalti sebaran hari mengajar harus ≥ 0';
-    if (form.wWaste < 0) errs.wWaste = 'Bobot penalti pemborosan kursi harus ≥ 0';
-    if (form.timeoutSeconds <= 0) errs.timeoutSeconds = 'Batas waktu (timeout) harus > 0 detik';
-    if (form.numWorkers <= 0) errs.numWorkers = 'Jumlah search workers harus ≥ 1';
+    if (form.wGap < 0) errs.wGap = 'Bobot jeda mahasiswa harus ≥ 0';
+    if (form.wPref < 0) errs.wPref = 'Bobot preferensi dosen harus ≥ 0';
+    if (form.wSpread < 0) errs.wSpread = 'Bobot sebaran hari mengajar harus ≥ 0';
+    if (form.wWaste < 0) errs.wWaste = 'Bobot efisiensi ruang harus ≥ 0';
+    if (form.timeoutSeconds <= 0) errs.timeoutSeconds = 'Batas waktu harus > 0 detik';
+    if (form.numWorkers <= 0) errs.numWorkers = 'Jumlah pekerja prosesor harus ≥ 1';
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -93,6 +93,7 @@ export const GAConfigModal: React.FC = () => {
                   onChange={(e) => setForm({ ...form, wGap: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium focus:border-blue-500 focus:outline-hidden"
                 />
+                {errors.wGap && <p className="text-[10px] text-rose-600 mt-0.5">{errors.wGap}</p>}
                 <p className="text-[10px] text-slate-500 mt-0.5">Standar: 10 (Menghindari jeda kuliah yang terlalu lama)</p>
               </div>
 
@@ -107,6 +108,7 @@ export const GAConfigModal: React.FC = () => {
                   onChange={(e) => setForm({ ...form, wPref: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium focus:border-blue-500 focus:outline-hidden"
                 />
+                {errors.wPref && <p className="text-[10px] text-rose-600 mt-0.5">{errors.wPref}</p>}
                 <p className="text-[10px] text-slate-500 mt-0.5">Standar: 4 (Mengutamakan jam luang pilihan dosen)</p>
               </div>
 
@@ -121,6 +123,7 @@ export const GAConfigModal: React.FC = () => {
                   onChange={(e) => setForm({ ...form, wSpread: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium focus:border-blue-500 focus:outline-hidden"
                 />
+                {errors.wSpread && <p className="text-[10px] text-rose-600 mt-0.5">{errors.wSpread}</p>}
                 <p className="text-[10px] text-slate-500 mt-0.5">Standar: 3 (Fokus mengajar di hari yang sama)</p>
               </div>
 
@@ -135,6 +138,7 @@ export const GAConfigModal: React.FC = () => {
                   onChange={(e) => setForm({ ...form, wWaste: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium focus:border-blue-500 focus:outline-hidden"
                 />
+                {errors.wWaste && <p className="text-[10px] text-rose-600 mt-0.5">{errors.wWaste}</p>}
                 <p className="text-[10px] text-slate-500 mt-0.5">Standar: 1 (Menghindari ruang terlalu besar untuk kelas kecil)</p>
               </div>
             </div>
@@ -159,6 +163,7 @@ export const GAConfigModal: React.FC = () => {
                   onChange={(e) => setForm({ ...form, timeoutSeconds: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium focus:border-blue-500 focus:outline-hidden"
                 />
+                {errors.timeoutSeconds && <p className="text-[10px] text-rose-600 mt-0.5">{errors.timeoutSeconds}</p>}
                 <p className="text-[10px] text-slate-500 mt-0.5">Disarankan: 30 - 60 detik untuk skala fakultas</p>
               </div>
 

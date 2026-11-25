@@ -279,7 +279,7 @@ interface CariRuangModalProps {
   userRole: string;
   userProdi: 'SI' | 'IF' | 'TK';
   onClose: () => void;
-  showToast: (msg: string, type?: 'success' | 'info' | 'error' | 'warning' | any) => void;
+  showToast: (msg: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
 const CariRuangKosongModal: React.FC<CariRuangModalProps> = ({

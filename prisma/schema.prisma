@@ -1,0 +1,384 @@
+// Schema Prisma - Sistem Informasi Penjadwalan Perkuliahan & Manajemen Ruang Terintegrasi FTI
+// Database: MySQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// MASTER DATA
+// ============================================================
+
+model ProgramStudi {
+  id_prodi         Int    @id @default(autoincrement()) @db.SmallInt
+  kode_prodi       String @unique @db.VarChar(20)
+  nama_prodi       String @db.VarChar(150)
+  nama_departemen  String @db.VarChar(150)
+
+  pengguna     Pengguna[]
+  mahasiswa    Mahasiswa[]
+  mata_kuliah  MataKuliah[]
+  dosen        Dosen[]
+  ruang        Ruang[]
+
+  @@map("program_studi")
+}
+
+model Pengguna {
+  id_pengguna    BigInt  @id @default(autoincrement())
+  id_prodi       Int     @db.SmallInt
+  username       String  @unique @db.VarChar(100)
+  password_hash  String  @db.VarChar(255)
+  nama_lengkap   String  @db.VarChar(150)
+  email          String  @unique @db.VarChar(150)
+  peran          String  @db.VarChar(50)
+  status_aktif   Boolean @default(true)
+
+  prodi ProgramStudi @relation(fields: [id_prodi], references: [id_prodi])
+
+  mahasiswa             Mahasiswa?
+  dosen                 Dosen?
+  kelas_diajukan        Kelas[]
+  konfigurasi_algoritma KonfigurasiAlgoritma[]
+  versi_dibuat          JadwalVersi[]     @relation("VersiDibuatOleh")
+  versi_diterbitkan     JadwalVersi[]     @relation("VersiDiterbitkanOleh")
+  proses_dipicu         ProsesOptimasi[]
+  bentrok_ditindak      DeteksiBentrok[]
+  pertemuan_pengganti   PertemuanKuliah[]
+  perubahan_jadwal      PerubahanJadwal[]
+
+  @@index([id_prodi])
+  @@map("pengguna")
+}
+
+model Mahasiswa {
+  id_mahasiswa BigInt @id @default(autoincrement())
+  id_pengguna  BigInt @unique
+  id_prodi     Int    @db.SmallInt
+  nim          String @unique @db.VarChar(30)
+  tahun_masuk  Int    @db.SmallInt
+
+  pengguna Pengguna     @relation(fields: [id_pengguna], references: [id_pengguna])
+  prodi    ProgramStudi @relation(fields: [id_prodi], references: [id_prodi])
+
+  @@index([id_prodi])
+  @@map("mahasiswa")
+}
+
+model Dosen {
+  id_dosen           Int     @id @default(autoincrement())
+  id_pengguna        BigInt  @unique
+  id_prodi           Int     @db.SmallInt
+  nidn               String  @unique @db.VarChar(30)
+  jabatan_struktural String? @db.VarChar(100)
+  maks_sks_harian    Int     @db.SmallInt
+
+  pengguna Pengguna     @relation(fields: [id_pengguna], references: [id_pengguna])
+  prodi    ProgramStudi @relation(fields: [id_prodi], references: [id_prodi])
+
+  pengampu_kelas    PengampuKelas[]
+  preferensi_dosen  PreferensiDosen[]
+  versi_disetujui   JadwalVersi[]
+
+  @@index([id_prodi])
+  @@map("dosen")
+}
+
+model MataKuliah {
+  id_mk          Int     @id @default(autoincrement())
+  id_prodi       Int     @db.SmallInt
+  kode_mk        String  @unique @db.VarChar(20)
+  nama_mk        String  @db.VarChar(200)
+  sks            Int     @db.SmallInt
+  semester_paket Int     @db.SmallInt
+  jenis_mk       String  @db.VarChar(50)
+  lintas_prodi   Boolean @default(false)
+
+  prodi ProgramStudi @relation(fields: [id_prodi], references: [id_prodi])
+  kelas Kelas[]
+
+  @@index([id_prodi])
+  @@map("mata_kuliah")
+}
+
+model SemesterAkademik {
+  id_semester        Int      @id @default(autoincrement()) @db.SmallInt
+  tahun_ajaran       String   @db.VarChar(20)
+  jenis_semester     String   @db.VarChar(20)
+  tgl_mulai          DateTime @db.Date
+  tgl_selesai        DateTime @db.Date
+  kuota_minimum_kelas Int     @db.SmallInt
+
+  kelas            Kelas[]
+  preferensi_dosen PreferensiDosen[]
+  jadwal_versi     JadwalVersi[]
+
+  @@map("semester_akademik")
+}
+
+model Ruang {
+  id_ruang           Int      @id @default(autoincrement())
+  id_prodi_pengelola Int?     @db.SmallInt
+  kode_ruang         String   @unique @db.VarChar(30)
+  nama_ruang         String   @db.VarChar(150)
+  gedung             String   @db.VarChar(100)
+  lantai             Int      @db.SmallInt
+  kapasitas          Int      @db.SmallInt
+  jenis_ruang        String   @db.VarChar(50)
+  bisa_dipakai_bersama Boolean @default(false)
+  aksesibel          Boolean  @default(false)
+  latitude           Decimal? @db.Decimal(10, 7)
+  longitude          Decimal? @db.Decimal(10, 7)
+  petunjuk_rute      String?  @db.Text
+  denah_url          String?  @db.VarChar(500)
+
+  prodi_pengelola ProgramStudi? @relation(fields: [id_prodi_pengelola], references: [id_prodi])
+
+  jadwal_kuliah        JadwalKuliah[]
+  pertemuan_aktual     PertemuanKuliah[]
+  perubahan_ruang_lama PerubahanJadwal[] @relation("RuangLama")
+  perubahan_ruang_baru PerubahanJadwal[] @relation("RuangBaru")
+
+  @@index([id_prodi_pengelola])
+  @@map("ruang")
+}
+
+// ============================================================
+// KELAS & PENGAMPU
+// ============================================================
+
+model Kelas {
+  id_kelas            Int     @id @default(autoincrement())
+  id_semester         Int     @db.SmallInt
+  id_mk               Int
+  id_pengaju          BigInt
+  kode_kelas          String  @db.VarChar(20)
+  target_angkatan     Int     @db.SmallInt
+  estimasi_mahasiswa  Int     @db.SmallInt
+  jumlah_peserta      Int     @default(0) @db.SmallInt
+  butuh_aksesibilitas Boolean @default(false)
+  status_kelas        String  @db.VarChar(30)
+
+  semester SemesterAkademik @relation(fields: [id_semester], references: [id_semester])
+  mk       MataKuliah       @relation(fields: [id_mk], references: [id_mk])
+  pengaju  Pengguna         @relation(fields: [id_pengaju], references: [id_pengguna])
+
+  pengampu_kelas PengampuKelas[]
+  jadwal_kuliah  JadwalKuliah[]
+
+  @@index([id_semester])
+  @@index([id_mk])
+  @@index([id_pengaju])
+  @@map("kelas")
+}
+
+model PengampuKelas {
+  id_kelas       Int
+  id_dosen       Int
+  peran_pengampu String @db.VarChar(50)
+
+  kelas Kelas @relation(fields: [id_kelas], references: [id_kelas])
+  dosen Dosen @relation(fields: [id_dosen], references: [id_dosen])
+
+  @@id([id_kelas, id_dosen])
+  @@index([id_dosen])
+  @@map("pengampu_kelas")
+}
+
+model PreferensiDosen {
+  id_preferensi     BigInt   @id @default(autoincrement())
+  id_dosen          Int
+  id_semester       Int      @db.SmallInt
+  hari              String   @db.VarChar(15)
+  jam_mulai_hindari DateTime @db.Time(0)
+  jam_selesai_hindari DateTime @db.Time(0)
+  tingkat           String   @db.VarChar(30)
+  alasan            String?  @db.VarChar(255)
+
+  dosen    Dosen            @relation(fields: [id_dosen], references: [id_dosen])
+  semester SemesterAkademik @relation(fields: [id_semester], references: [id_semester])
+
+  @@index([id_dosen])
+  @@index([id_semester])
+  @@map("preferensi_dosen")
+}
+
+// ============================================================
+// PENJADWALAN & OPTIMASI
+// ============================================================
+
+model JadwalVersi {
+  id_versi         Int       @id @default(autoincrement())
+  id_semester      Int       @db.SmallInt
+  nomor_versi      Int       @db.SmallInt
+  tahap            String    @db.VarChar(30)
+  status_versi     String    @db.VarChar(30)
+  dibuat_oleh      BigInt
+  id_wd1_penyetuju Int?
+  tgl_persetujuan  DateTime? @db.Timestamp(6)
+  id_penerbit      BigInt?
+  tgl_publikasi    DateTime? @db.Timestamp(6)
+
+  semester  SemesterAkademik @relation(fields: [id_semester], references: [id_semester])
+  pembuat   Pengguna         @relation("VersiDibuatOleh", fields: [dibuat_oleh], references: [id_pengguna])
+  penyetuju Dosen?           @relation(fields: [id_wd1_penyetuju], references: [id_dosen])
+  penerbit  Pengguna?        @relation("VersiDiterbitkanOleh", fields: [id_penerbit], references: [id_pengguna])
+
+  jadwal_kuliah      JadwalKuliah[]
+  proses_versi_awal  ProsesOptimasi[] @relation("VersiAwal")
+  proses_versi_hasil ProsesOptimasi[] @relation("VersiHasil")
+
+  @@unique([id_semester, nomor_versi])
+  @@index([dibuat_oleh])
+  @@index([id_wd1_penyetuju])
+  @@index([id_penerbit])
+  @@map("jadwal_versi")
+}
+
+model KonfigurasiAlgoritma {
+  id_konfigurasi        Int     @id @default(autoincrement())
+  id_pembuat            BigInt
+  nama_konfigurasi      String  @db.VarChar(150)
+  ukuran_populasi       Int
+  peluang_crossover     Decimal @db.Decimal(5, 4)
+  peluang_mutasi        Decimal @db.Decimal(5, 4)
+  maks_generasi         Int
+  bobot_preferensi_hari Decimal @db.Decimal(8, 4)
+  bobot_kondisi_pribadi Decimal @db.Decimal(8, 4)
+  bobot_beban_harian    Decimal @db.Decimal(8, 4)
+  bobot_pemerataan      Decimal @db.Decimal(8, 4)
+
+  pembuat Pengguna @relation(fields: [id_pembuat], references: [id_pengguna])
+
+  proses_optimasi ProsesOptimasi[]
+
+  @@index([id_pembuat])
+  @@map("konfigurasi_algoritma")
+}
+
+model ProsesOptimasi {
+  id_proses        Int       @id @default(autoincrement())
+  id_konfigurasi   Int
+  id_versi_awal    Int
+  id_versi_hasil   Int?
+  id_pemicu        BigInt
+  algoritma        String    @db.VarChar(50)
+  waktu_mulai      DateTime  @default(now()) @db.Timestamp(6)
+  waktu_selesai    DateTime? @db.Timestamp(6)
+  status_proses    String    @db.VarChar(30)
+  generasi_tercapai Int?
+  penalti_sebelum  Decimal?  @db.Decimal(14, 4)
+  penalti_sesudah  Decimal?  @db.Decimal(14, 4)
+
+  konfigurasi  KonfigurasiAlgoritma @relation(fields: [id_konfigurasi], references: [id_konfigurasi])
+  versi_awal   JadwalVersi          @relation("VersiAwal", fields: [id_versi_awal], references: [id_versi])
+  versi_hasil  JadwalVersi?         @relation("VersiHasil", fields: [id_versi_hasil], references: [id_versi])
+  pemicu       Pengguna             @relation(fields: [id_pemicu], references: [id_pengguna])
+
+  @@index([id_konfigurasi])
+  @@index([id_versi_awal])
+  @@index([id_versi_hasil])
+  @@index([id_pemicu])
+  @@map("proses_optimasi")
+}
+
+model JadwalKuliah {
+  id_jadwal   BigInt   @id @default(autoincrement())
+  id_versi    Int
+  id_kelas    Int
+  id_ruang    Int
+  hari        String   @db.VarChar(15)
+  jam_mulai   DateTime @db.Time(0)
+  jam_selesai DateTime @db.Time(0)
+
+  versi JadwalVersi @relation(fields: [id_versi], references: [id_versi])
+  kelas Kelas       @relation(fields: [id_kelas], references: [id_kelas])
+  ruang Ruang       @relation(fields: [id_ruang], references: [id_ruang])
+
+  pertemuan_kuliah   PertemuanKuliah[]
+  perubahan_jadwal   PerubahanJadwal[]
+  bentrok_sebagai_1  DeteksiBentrok[] @relation("Jadwal1")
+  bentrok_sebagai_2  DeteksiBentrok[] @relation("Jadwal2")
+
+  @@index([id_versi])
+  @@index([id_kelas])
+  @@index([id_ruang])
+  @@map("jadwal_kuliah")
+}
+
+// ============================================================
+// PELAKSANAAN, PERUBAHAN & BENTROK
+// ============================================================
+
+model PertemuanKuliah {
+  id_pertemuan         BigInt   @id @default(autoincrement())
+  id_jadwal            BigInt
+  id_ruang_aktual      Int
+  id_pemohon_pengganti BigInt?
+  pertemuan_ke         Int      @db.SmallInt
+  tanggal_pertemuan    DateTime @db.Date
+  jam_mulai_aktual     DateTime @db.Time(0)
+  jam_selesai_aktual   DateTime @db.Time(0)
+  status_pertemuan     String   @db.VarChar(30)
+  keterangan           String?  @db.Text
+
+  jadwal          JadwalKuliah @relation(fields: [id_jadwal], references: [id_jadwal])
+  ruang_aktual    Ruang        @relation(fields: [id_ruang_aktual], references: [id_ruang])
+  pemohon_pengganti Pengguna?  @relation(fields: [id_pemohon_pengganti], references: [id_pengguna])
+
+  @@unique([id_jadwal, pertemuan_ke])
+  @@index([id_ruang_aktual])
+  @@index([id_pemohon_pengganti])
+  @@map("pertemuan_kuliah")
+}
+
+model PerubahanJadwal {
+  id_perubahan    BigInt   @id @default(autoincrement())
+  id_jadwal       BigInt
+  id_pengguna     BigInt
+  hari_lama       String   @db.VarChar(15)
+  jam_mulai_lama  DateTime @db.Time(0)
+  hari_baru       String   @db.VarChar(15)
+  jam_mulai_baru  DateTime @db.Time(0)
+  id_ruang_lama   Int
+  id_ruang_baru   Int
+  alasan          String?  @db.Text
+  waktu_perubahan DateTime @default(now()) @db.Timestamp(6)
+
+  jadwal     JadwalKuliah @relation(fields: [id_jadwal], references: [id_jadwal])
+  pengguna   Pengguna     @relation(fields: [id_pengguna], references: [id_pengguna])
+  ruang_lama Ruang        @relation("RuangLama", fields: [id_ruang_lama], references: [id_ruang])
+  ruang_baru Ruang        @relation("RuangBaru", fields: [id_ruang_baru], references: [id_ruang])
+
+  @@index([id_jadwal])
+  @@index([id_pengguna])
+  @@index([id_ruang_lama])
+  @@index([id_ruang_baru])
+  @@map("perubahan_jadwal")
+}
+
+model DeteksiBentrok {
+  id_bentrok      BigInt    @id @default(autoincrement())
+  id_jadwal_1     BigInt
+  id_jadwal_2     BigInt
+  id_penindak     BigInt?
+  jenis_bentrok   String    @db.VarChar(50)
+  deskripsi       String?   @db.Text
+  status_bentrok  String    @db.VarChar(30)
+  terdeteksi_pada DateTime  @default(now()) @db.Timestamp(6)
+  selesai_pada    DateTime? @db.Timestamp(6)
+
+  jadwal_1 JadwalKuliah @relation("Jadwal1", fields: [id_jadwal_1], references: [id_jadwal])
+  jadwal_2 JadwalKuliah @relation("Jadwal2", fields: [id_jadwal_2], references: [id_jadwal])
+  penindak Pengguna?    @relation(fields: [id_penindak], references: [id_pengguna])
+
+  @@index([id_jadwal_1])
+  @@index([id_jadwal_2])
+  @@index([id_penindak])
+  @@map("deteksi_bentrok")
+}

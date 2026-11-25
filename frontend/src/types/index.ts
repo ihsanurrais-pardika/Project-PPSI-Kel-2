@@ -81,6 +81,7 @@ export interface ScheduleItem {
   roomName: string;
   building?: string;
   floor?: number;
+  capacity?: number;
   day: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | string;
   sessionIndex: number; // 1 to 5
   timeLabel?: string; // e.g. "07:30 - 09:10"

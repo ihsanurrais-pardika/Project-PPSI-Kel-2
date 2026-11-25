@@ -6,7 +6,12 @@
     "dev": "npm --prefix frontend run dev",
     "dev:open": "npm --prefix frontend run dev -- --open",
     "build": "npm --prefix frontend run build",
-    "preview": "npm --prefix frontend run preview"
+    "preview": "npm --prefix frontend run preview",
+    "db:setup": "prisma migrate dev --name init && prisma db seed",
+    "db:migrate": "prisma migrate dev && prisma db seed",
+    "db:deploy": "prisma migrate deploy && prisma db seed",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio"
   },
   "keywords": [
     "siprama",
@@ -17,5 +22,23 @@
     "genetic-algorithm"
   ],
   "author": "Kelompok 2 - Departemen Sistem Informasi FTI UNAND",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "prisma": "^6.19.3"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.10"
+  },
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ihsanurrais-pardika/Project-PPSI-Kel-2.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ihsanurrais-pardika/Project-PPSI-Kel-2/issues"
+  },
+  "homepage": "https://github.com/ihsanurrais-pardika/Project-PPSI-Kel-2#readme"
 }
