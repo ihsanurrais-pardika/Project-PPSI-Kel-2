@@ -1412,19 +1412,17 @@ export const JadwalTerpaduPage: React.FC = () => {
                 <button
                   key={sksVal}
                   onClick={() => setSelectedSks(sksVal)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5 ${
-                    isSelected
-                      ? 'bg-blue-700 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5 ${isSelected
+                    ? 'bg-blue-700 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                 >
                   <span>
                     {sksVal === 'Semua' ? 'Semua SKS' : `${sksVal} SKS (${sksVal * 50}m)`}
                   </span>
                   <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      isSelected ? 'bg-blue-800 text-blue-100' : 'bg-slate-200 text-slate-600'
-                    }`}
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${isSelected ? 'bg-blue-800 text-blue-100' : 'bg-slate-200 text-slate-600'
+                      }`}
                   >
                     {count}
                   </span>

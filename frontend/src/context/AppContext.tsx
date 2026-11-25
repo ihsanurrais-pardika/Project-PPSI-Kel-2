@@ -11,7 +11,7 @@ export const initialCPSATParams: CPSATParameters = {
   wWaste: 1,
   timeoutSeconds: 60,
   numWorkers: 8,
-  linearizationLevel: 2,
+  linearizationLevel: 0,
 };
 
 interface AppContextType {
@@ -497,35 +497,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       roomName?: string;
     }
   ) => {
-    setSchedule(prev => prev.map(s => {
-      if (s.id === scheduleId) {
-        return {
-          ...s,
-          sks: params.sks,
-          day: params.day,
-          sessionIndex: params.sessionIndex,
-          timeLabel: `${params.startTime} - ${params.endTime}`,
-          time: `${params.startTime} - ${params.endTime}`,
-          roomId: params.roomId || s.roomId,
-          roomName: params.roomName || s.roomName,
-          note: `Disesuaikan: ${params.sks} SKS (${params.sks * 50} Menit)`
-        };
-      }
-      return s;
-    }));
-
-    const log: AuditLogItem = {
-      id: `log-${Date.now()}`,
-      timestamp: 'Baru saja',
-      activity: `Penyesuaian Fleksibel SKS & Jam (${params.sks} SKS)`,
-      description: `Jadwal ${scheduleId} disesuaikan menjadi ${params.sks} SKS (${params.startTime} - ${params.endTime}) pada hari ${params.day}.`,
-      category: 'Admin',
-      actorName: currentUser.name,
-      actorRole: currentUser.role,
-      status: 'info',
-    };
-    setAuditLogs(prev => [log, ...prev]);
-    showToast(`Jadwal berhasil disesuaikan: ${params.sks} SKS (${params.startTime} - ${params.endTime})!`, 'success');
+    setSchedule((prev) =>
+      prev.map((item) => {
+        if (item.id === scheduleId) {
+          return {
+            ...item,
+            sks: params.sks,
+            day: params.day as any,
+            sessionIndex: params.sessionIndex,
+            timeLabel: `${params.startTime} - ${params.endTime}`,
+            time: `${params.startTime} - ${params.endTime}`,
+            ...(params.roomId ? { roomId: params.roomId } : {}),
+            ...(params.roomName ? { roomName: params.roomName } : {}),
+          };
+        }
+        return item;
+      })
+    );
+    showToast(`Jadwal kelas berhasil disesuaikan (${params.sks} SKS, ${params.day} ${params.startTime}-${params.endTime}).`, 'success');
   };
 
   const fetchBackendClasses = async () => {
@@ -600,42 +589,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setLatestCPSATResult(res);
 
       if (res.status === 'OPTIMAL' || res.status === 'FEASIBLE') {
-        const newScheduleItems: ScheduleItem[] = res.schedule.map((sc, idx) => {
-          const backendClass = backendClasses.find(b => b.id === sc.class_id || b.course_code === sc.course_code);
-          const resolvedSks = sc.sks || backendClass?.sks || (sc.duration >= 2 ? sc.duration : 2);
-          return {
-            id: `sch-${sc.class_id}-${idx}`,
-            courseCode: sc.course_code,
-            courseName: sc.course_name,
-            classLabel: sc.class_label,
-            className: sc.class_label,
-            sks: resolvedSks,
-            studentCount: sc.size,
-            roomId: sc.room_id,
-            roomName: sc.room_name,
-            building: sc.floor === 1 ? 'Gedung FTI (Lantai 1)' : 'Gedung FTI',
-            floor: sc.floor,
-            day: sc.day as any,
-            sessionIndex: (sc.start_slot_index % 6) + 1,
-            timeLabel: `${sc.start_time} - ${sc.end_time}`,
-            time: `${sc.start_time} - ${sc.end_time}`,
-            primaryLecturer: sc.lecturer_names[0] || 'Dosen Pengampu',
-            lecturerName: sc.lecturer_names.join(', '),
-            tandemLecturers: sc.lecturer_names.slice(1),
-            isTandem: sc.lecturer_names.length > 1,
-            department: resolveDepartment(sc.department, sc.course_code),
-            status: 'OK',
-            wd1Status: 'Menunggu Review',
-          };
-        });
+        const newScheduleItems: ScheduleItem[] = res.schedule.map((sc, idx) => ({
+          id: `sch-${sc.class_id}-${idx}`,
+          courseCode: sc.course_code,
+          courseName: sc.course_name,
+          classLabel: sc.class_label,
+          className: sc.class_label,
+          sks: sc.duration,
+          studentCount: sc.size,
+          roomId: sc.room_id,
+          roomName: sc.room_name,
+          building: sc.floor === 1 ? 'Gedung FTI (Lantai 1)' : 'Gedung FTI',
+          floor: sc.floor,
+          day: sc.day as any,
+          sessionIndex: (sc.start_slot_index % 6) + 1,
+          timeLabel: `${sc.start_time} - ${sc.end_time}`,
+          time: `${sc.start_time} - ${sc.end_time}`,
+          primaryLecturer: sc.lecturer_names[0] || 'Dosen Pengampu',
+          lecturerName: sc.lecturer_names.join(', '),
+          tandemLecturers: sc.lecturer_names.slice(1),
+          isTandem: sc.lecturer_names.length > 1,
+          department: resolveDepartment(sc.department, sc.course_code),
+          status: 'OK',
+          wd1Status: 'Menunggu Review',
+        }));
         setSchedule(newScheduleItems);
-        showToast(`Solver CP-SAT Selesai: Status ${res.status} dalam ${res.wall_time_seconds} detik! (${res.scheduled_classes} kelas terjadwal)`, 'success');
+        showToast(`Penjadwalan otomatis selesai: ${res.scheduled_classes} kelas berhasil disusun (${res.wall_time_seconds} detik)!`, 'success');
       } else {
-        showToast(`Solver CP-SAT menghasilkan status ${res.status}. Periksa batasan atau diagnostik.`, 'warning');
+        showToast(`Penyusunan jadwal memerlukan penyesuaian batasan atau waktu kalkulasi lebih lanjut (Status: ${res.status}).`, 'warning');
       }
       return res;
     } catch (err: any) {
-      showToast(`Gagal menjalankan solver CP-SAT: ${err.message}`, 'error');
+      showToast(`Gagal memproses penjadwalan otomatis: ${err.message}`, 'error');
       return null;
     } finally {
       setIsBackendLoading(false);

@@ -1,0 +1,394 @@
+erDiagram
+    program_studi |o--o{ pengguna : mewakili
+    program_studi |o--o{ dosen : menaungi
+    program_studi ||--o{ rombongan_belajar : memiliki_rombel
+    program_studi ||--o{ mahasiswa : memiliki
+    program_studi |o--o{ mata_kuliah : mengelola_mk
+    program_studi |o--o{ ruang : mengelola_utama
+    program_studi ||--o{ usulan_perkuliahan : mengusulkan
+    program_studi |o--o{ proses_solver : filter_prodi
+    pengguna ||--o{ sesi_pengguna : memiliki_sesi
+    pengguna |o--o{ log_aktivitas : mencatat_audit
+    pengguna |o--o| dosen : akun_dosen
+    pengguna ||--o| mahasiswa : akun_mahasiswa
+    pengguna |o--o{ usulan_perkuliahan : mengajukan
+    pengguna |o--o{ konfigurasi_solver : mengatur
+    pengguna ||--o{ proses_solver : memicu
+    pengguna ||--o{ jadwal_versi : membuat_menerbitkan
+    pengguna ||--o{ persetujuan_wd1 : meninjau_wd1
+    pengguna |o--o{ pertemuan_kuliah : memohon_pengganti
+    pengguna ||--o{ perubahan_jadwal : mengubah
+    pengguna |o--o{ deteksi_bentrok : menindaklanjuti
+    dosen |o--o{ mahasiswa : membimbing_pa
+    dosen ||--o{ pengampu_kelas : mengampu
+    dosen ||--o{ preferensi_dosen : memilih_preferensi
+    dosen |o--o{ krs_mahasiswa : menyetujui_batal
+    rombongan_belajar |o--o{ mahasiswa : beranggota
+    rombongan_belajar ||--o{ kelas_rombel : diikuti_kelas
+    mahasiswa ||--o{ krs_mahasiswa : mengambil_krs
+    semester_akademik ||--o{ usulan_perkuliahan : periode_usulan
+    semester_akademik ||--o{ preferensi_dosen : periode_pref
+    semester_akademik ||--o{ jadwal_versi : periode_versi
+    semester_akademik ||--o{ proses_solver : periode_solver
+    mata_kuliah ||--o{ usulan_perkuliahan : ditawarkan_pada
+    usulan_perkuliahan ||--|{ kelas : dipecah_menjadi
+    kelas ||--|{ kelas_rombel : diikuti_rombel
+    kelas ||--|{ pengampu_kelas : diampu_oleh
+    kelas ||--o{ krs_mahasiswa : didaftarkan
+    kelas ||--o{ jadwal_kuliah : dijadwalkan
+    slot_waktu |o--o{ preferensi_dosen : slot_preferensi
+    slot_waktu |o--o{ jadwal_kuliah : slot_mulai
+    ruang |o--o{ jadwal_kuliah : dipakai_reguler
+    ruang ||--o{ pertemuan_kuliah : ditempati_aktual
+    ruang |o--o{ perubahan_jadwal : ruang_lama_baru
+    konfigurasi_solver |o--o{ proses_solver : dipakai_solver
+    jadwal_versi |o--o{ proses_solver : versi_awal_hasil
+    jadwal_versi ||--o{ persetujuan_wd1 : riwayat_review
+    jadwal_versi ||--o{ jadwal_kuliah : memuat
+    jadwal_kuliah ||--o{ pertemuan_kuliah : realisasi_sesi
+    jadwal_kuliah ||--o{ perubahan_jadwal : diubah
+    jadwal_kuliah |o--o{ deteksi_bentrok : terlibat_bentrok
+
+    program_studi {
+        smallint id_prodi PK
+        varchar kode_prodi UK "SI, IF, TK"
+        varchar nama_prodi
+        varchar nama_departemen
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    pengguna {
+        bigint id_pengguna PK
+        smallint id_prodi FK "nullable"
+        varchar username UK
+        varchar password_hash
+        varchar nama_lengkap
+        varchar email UK
+        varchar peran "RBAC role"
+        boolean status_aktif
+        timestamptz last_login_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    sesi_pengguna {
+        bigint id_sesi PK
+        bigint id_pengguna FK
+        varchar refresh_token_hash UK
+        text user_agent
+        inet ip_address
+        timestamptz waktu_login
+        timestamptz kedaluwarsa_pada
+        timestamptz waktu_logout
+        boolean is_revoked
+    }
+
+    log_aktivitas {
+        bigint id_log PK
+        bigint id_pengguna FK "nullable"
+        varchar kategori
+        varchar aksi
+        varchar nama_tabel
+        varchar id_entitas
+        text deskripsi
+        jsonb data_lama
+        jsonb data_baru
+        varchar status_log
+        inet ip_address
+        timestamptz waktu
+    }
+
+    semester_akademik {
+        smallint id_semester PK
+        varchar tahun_ajaran UK
+        varchar jenis_semester UK
+        date tgl_mulai
+        date tgl_selesai
+        smallint kuota_minimum_kelas
+        boolean status_aktif "max 1 aktif"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    dosen {
+        int id_dosen PK
+        bigint id_pengguna FK "nullable 1:1"
+        smallint id_prodi FK "nullable eksternal"
+        varchar kode_dosen UK "dari CSV"
+        varchar nidn UK "nullable"
+        varchar nama_dosen
+        varchar jabatan_struktural
+        varchar bidang_keahlian
+        smallint maks_sks_harian
+        smallint maks_sks_semester
+        varchar tipe_dosen
+        boolean status_aktif
+    }
+
+    rombongan_belajar {
+        int id_rombel PK
+        smallint id_prodi FK
+        smallint semester_paket
+        varchar kode_rombel UK "TK-S1-A"
+        varchar nama_rombel
+        varchar jenis_rombel
+    }
+
+    mahasiswa {
+        bigint id_mahasiswa PK
+        bigint id_pengguna FK "unik 1:1"
+        smallint id_prodi FK
+        int id_rombel FK "nullable"
+        int id_dosen_pa FK "Dosen PA"
+        varchar nim UK
+        smallint tahun_masuk
+        boolean status_aktif
+    }
+
+    mata_kuliah {
+        int id_mk PK
+        smallint id_prodi FK "nullable MKWU"
+        varchar kode_mk UK
+        varchar nama_mk
+        smallint sks
+        smallint sks_teori
+        smallint sks_praktikum
+        smallint semester_paket
+        varchar kurikulum
+        varchar jenis_mk
+        boolean lintas_prodi
+    }
+
+    ruang {
+        int id_ruang PK
+        smallint id_prodi_pengelola FK "nullable bersama"
+        varchar kode_ruang UK
+        varchar nama_ruang
+        varchar gedung
+        varchar sayap
+        smallint lantai
+        decimal luas_m2
+        smallint kapasitas
+        varchar jenis_ruang
+        varchar kategori_solver "Teori atau Lab"
+        varchar status_operasional
+        boolean bisa_dipakai_bersama
+        boolean aksesibel
+        jsonb fasilitas
+        decimal latitude
+        decimal longitude
+        text petunjuk_rute
+        varchar denah_url
+    }
+
+    slot_waktu {
+        smallint id_slot PK
+        varchar kode_slot UK
+        smallint indeks_global UK "0..29"
+        varchar hari UK
+        smallint indeks_harian UK "0..5"
+        smallint sesi_ke "1..6"
+        time jam_mulai_standar
+        time jam_selesai_standar
+        varchar label_waktu
+    }
+
+    usulan_perkuliahan {
+        int id_usulan PK
+        smallint id_semester FK
+        int id_mk FK
+        smallint id_prodi_pengusul FK
+        bigint id_pengaju FK
+        smallint jumlah_kelas_rencana
+        smallint estimasi_total_mhs
+        text_array hari_prioritas "array hari"
+        varchar sesi_pilihan
+        boolean hindari_jumat_siang
+        boolean maks_satu_sesi_per_hari
+        text catatan_khusus
+        varchar status_usulan
+        text catatan_revisi_admin
+    }
+
+    kelas {
+        int id_kelas PK
+        int id_usulan FK
+        varchar kode_referensi_kelas "SCE61101-A"
+        varchar kode_kelas UK "A, B, Shift 1"
+        smallint sks_efektif "1..4 SKS"
+        varchar tipe_ruang_dibutuhkan "Teori atau Lab"
+        smallint kapasitas_rencana
+        smallint estimasi_mahasiswa
+        smallint jumlah_peserta
+        boolean estimasi_otomatis
+        boolean butuh_ruang "FALSE=KKN/TA"
+        boolean butuh_aksesibilitas
+        boolean is_transisi
+        varchar status_kelas
+    }
+
+    kelas_rombel {
+        int id_kelas PK, FK
+        int id_rombel PK, FK
+    }
+
+    pengampu_kelas {
+        int id_kelas PK, FK
+        int id_dosen PK, FK
+        varchar peran_pengampu "Utama/Tandem"
+        smallint urutan_tandem
+    }
+
+    krs_mahasiswa {
+        bigint id_krs PK
+        bigint id_mahasiswa FK
+        int id_kelas FK
+        varchar status_krs
+        int id_dosen_pa_penyetuju FK "nullable"
+        timestamptz waktu_persetujuan_pa
+        text alasan_batal
+    }
+
+    preferensi_dosen {
+        bigint id_preferensi PK
+        int id_dosen FK
+        smallint id_semester FK
+        smallint id_slot FK "nullable"
+        varchar hari
+        time jam_mulai
+        time jam_selesai
+        varchar jenis_preferensi
+        smallint bobot_penalti
+        varchar alasan
+    }
+
+    konfigurasi_solver {
+        int id_konfigurasi PK
+        bigint id_pembuat FK "nullable"
+        varchar nama_konfigurasi
+        int w_gap
+        int w_pref
+        int w_spread
+        int w_waste
+        decimal max_time_seconds
+        smallint num_workers
+        smallint linearization_level "default 0"
+        varchar search_branching
+        int random_seed
+        jsonb parameter_ekstra
+        boolean is_default
+    }
+
+    proses_solver {
+        bigint id_proses PK
+        int id_konfigurasi FK "nullable"
+        smallint id_semester FK
+        smallint id_prodi_filter FK "nullable semua FTI"
+        int id_versi_awal FK "nullable"
+        int id_versi_hasil FK "nullable"
+        bigint id_pemicu FK
+        varchar status_solver "OPTIMAL/FEASIBLE"
+        decimal durasi_eksekusi_detik
+        int total_kelas
+        int kelas_terjadwal
+        int penalti_gap
+        int penalti_pref
+        int penalti_spread
+        int penalti_waste
+        int total_penalti_tertimbang
+        int random_seed
+        jsonb diagnostik_json "NF-11 diagnostics"
+        timestamptz waktu_mulai
+        timestamptz waktu_selesai
+    }
+
+    jadwal_versi {
+        int id_versi PK
+        smallint id_semester FK
+        smallint nomor_versi UK
+        varchar kode_batch
+        varchar tahap
+        varchar status_persetujuan
+        bigint dibuat_oleh FK
+        bigint diterbitkan_oleh FK "nullable"
+        timestamptz tgl_publikasi
+        boolean is_aktif_portal "max 1 per semester"
+    }
+
+    persetujuan_wd1 {
+        bigint id_persetujuan PK
+        int id_versi FK
+        bigint id_peninjau FK "aktor WD1"
+        varchar keputusan "Disetujui/Revisi"
+        text catatan_revisi
+        varchar nomor_sk
+        varchar signature_bsre
+        timestamptz waktu_keputusan
+    }
+
+    jadwal_kuliah {
+        bigint id_jadwal PK
+        int id_versi FK
+        int id_kelas FK
+        int id_ruang FK "nullable"
+        smallint id_slot_mulai FK "nullable"
+        smallint durasi_slot
+        varchar hari
+        time jam_mulai
+        time jam_selesai
+        int4range rentang_waktu_mingguan "GiST exclude"
+        varchar status_review_wd1
+        text catatan_review_wd1
+    }
+
+    pertemuan_kuliah {
+        bigint id_pertemuan PK
+        bigint id_jadwal FK
+        int id_ruang_aktual FK
+        bigint id_pemohon_pengganti FK "nullable"
+        smallint pertemuan_ke UK "1..16"
+        date tanggal_pertemuan
+        time jam_mulai_aktual
+        time jam_selesai_aktual
+        int4range rentang_menit "GiST exclude"
+        varchar status_pertemuan
+        varchar status_pengajuan_ruang
+        text alasan_penggantian
+        varchar qr_presensi_token
+        text keterangan
+    }
+
+    perubahan_jadwal {
+        bigint id_perubahan PK
+        bigint id_jadwal FK
+        bigint id_pengguna FK
+        varchar jenis_perubahan
+        varchar hari_lama
+        time jam_mulai_lama
+        time jam_selesai_lama
+        smallint sks_lama
+        int id_ruang_lama FK "nullable"
+        varchar hari_baru
+        time jam_mulai_baru
+        time jam_selesai_baru
+        smallint sks_baru
+        int id_ruang_baru FK "nullable"
+        text alasan
+        timestamptz waktu_perubahan
+    }
+
+    deteksi_bentrok {
+        bigint id_bentrok PK
+        bigint id_jadwal_1 FK
+        bigint id_jadwal_2 FK "nullable tunggal"
+        bigint id_penindak FK "nullable"
+        varchar jenis_bentrok
+        varchar tingkat_keparahan "hard/soft/warning"
+        varchar judul_konflik
+        text deskripsi
+        text rekomendasi_solusi
+        varchar status_bentrok
+        timestamptz terdeteksi_pada
+        timestamptz selesai_pada
+    }
