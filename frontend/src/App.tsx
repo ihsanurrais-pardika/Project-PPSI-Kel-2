@@ -2,6 +2,7 @@ import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
+import { Toast } from './components/Toast';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardAdminPage } from './pages/DashboardAdminPage';
 import { FormUsulanMKPage } from './pages/FormUsulanMKPage';
@@ -82,6 +83,7 @@ export default function App() {
     <ErrorBoundary>
       <AppProvider>
         <AppContent />
+        <Toast />
       </AppProvider>
     </ErrorBoundary>
   );

@@ -3,10 +3,11 @@ import { useApp } from '../context/AppContext';
 import { Search, Bell, LogOut, ChevronDown, User, ShieldCheck } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
-  const { activePage, currentUser, conflicts, setActivePage, logout } = useApp();
+  const { activePage, currentUser, conflicts, setActivePage, logout, latestCPSATResult } = useApp();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
   const unresolvedCount = conflicts.filter((c) => !c.isResolved).length;
+  const semesterLabel = latestCPSATResult?.semester_label || '2026/2027 Ganjil';
 
   const getPageInfo = (page: string) => {
     switch (page) {
@@ -112,7 +113,7 @@ export const Navbar: React.FC = () => {
         {/* Academic year indicator */}
         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-900 text-xs font-semibold">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-          <span>2024/2025 Ganjil</span>
+          <span>{semesterLabel}</span>
         </div>
 
         {/* Notification bell (Khusus Admin menuju Validasi & Konflik) */}
@@ -147,7 +148,9 @@ export const Navbar: React.FC = () => {
                 {currentUser.name}
               </div>
               <div className="text-[10px] text-slate-500 leading-tight truncate">
-                {currentUser.department || 'Konsol Akademik FTI'}
+                {currentUser.role === 'admin'
+                  ? 'Konsol Akademik FTI'
+                  : currentUser.department || 'Konsol Akademik FTI'}
               </div>
             </div>
 

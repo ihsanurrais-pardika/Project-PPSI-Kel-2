@@ -29,6 +29,7 @@ from app.engine.domain_models import ObjectiveWeights, SolverConfig
 from app.schemas.schedule_dto import SolverResultOutput, DiagnosticsOutput
 from app.engine.diagnostics import ScheduleDiagnostics
 from app.engine.manual_schedule import ScheduleConflictException
+from app.modul4_exports import build_offerings_excel, build_offerings_pdf
 
 app = FastAPI(
     title="SIPRAMA FTI UNAND - Unified API & CP-SAT Engine",
@@ -68,6 +69,58 @@ class AdjustClassRequest(BaseModel):
     requires_room: Optional[bool] = None
     lecturer_names: Optional[List[str]] = None
     lecturer_ids: Optional[List[str]] = None
+    reason: Optional[str] = None
+    actor_email: Optional[str] = None
+
+
+class OfferingRombelPayload(BaseModel):
+    class_label: str
+    enrolled_count: int
+
+
+class CreateOfferingRequest(BaseModel):
+    course_code: str
+    name: str
+    department: str = "SI"
+    semester: int = 1
+    sks: int = 3
+    sks_teori: Optional[int] = None
+    sks_praktik: Optional[int] = None
+    is_mandatory: bool = True
+    requires_room: bool = True
+    room_type_needed: Optional[str] = None
+    primary_lecturer_name: str
+    tandem_lecturer_names: List[str] = []
+    classes: List[OfferingRombelPayload]
+    preferred_days: List[str] = []
+    preferred_time_slot: Optional[str] = None
+    avoid_friday: bool = False
+    special_note: Optional[str] = None
+    as_draft: bool = False
+    update_existing: bool = False
+    actor_email: Optional[str] = None
+
+
+class CancelClassRequest(BaseModel):
+    reason: str
+    actor_email: Optional[str] = None
+
+
+class RestoreClassRequest(BaseModel):
+    actor_email: Optional[str] = None
+
+
+class AdjustRombelsRequest(BaseModel):
+    target_count: int
+    default_capacity: int = 40
+    reason: str = "Penyesuaian jumlah rombel departemen"
+    actor_email: Optional[str] = None
+
+
+class SubmitDepartemenRequest(BaseModel):
+    department: str
+    catatan: Optional[str] = None
+    actor_email: Optional[str] = None
 
 
 class RoomPayload(BaseModel):
@@ -189,12 +242,36 @@ def list_courses(store=Depends(get_store)):
     return []
 
 
+@app.get("/api/semester/active")
+def get_active_semester(store=Depends(get_store)):
+    if hasattr(store, "get_active_semester_info"):
+        return store.get_active_semester_info()
+    return {
+        "id_semester": 1,
+        "tahun_ajaran": "2026/2027",
+        "jenis_semester": "Ganjil",
+        "semester_label": "2026/2027 Ganjil",
+        "kuota_minimum_kelas": getattr(store, "kuota_minimum_kelas", 15),
+    }
+
+
+@app.get("/api/lecturers")
+def list_lecturers(
+    department: Optional[str] = Query(None, description="Filter prodi: SI, IF, TK"),
+    store=Depends(get_store),
+):
+    if hasattr(store, "get_lecturers_raw"):
+        return store.get_lecturers_raw(department=department)
+    return []
+
+
 @app.get("/api/classes", response_model=List[ClassItem])
 def list_classes(
     department: Optional[str] = Query(None, description="Filter prodi: SI, IF, TK"),
     semester: Optional[int] = Query(None, description="Filter semester: 1, 3, 5, 7"),
     search: Optional[str] = Query(None, description="Pencarian kode/nama/dosen"),
     room_type: Optional[str] = Query(None, description="Filter tipe ruang: Teori atau Lab"),
+    include_cancelled: bool = Query(False, description="Sertakan kelas yang dibatalkan"),
     store=Depends(get_store),
 ):
     return store.get_classes(
@@ -202,6 +279,79 @@ def list_classes(
         semester=semester,
         search=search,
         room_type=room_type,
+        include_cancelled=include_cancelled,
+    )
+
+
+@app.get("/api/classes/below-quota")
+def list_classes_below_quota(
+    department: Optional[str] = Query(None, description="Filter prodi: SI, IF, TK"),
+    store=Depends(get_store),
+):
+    return store.get_below_quota_classes(department=department)
+
+
+@app.get("/api/classes/export-excel")
+def export_classes_excel(
+    department: Optional[str] = Query(None, description="Filter prodi: SI, IF, TK"),
+    semester: Optional[int] = Query(None, description="Filter semester"),
+    include_cancelled: bool = Query(False, description="Sertakan kelas dibatalkan"),
+    store=Depends(get_store),
+):
+    classes = store.get_classes(
+        department=department,
+        semester=semester,
+        include_cancelled=include_cancelled,
+    )
+    sem_info = (
+        store.get_active_semester_info()
+        if hasattr(store, "get_active_semester_info")
+        else {"semester_label": "2026/2027 Ganjil", "kuota_minimum_kelas": 15}
+    )
+    xlsx_bytes = build_offerings_excel(
+        classes=classes,
+        department=department,
+        semester_label=sem_info["semester_label"],
+        kuota_minimum=sem_info["kuota_minimum_kelas"],
+    )
+    dept_suffix = f"_{department.lower()}" if department else "_all"
+    filename = f"kebutuhan_perkuliahan{dept_suffix}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/classes/export-pdf")
+def export_classes_pdf(
+    department: Optional[str] = Query(None, description="Filter prodi: SI, IF, TK"),
+    semester: Optional[int] = Query(None, description="Filter semester"),
+    include_cancelled: bool = Query(False, description="Sertakan kelas dibatalkan"),
+    store=Depends(get_store),
+):
+    classes = store.get_classes(
+        department=department,
+        semester=semester,
+        include_cancelled=include_cancelled,
+    )
+    sem_info = (
+        store.get_active_semester_info()
+        if hasattr(store, "get_active_semester_info")
+        else {"semester_label": "2026/2027 Ganjil", "kuota_minimum_kelas": 15}
+    )
+    pdf_bytes = build_offerings_pdf(
+        classes=classes,
+        department=department,
+        semester_label=sem_info["semester_label"],
+        kuota_minimum=sem_info["kuota_minimum_kelas"],
+    )
+    dept_suffix = f"_{department.lower()}" if department else "_all"
+    filename = f"surat_usulan_kebutuhan{dept_suffix}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -276,13 +426,36 @@ def create_class(item: ClassItem, store=Depends(get_store)):
 
 @app.put("/api/classes/{class_id}", response_model=ClassItem)
 def adjust_class(class_id: str, req: AdjustClassRequest, store=Depends(get_store)):
-    updated = store.update_class(class_id, req.model_dump(exclude_unset=True))
+    try:
+        updated = store.update_class(class_id, req.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Kelas dengan ID {class_id} tidak ditemukan untuk disesuaikan",
         )
     return updated
+
+
+@app.post("/api/classes/{class_id}/cancel", response_model=ClassItem)
+def cancel_class_soft(class_id: str, req: CancelClassRequest, store=Depends(get_store)):
+    try:
+        return store.cancel_class(class_id, reason=req.reason, actor_email=req.actor_email)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@app.post("/api/classes/{class_id}/restore", response_model=ClassItem)
+def restore_cancelled_class(
+    class_id: str, req: RestoreClassRequest = RestoreClassRequest(), store=Depends(get_store)
+):
+    try:
+        return store.restore_class(class_id, actor_email=req.actor_email)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
 @app.delete("/api/classes/{class_id}")
@@ -303,6 +476,59 @@ def reset_classes_to_csv(store=Depends(get_store)):
         "message": "Data kelas berhasil disinkronkan kembali dari CSV.",
         "total_classes": count,
     }
+
+
+@app.post("/api/departemen/offerings", status_code=status.HTTP_201_CREATED)
+def create_departemen_offering(req: CreateOfferingRequest, store=Depends(get_store)):
+    try:
+        return store.create_offering(req.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@app.post("/api/departemen/offerings/{course_code}/adjust-rombels")
+def adjust_course_rombels(course_code: str, req: AdjustRombelsRequest, store=Depends(get_store)):
+    try:
+        return store.adjust_rombels(
+            course_code=course_code,
+            target_count=req.target_count,
+            default_capacity=req.default_capacity,
+            reason=req.reason,
+            actor_email=req.actor_email,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@app.get("/api/departemen/logs")
+def list_departemen_logs(
+    department: Optional[str] = Query(None, description="Filter prodi: SI, IF, TK"),
+    limit: int = Query(50, ge=1, le=200),
+    store=Depends(get_store),
+):
+    return store.get_departemen_logs(department=department, limit=limit)
+
+
+@app.get("/api/departemen/status")
+def get_departemen_submission_status(
+    department: str = Query("SI", description="Kode prodi: SI, IF, TK"),
+    store=Depends(get_store),
+):
+    return store.get_departemen_status(department=department)
+
+
+@app.post("/api/departemen/submit")
+def submit_departemen_needs(req: SubmitDepartemenRequest, store=Depends(get_store)):
+    try:
+        return store.submit_departemen(
+            department=req.department,
+            actor_email=req.actor_email,
+            catatan=req.catatan,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 # -------------------------------------------------------------

@@ -22,7 +22,7 @@ export const Toast: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 max-w-md animate-fade-in shadow-xl">
+    <div className="fixed bottom-5 right-5 z-[80] max-w-md animate-fade-in shadow-xl">
       <div className={`flex items-start gap-3 p-4 rounded-xl border-l-4 ${bgMap[toast.type]} shadow-lg`}>
         {iconMap[toast.type]}
         <div className="flex-1 text-sm font-medium leading-relaxed">

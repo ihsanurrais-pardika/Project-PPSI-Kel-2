@@ -1,7 +1,6 @@
 import React, { ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
-import { Toast } from './Toast';
 import { GAConfigModal } from './GAConfigModal';
 import { PublishModal } from './PublishModal';
 import { RoomReplacementModal } from './RoomReplacementModal';
@@ -22,8 +21,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </main>
       </div>
 
-      {/* Global Modals & Notifications */}
-      <Toast />
+      {/* Global Modals */}
       <GAConfigModal />
       <PublishModal />
       <RoomReplacementModal />

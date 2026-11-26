@@ -20,6 +20,8 @@ export interface BackendCourseItem {
   kode_mk: string;
   nama_mk: string;
   sks: number;
+  sks_teori?: number;
+  sks_praktik?: number;
   semester_paket: number;
   jenis_mk: string;
   lintas_prodi: boolean;
@@ -35,6 +37,8 @@ export interface BackendClassItem {
   name: string;
   class_label: string;
   sks: number;
+  sks_teori?: number;
+  sks_praktik?: number;
   enrolled_count: number;
   enrolled_is_estimated: boolean;
   room_type_needed: string;
@@ -46,6 +50,12 @@ export interface BackendClassItem {
   is_transition_course: boolean;
   lecturer_ids: string[];
   lecturer_names: string[];
+  status_kelas?: string;
+  alasan_pembatalan?: string | null;
+  preferensi_hari?: string[];
+  preferensi_waktu?: string | null;
+  catatan_khusus?: string | null;
+  below_min_quota?: boolean;
 }
 
 export interface AdjustClassPayload {
@@ -58,6 +68,81 @@ export interface AdjustClassPayload {
   requires_room?: boolean;
   lecturer_names?: string[];
   lecturer_ids?: string[];
+  reason?: string;
+  actor_email?: string;
+}
+
+export interface BackendLecturer {
+  id: string;
+  id_dosen: number | null;
+  nidn: string;
+  name: string;
+  email: string;
+  department: string;
+  jabatan_struktural: string;
+  maks_sks_harian: number;
+}
+
+export interface CreateOfferingPayload {
+  course_code: string;
+  name: string;
+  department: string;
+  semester: number;
+  sks: number;
+  sks_teori?: number;
+  sks_praktik?: number;
+  is_mandatory?: boolean;
+  requires_room?: boolean;
+  room_type_needed?: string;
+  primary_lecturer_name: string;
+  tandem_lecturer_names?: string[];
+  classes: { class_label: string; enrolled_count: number }[];
+  preferred_days?: string[];
+  preferred_time_slot?: string;
+  avoid_friday?: boolean;
+  special_note?: string;
+  as_draft?: boolean;
+  update_existing?: boolean;
+  actor_email?: string;
+}
+
+export interface CreateOfferingResponse {
+  message: string;
+  course_code: string;
+  created_classes: BackendClassItem[];
+  warnings: string[];
+}
+
+export interface DepartemenLogItem {
+  id_perubahan: number;
+  kode_prodi: string;
+  kode_mk: string;
+  kode_kelas?: string | null;
+  jenis_aksi: string;
+  nilai_lama?: string | null;
+  nilai_baru?: string | null;
+  alasan?: string | null;
+  actor_name: string;
+  actor_email?: string;
+  waktu_perubahan: string;
+}
+
+export interface DepartemenStatusResponse {
+  department: string;
+  status_pengajuan: string;
+  waktu_pengajuan?: string | null;
+  catatan?: string | null;
+  kuota_minimum_kelas: number;
+  total_active_classes: number;
+  below_quota_count: number;
+}
+
+export interface ActiveSemesterInfo {
+  id_semester: number;
+  tahun_ajaran: string;
+  jenis_semester: string;
+  semester_label: string;
+  kuota_minimum_kelas: number;
 }
 
 export interface BackendRoom {
@@ -264,17 +349,145 @@ export const apiService = {
     semester?: number;
     search?: string;
     room_type?: string;
+    include_cancelled?: boolean;
   }): Promise<BackendClassItem[]> {
     const query = new URLSearchParams();
     if (filters?.department) query.append('department', filters.department);
     if (filters?.semester) query.append('semester', filters.semester.toString());
     if (filters?.search) query.append('search', filters.search);
     if (filters?.room_type) query.append('room_type', filters.room_type);
+    if (filters?.include_cancelled) query.append('include_cancelled', 'true');
 
     const url = `${API_BASE_URL}/api/classes${query.toString() ? '?' + query.toString() : ''}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat daftar kelas'));
     return res.json();
+  },
+
+  async getActiveSemester(): Promise<ActiveSemesterInfo> {
+    const res = await fetch(`${API_BASE_URL}/api/semester/active`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat info semester'));
+    return res.json();
+  },
+
+  async getLecturers(department?: string): Promise<BackendLecturer[]> {
+    const query = department ? `?department=${encodeURIComponent(department)}` : '';
+    const res = await fetch(`${API_BASE_URL}/api/lecturers${query}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat daftar dosen'));
+    return res.json();
+  },
+
+  async createOffering(payload: CreateOfferingPayload): Promise<CreateOfferingResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/departemen/offerings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menyimpan usulan mata kuliah'));
+    return res.json();
+  },
+
+  async cancelClassSoft(classId: string, reason: string, actorEmail?: string): Promise<BackendClassItem> {
+    const res = await fetch(`${API_BASE_URL}/api/classes/${encodeURIComponent(classId)}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason, actor_email: actorEmail }),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal membatalkan kelas'));
+    return res.json();
+  },
+
+  async restoreClass(classId: string, actorEmail?: string): Promise<BackendClassItem> {
+    const res = await fetch(`${API_BASE_URL}/api/classes/${encodeURIComponent(classId)}/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor_email: actorEmail }),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memulihkan kelas'));
+    return res.json();
+  },
+
+  async adjustRombels(
+    courseCode: string,
+    payload: { target_count: number; default_capacity?: number; reason?: string; actor_email?: string }
+  ): Promise<{ message: string; course_code: string; classes: BackendClassItem[] }> {
+    const res = await fetch(
+      `${API_BASE_URL}/api/departemen/offerings/${encodeURIComponent(courseCode)}/adjust-rombels`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
+    );
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menyesuaikan jumlah rombel'));
+    return res.json();
+  },
+
+  async getBelowQuotaClasses(department?: string): Promise<{
+    kuota_minimum_kelas: number;
+    total_below_quota: number;
+    classes: BackendClassItem[];
+  }> {
+    const query = department ? `?department=${encodeURIComponent(department)}` : '';
+    const res = await fetch(`${API_BASE_URL}/api/classes/below-quota${query}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memeriksa kuota minimum'));
+    return res.json();
+  },
+
+  async getDepartemenLogs(department?: string, limit = 50): Promise<DepartemenLogItem[]> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (department) params.append('department', department);
+    const res = await fetch(`${API_BASE_URL}/api/departemen/logs?${params.toString()}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat riwayat perubahan'));
+    return res.json();
+  },
+
+  async getDepartemenStatus(department: string): Promise<DepartemenStatusResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/departemen/status?department=${encodeURIComponent(department)}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat status pengajuan'));
+    return res.json();
+  },
+
+  async submitDepartemen(
+    department: string,
+    actorEmail?: string,
+    catatan?: string
+  ): Promise<DepartemenStatusResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/departemen/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ department, actor_email: actorEmail, catatan }),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal mengajukan kebutuhan ke fakultas'));
+    return res.json();
+  },
+
+  async downloadExportFile(format: 'excel' | 'pdf' | 'csv', department?: string, includeCancelled = false): Promise<void> {
+    const endpoint =
+      format === 'excel'
+        ? '/api/classes/export-excel'
+        : format === 'pdf'
+        ? '/api/classes/export-pdf'
+        : '/api/classes/export-csv';
+    const params = new URLSearchParams();
+    if (department) params.append('department', department);
+    if (includeCancelled && format !== 'csv') params.append('include_cancelled', 'true');
+    const url = `${API_BASE_URL}${endpoint}${params.toString() ? '?' + params.toString() : ''}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal mengunduh dokumen ekspor'));
+    const blob = await res.blob();
+    const disp = res.headers.get('content-disposition') || '';
+    const match = disp.match(/filename="?([^"]+)"?/i);
+    const ext = format === 'excel' ? 'xlsx' : format;
+    const filename = match ? match[1] : `kebutuhan_${(department || 'all').toLowerCase()}.${ext}`;
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
   },
 
   async adjustClass(classId: string, payload: AdjustClassPayload): Promise<BackendClassItem> {

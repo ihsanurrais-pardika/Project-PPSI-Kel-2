@@ -20,11 +20,12 @@ model ProgramStudi {
   nama_prodi       String @db.VarChar(150)
   nama_departemen  String @db.VarChar(150)
 
-  pengguna     Pengguna[]
-  mahasiswa    Mahasiswa[]
-  mata_kuliah  MataKuliah[]
-  dosen        Dosen[]
-  ruang        Ruang[]
+  pengguna             Pengguna[]
+  mahasiswa            Mahasiswa[]
+  mata_kuliah          MataKuliah[]
+  dosen                Dosen[]
+  ruang                Ruang[]
+  pengajuan_departemen PengajuanDepartemen[]
 
   @@map("program_studi")
 }
@@ -51,6 +52,8 @@ model Pengguna {
   bentrok_ditindak      DeteksiBentrok[]
   pertemuan_pengganti   PertemuanKuliah[]
   perubahan_jadwal      PerubahanJadwal[]
+  perubahan_kebutuhan   PerubahanKebutuhan[]
+  pengajuan_departemen  PengajuanDepartemen[]
 
   @@index([id_prodi])
   @@map("pengguna")
@@ -95,12 +98,15 @@ model MataKuliah {
   kode_mk        String  @unique @db.VarChar(20)
   nama_mk        String  @db.VarChar(200)
   sks            Int     @db.SmallInt
+  sks_teori      Int     @default(2) @db.SmallInt
+  sks_praktik    Int     @default(0) @db.SmallInt
   semester_paket Int     @db.SmallInt
   jenis_mk       String  @db.VarChar(50)
   lintas_prodi   Boolean @default(false)
 
-  prodi ProgramStudi @relation(fields: [id_prodi], references: [id_prodi])
-  kelas Kelas[]
+  prodi               ProgramStudi         @relation(fields: [id_prodi], references: [id_prodi])
+  kelas               Kelas[]
+  perubahan_kebutuhan PerubahanKebutuhan[]
 
   @@index([id_prodi])
   @@map("mata_kuliah")
@@ -114,9 +120,10 @@ model SemesterAkademik {
   tgl_selesai        DateTime @db.Date
   kuota_minimum_kelas Int     @db.SmallInt
 
-  kelas            Kelas[]
-  preferensi_dosen PreferensiDosen[]
-  jadwal_versi     JadwalVersi[]
+  kelas                Kelas[]
+  preferensi_dosen     PreferensiDosen[]
+  jadwal_versi         JadwalVersi[]
+  pengajuan_departemen PengajuanDepartemen[]
 
   @@map("semester_akademik")
 }
@@ -156,13 +163,18 @@ model Kelas {
   jumlah_peserta      Int     @default(0) @db.SmallInt
   butuh_aksesibilitas Boolean @default(false)
   status_kelas        String  @db.VarChar(30)
+  alasan_pembatalan   String? @db.VarChar(255)
+  preferensi_hari     String? @db.VarChar(100)
+  preferensi_waktu    String? @db.VarChar(100)
+  catatan_khusus      String? @db.Text
 
   semester SemesterAkademik @relation(fields: [id_semester], references: [id_semester])
   mk       MataKuliah       @relation(fields: [id_mk], references: [id_mk])
   pengaju  Pengguna         @relation(fields: [id_pengaju], references: [id_pengguna])
 
-  pengampu_kelas PengampuKelas[]
-  jadwal_kuliah  JadwalKuliah[]
+  pengampu_kelas      PengampuKelas[]
+  jadwal_kuliah       JadwalKuliah[]
+  perubahan_kebutuhan PerubahanKebutuhan[]
 
   @@index([id_semester])
   @@index([id_mk])
@@ -374,4 +386,52 @@ model DeteksiBentrok {
   @@index([id_jadwal_2])
   @@index([id_penindak])
   @@map("deteksi_bentrok")
+}
+
+// ============================================================
+// MODUL 4: KEBUTUHAN DEPARTEMEN (PENGAJUAN & LOG PERUBAHAN)
+// ============================================================
+
+model PengajuanDepartemen {
+  id_pengajuan     Int      @id @default(autoincrement())
+  id_semester      Int      @db.SmallInt
+  id_prodi         Int      @db.SmallInt
+  id_pengaju       BigInt
+  status_pengajuan String   @db.VarChar(30)
+  catatan          String?  @db.Text
+  waktu_pengajuan  DateTime @default(now()) @db.Timestamp(6)
+
+  semester SemesterAkademik @relation(fields: [id_semester], references: [id_semester])
+  prodi    ProgramStudi     @relation(fields: [id_prodi], references: [id_prodi])
+  pengaju  Pengguna         @relation(fields: [id_pengaju], references: [id_pengguna])
+
+  @@unique([id_semester, id_prodi])
+  @@index([id_pengaju])
+  @@map("pengajuan_departemen")
+}
+
+model PerubahanKebutuhan {
+  id_perubahan    BigInt   @id @default(autoincrement())
+  id_kelas        Int?
+  id_mk           Int?
+  id_pengguna     BigInt
+  kode_prodi      String   @db.VarChar(20)
+  kode_mk         String   @db.VarChar(20)
+  kode_kelas      String?  @db.VarChar(20)
+  jenis_aksi      String   @db.VarChar(40)
+  nilai_lama      String?  @db.Text
+  nilai_baru      String?  @db.Text
+  alasan          String?  @db.Text
+  waktu_perubahan DateTime @default(now()) @db.Timestamp(6)
+
+  kelas    Kelas?      @relation(fields: [id_kelas], references: [id_kelas], onDelete: SetNull)
+  mk       MataKuliah? @relation(fields: [id_mk], references: [id_mk], onDelete: SetNull)
+  pengguna Pengguna    @relation(fields: [id_pengguna], references: [id_pengguna])
+
+  @@index([kode_prodi])
+  @@index([waktu_perubahan])
+  @@index([id_kelas])
+  @@index([id_mk])
+  @@index([id_pengguna])
+  @@map("perubahan_kebutuhan")
 }

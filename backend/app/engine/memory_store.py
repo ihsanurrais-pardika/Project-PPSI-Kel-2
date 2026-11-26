@@ -6,6 +6,7 @@ manajemen ruangan FTI, dan penjadwalan terpadu dengan engine CP-SAT.
 
 import os
 import csv
+from datetime import datetime
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel, Field
 
@@ -52,6 +53,14 @@ class ClassItem(BaseModel):
     is_transition_course: bool = False
     lecturer_ids: List[str] = Field(default_factory=list)
     lecturer_names: List[str] = Field(default_factory=list)
+    status_kelas: str = "TERBUKA"
+    sks_teori: int = 2
+    sks_praktik: int = 0
+    alasan_pembatalan: Optional[str] = None
+    preferensi_hari: List[str] = Field(default_factory=list)
+    preferensi_waktu: Optional[str] = None
+    catatan_khusus: Optional[str] = None
+    below_min_quota: bool = False
 
 
 class InMemoryDataStore:
@@ -64,6 +73,9 @@ class InMemoryDataStore:
         self.groups: Dict[str, StudentGroup] = {}
         self.latest_schedule_result: Optional[SolverResultOutput] = None
         self.accepted_soft_keys: set[str] = set()
+        self.kuota_minimum_kelas: int = 15
+        self.need_logs: List[Dict[str, Any]] = []
+        self.dept_submissions: Dict[str, Dict[str, Any]] = {}
 
         self._init_rooms()
         self._init_slots()
@@ -142,6 +154,8 @@ class InMemoryDataStore:
         self.classes.clear()
         self.lecturers.clear()
         self.groups.clear()
+        self.need_logs.clear()
+        self.dept_submissions.clear()
 
         with open(csv_path, mode="r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
@@ -201,6 +215,12 @@ class InMemoryDataStore:
                     is_transition_course=row.get("is_transition_course", "").lower() == "true",
                     lecturer_ids=l_ids,
                     lecturer_names=l_names,
+                    sks_teori=max(0, int(row.get("sks", 2)) - (1 if "lab" in row.get("room_type_needed", "").lower() else 0)),
+                    sks_praktik=1 if "lab" in row.get("room_type_needed", "").lower() else 0,
+                    below_min_quota=(
+                        (row.get("requires_room", "true").lower() == "true")
+                        and int(row.get("enrolled_count", 40)) < self.kuota_minimum_kelas
+                    ),
                 )
                 self.classes[c_id] = item
 
@@ -212,8 +232,11 @@ class InMemoryDataStore:
         semester: Optional[int] = None,
         search: Optional[str] = None,
         room_type: Optional[str] = None,
+        include_cancelled: bool = False,
     ) -> List[ClassItem]:
         result = list(self.classes.values())
+        if not include_cancelled:
+            result = [c for c in result if c.status_kelas != "DIBATALKAN"]
 
         if department:
             dept_upper = department.upper()
@@ -303,8 +326,11 @@ class InMemoryDataStore:
         Menjalankan engine CP-SAT langsung dari data in-memory.
         100% CP-SAT murni, TANPA Database, TANPA Algoritma Genetika.
         """
-        # Saring kelas yang membutuhkan ruangan
-        filtered_classes = [c for c in self.classes.values() if c.requires_room]
+        # Saring kelas yang membutuhkan ruangan dan tidak dibatalkan
+        filtered_classes = [
+            c for c in self.classes.values()
+            if c.requires_room and c.status_kelas != "DIBATALKAN"
+        ]
 
         if department:
             dept_map = {
@@ -660,6 +686,312 @@ class InMemoryDataStore:
         report["fixed_count"] = len(planned)
         report["message"] = f"Berhasil memperbaiki {len(planned)} bentrok secara otomatis."
         return report
+
+    # -----------------------------------------------------------------
+    # Modul 4: Kebutuhan Departemen (Lecturers, Offerings, Quota, Logs)
+    # -----------------------------------------------------------------
+    def _log_need_change(
+        self,
+        dept: str,
+        kode_mk: str,
+        kode_kelas: Optional[str],
+        jenis_aksi: str,
+        nilai_lama: Optional[str] = None,
+        nilai_baru: Optional[str] = None,
+        alasan: Optional[str] = None,
+        actor_email: Optional[str] = None,
+    ) -> None:
+        self.need_logs.insert(
+            0,
+            {
+                "id_perubahan": len(self.need_logs) + 1,
+                "kode_prodi": dept,
+                "kode_mk": kode_mk,
+                "kode_kelas": kode_kelas,
+                "jenis_aksi": jenis_aksi,
+                "nilai_lama": nilai_lama,
+                "nilai_baru": nilai_baru,
+                "alasan": alasan,
+                "actor_name": actor_email or "System",
+                "waktu_perubahan": datetime.now().isoformat(timespec="seconds"),
+            },
+        )
+
+    def get_lecturers_raw(self, department: Optional[str] = None) -> List[Dict[str, Any]]:
+        rows = []
+        for idx, lec in enumerate(self.lecturers.values(), start=1):
+            if department and lec.department.upper() != department.strip().upper():
+                continue
+            rows.append(
+                {
+                    "id": lec.id,
+                    "id_dosen": idx,
+                    "nidn": lec.id,
+                    "name": lec.name,
+                    "email": "",
+                    "department": lec.department,
+                    "jabatan_struktural": "Dosen Pengampu",
+                    "maks_sks_harian": getattr(lec, "max_daily_sks", 12),
+                }
+            )
+        rows.sort(key=lambda r: (r["department"], r["name"]))
+        return rows
+
+    def create_offering(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        code = (payload.get("course_code") or "").strip().upper()
+        name = (payload.get("name") or "").strip()
+        dept = (payload.get("department") or "SI").strip().upper()
+        sks = int(payload.get("sks") or 2)
+        sks_teori = int(payload.get("sks_teori") if payload.get("sks_teori") is not None else sks)
+        sks_praktik = int(payload.get("sks_praktik") if payload.get("sks_praktik") is not None else 0)
+        semester = int(payload.get("semester") or 1)
+        is_mandatory = bool(payload.get("is_mandatory", True))
+        rombels = payload.get("classes") or []
+        primary_name = (payload.get("primary_lecturer_name") or "").strip()
+        tandem_names = [x.strip() for x in (payload.get("tandem_lecturer_names") or []) if x.strip()]
+
+        if not code or not name:
+            raise ValueError("Kode Mata Kuliah dan Nama Mata Kuliah wajib diisi.")
+        if sks < 1 or sks > 6:
+            raise ValueError("Total SKS harus antara 1 sampai 6.")
+        if sks_teori < 0 or sks_praktik < 0 or (sks_teori + sks_praktik != sks):
+            raise ValueError("Jumlah SKS Teori + SKS Praktik harus sama dengan Total SKS.")
+        if not rombels:
+            raise ValueError("Minimal harus ada 1 rombel kelas.")
+        if not primary_name:
+            raise ValueError("Dosen Pengampu Utama wajib diisi.")
+
+        lecturer_names = [primary_name] + [t for t in tandem_names if t != primary_name]
+        room_type = "Lab" if sks_praktik > 0 else (payload.get("room_type_needed") or "Teori")
+        status_kelas = "DRAFT" if payload.get("as_draft") else "TERBUKA"
+        update_existing = bool(payload.get("update_existing", False))
+
+        created: List[ClassItem] = []
+        warnings: List[str] = []
+        seen_labels: set[str] = set()
+        pending_items: List[ClassItem] = []
+        for r in rombels:
+            lbl = (r.get("class_label") or "").strip()
+            cnt = int(r.get("enrolled_count") or 0)
+            if not lbl:
+                raise ValueError("Label rombel tidak boleh kosong.")
+            if lbl.upper() in seen_labels:
+                raise ValueError(f"Label kelas {lbl} terduplikasi dalam pengajuan yang sama.")
+            seen_labels.add(lbl.upper())
+            if cnt <= 0:
+                raise ValueError(f"Estimasi mahasiswa untuk kelas {lbl} harus lebih dari 0.")
+
+            cid = f"{code}-{lbl}"
+            if cid in self.classes and self.classes[cid].status_kelas != "DIBATALKAN" and not update_existing:
+                raise ValueError(f"Kelas {cid} sudah terdaftar aktif.")
+
+            item = ClassItem(
+                id=cid,
+                course_code=code,
+                department=dept,
+                semester=semester,
+                name=name,
+                class_label=lbl,
+                sks=sks,
+                sks_teori=sks_teori,
+                sks_praktik=sks_praktik,
+                enrolled_count=cnt,
+                enrolled_is_estimated=True,
+                room_type_needed=room_type,
+                is_mandatory=is_mandatory,
+                is_elective=not is_mandatory,
+                rombel_key=f"{dept}-S{semester}-{lbl}",
+                requires_room=bool(payload.get("requires_room", True)),
+                lecturer_names=lecturer_names,
+                status_kelas=status_kelas,
+                preferensi_hari=list(payload.get("preferred_days") or []),
+                preferensi_waktu=payload.get("preferred_time_slot"),
+                catatan_khusus=payload.get("special_note"),
+                below_min_quota=bool(payload.get("requires_room", True)) and cnt < self.kuota_minimum_kelas,
+            )
+            pending_items.append(item)
+
+        for item in pending_items:
+            self.classes[item.id] = item
+            created.append(item)
+            if item.below_min_quota:
+                warnings.append(f"Kelas {item.id} ({item.enrolled_count} mhs) di bawah kuota minimum ({self.kuota_minimum_kelas} mhs).")
+
+        self._log_need_change(
+            dept=dept,
+            kode_mk=code,
+            kode_kelas=",".join([c.class_label for c in created]),
+            jenis_aksi="TAMBAH_USULAN",
+            nilai_baru=f"{len(created)} kelas | Pengampu: {', '.join(lecturer_names)}",
+            actor_email=payload.get("actor_email"),
+        )
+        return {
+            "message": f"Berhasil menyimpan {len(created)} rombel untuk [{code}] {name}.",
+            "course_code": code,
+            "created_classes": created,
+            "warnings": warnings,
+        }
+
+    def get_below_quota_classes(self, department: Optional[str] = None) -> Dict[str, Any]:
+        active = self.get_classes(department=department, include_cancelled=False)
+        below = [c for c in active if c.requires_room and c.enrolled_count < self.kuota_minimum_kelas]
+        return {
+            "kuota_minimum_kelas": self.kuota_minimum_kelas,
+            "total_below_quota": len(below),
+            "classes": below,
+        }
+
+    def cancel_class(self, class_id: str, reason: str, actor_email: Optional[str] = None) -> ClassItem:
+        clean_reason = (reason or "").strip()
+        if len(clean_reason) < 3:
+            raise ValueError("Alasan pembatalan kelas wajib diisi minimal 3 karakter.")
+        item = self.classes.get(class_id)
+        if not item:
+            raise LookupError(f"Kelas {class_id} tidak ditemukan.")
+        old_status = item.status_kelas
+        updated = item.model_copy(
+            update={"status_kelas": "DIBATALKAN", "alasan_pembatalan": clean_reason}
+        )
+        self.classes[class_id] = updated
+        self._log_need_change(
+            dept=item.department,
+            kode_mk=item.course_code,
+            kode_kelas=item.class_label,
+            jenis_aksi="BATALKAN_KELAS",
+            nilai_lama=f"{old_status} ({item.enrolled_count} mhs)",
+            nilai_baru="DIBATALKAN",
+            alasan=clean_reason,
+            actor_email=actor_email,
+        )
+        return updated
+
+    def restore_class(self, class_id: str, actor_email: Optional[str] = None) -> ClassItem:
+        item = self.classes.get(class_id)
+        if not item:
+            raise LookupError(f"Kelas {class_id} tidak ditemukan.")
+        updated = item.model_copy(
+            update={"status_kelas": "TERBUKA", "alasan_pembatalan": None}
+        )
+        self.classes[class_id] = updated
+        self._log_need_change(
+            dept=item.department,
+            kode_mk=item.course_code,
+            kode_kelas=item.class_label,
+            jenis_aksi="PULIHKAN_KELAS",
+            nilai_lama="DIBATALKAN",
+            nilai_baru="TERBUKA",
+            actor_email=actor_email,
+        )
+        return updated
+
+    def adjust_rombels(
+        self,
+        course_code: str,
+        target_count: int,
+        default_capacity: int = 40,
+        reason: str = "Penyesuaian jumlah rombel departemen",
+        actor_email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if target_count < 1 or target_count > 10:
+            raise ValueError("Jumlah rombel target harus antara 1 sampai 10.")
+        code = course_code.strip().upper()
+        active = sorted(
+            [c for c in self.classes.values() if c.course_code == code and c.status_kelas != "DIBATALKAN"],
+            key=lambda x: x.class_label,
+        )
+        if not active:
+            raise LookupError(f"Mata kuliah {code} belum memiliki kelas aktif.")
+
+        template = active[0]
+        old_count = len(active)
+        if target_count > old_count:
+            existing_labels = {c.class_label.upper() for c in active}
+            next_ord = 65
+            while len(active) < target_count:
+                lbl = chr(next_ord)
+                next_ord += 1
+                if lbl in existing_labels:
+                    continue
+                cid = f"{code}-{lbl}"
+                new_item = template.model_copy(
+                    update={
+                        "id": cid,
+                        "class_label": lbl,
+                        "enrolled_count": default_capacity,
+                        "rombel_key": f"{template.department}-S{template.semester}-{lbl}",
+                        "status_kelas": "TERBUKA",
+                        "alasan_pembatalan": None,
+                        "below_min_quota": template.requires_room and default_capacity < self.kuota_minimum_kelas,
+                    }
+                )
+                self.classes[cid] = new_item
+                active.append(new_item)
+                existing_labels.add(lbl)
+        elif target_count < old_count:
+            to_cancel = active[target_count:]
+            for c in to_cancel:
+                self.cancel_class(c.id, reason=reason, actor_email=actor_email)
+            active = active[:target_count]
+
+        self._log_need_change(
+            dept=template.department,
+            kode_mk=code,
+            kode_kelas=None,
+            jenis_aksi="SESUAIKAN_ROMBEL",
+            nilai_lama=f"{old_count} rombel",
+            nilai_baru=f"{len(active)} rombel",
+            alasan=reason,
+            actor_email=actor_email,
+        )
+        return {
+            "message": f"Jumlah rombel {code} disesuaikan dari {old_count} menjadi {len(active)}.",
+            "course_code": code,
+            "classes": active,
+        }
+
+    def get_departemen_logs(self, department: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        rows = self.need_logs
+        if department:
+            d = department.strip().upper()
+            rows = [r for r in rows if r["kode_prodi"].upper() == d]
+        return rows[:limit]
+
+    def get_departemen_status(self, department: str) -> Dict[str, Any]:
+        d = department.strip().upper()
+        active = self.get_classes(department=d, include_cancelled=False)
+        below = [c for c in active if c.requires_room and c.enrolled_count < self.kuota_minimum_kelas]
+        sub = self.dept_submissions.get(d, {})
+        return {
+            "department": d,
+            "status_pengajuan": sub.get("status_pengajuan", "DRAFT"),
+            "waktu_pengajuan": sub.get("waktu_pengajuan"),
+            "catatan": sub.get("catatan"),
+            "kuota_minimum_kelas": self.kuota_minimum_kelas,
+            "total_active_classes": len(active),
+            "below_quota_count": len(below),
+        }
+
+    def submit_departemen(self, department: str, actor_email: Optional[str] = None, catatan: Optional[str] = None) -> Dict[str, Any]:
+        d = department.strip().upper()
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        for cid, c in list(self.classes.items()):
+            if c.department.upper() == d and c.status_kelas == "DRAFT":
+                self.classes[cid] = c.model_copy(update={"status_kelas": "TERBUKA"})
+        self.dept_submissions[d] = {
+            "status_pengajuan": "DIAJUKAN",
+            "waktu_pengajuan": now_iso,
+            "catatan": catatan,
+        }
+        self._log_need_change(
+            dept=d,
+            kode_mk="-",
+            kode_kelas=None,
+            jenis_aksi="AJUKAN_FAKULTAS",
+            nilai_baru="DIAJUKAN",
+            alasan=catatan,
+            actor_email=actor_email,
+        )
+        return self.get_departemen_status(d)
 
 
 # Singleton instance

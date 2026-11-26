@@ -23,7 +23,7 @@ import { CourseOffering, ClassRombel, Lecturer } from '../types';
 import { mockLecturers } from '../data/mockData';
 
 export const FormUsulanMKPage: React.FC = () => {
-  const { addCourse, setActivePage, showToast } = useApp();
+  const { addCourse, createDepartemenOffering, backendStatus, setActivePage, showToast } = useApp();
 
   const [code, setCode] = useState('SI211');
   const [name, setName] = useState('Basis Data Terdistribusi');
@@ -79,14 +79,44 @@ export const FormUsulanMKPage: React.FC = () => {
 
   const totalCapacity = classes.reduce((acc, c) => acc + c.capacity, 0);
 
-  const handleSubmit = (isDraft: boolean) => {
+  const handleSubmit = async (isDraft: boolean) => {
     if (!code.trim() || !name.trim()) {
-      showToast('Kode dan Nama Mata Kuliah wajib diisi (PRD UC-03 E1).', 'error');
+      showToast('Kode dan Nama Mata Kuliah wajib diisi.', 'error');
       return;
     }
 
     const primary = mockLecturers.find((l: Lecturer) => l.id === primaryLecturerId) || mockLecturers[0];
     const tandems = mockLecturers.filter((l: Lecturer) => tandemIds.includes(l.id));
+
+    if (backendStatus === 'connected') {
+      const deptCode =
+        department === 'Informatika' ? 'IF' : department === 'Teknik Komputer' ? 'TK' : 'SI';
+      const res = await createDepartemenOffering({
+        course_code: code.trim().toUpperCase(),
+        name: name.trim(),
+        department: deptCode,
+        semester,
+        sks,
+        sks_teori: Math.max(0, sks - (sks >= 3 ? 1 : 0)),
+        sks_praktik: sks >= 3 ? 1 : 0,
+        is_mandatory: isMandatory,
+        requires_room: true,
+        primary_lecturer_name: primary.name,
+        tandem_lecturer_names: tandems.map((t) => t.name),
+        classes: classes.map((cl) => ({
+          class_label: cl.name.replace(/^Kelas\s+/i, '').trim() || 'A',
+          enrolled_count: cl.capacity,
+        })),
+        preferred_days: preferredDays,
+        preferred_time_slot: timeSlotPref,
+        avoid_friday: avoidFridayNoon,
+        as_draft: isDraft,
+      });
+      if (res && !isDraft) {
+        setActivePage('kebutuhan_departemen');
+      }
+      return;
+    }
 
     const specialConstraints: string[] = [];
     if (avoidFridayNoon) specialConstraints.push('Hindari Jumat Siang');
