@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { resolveDepartment } from '../utils/departmentHelper';
 import {
   Activity,
   AlertTriangle,
@@ -51,10 +52,11 @@ const departments = [
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'] as const;
 const SESSIONS = [
   { idx: 1, label: '07:30 - 09:10' },
-  { idx: 2, label: '09:20 - 11:00' },
-  { idx: 3, label: '11:10 - 11:50' },
-  { idx: 4, label: '13:30 - 15:10' },
-  { idx: 5, label: '15:20 - 17:00' },
+  { idx: 2, label: '09:10 - 10:50' },
+  { idx: 3, label: '10:00 - 11:40' },
+  { idx: 4, label: '11:10 - 12:50' },
+  { idx: 5, label: '13:30 - 15:10' },
+  { idx: 6, label: '16:00 - 17:40' },
 ];
 
 const deptColor = (dept: string) => {
@@ -66,15 +68,53 @@ const deptColor = (dept: string) => {
 };
 
 export const WadekWorkspacePage: React.FC = () => {
-  const { currentUser, logout, schedule, conflicts, rooms, auditLogs, scheduleApprovalStatus, wadekRevisionNote, wadekApprove, wadekReject, reviewScheduleClass, showToast } = useApp();
+  const {
+    currentUser,
+    logout,
+    schedule,
+    conflicts,
+    rooms,
+    auditLogs,
+    scheduleApprovalStatus,
+    wadekRevisionNote,
+    wadekApprove,
+    wadekReject,
+    reviewScheduleClass,
+    showToast,
+    backendClasses,
+    backendCourses,
+    latestCPSATResult,
+  } = useApp();
   const [view, setView] = useState<View>('dashboard');
   const [note, setNote] = useState(wadekRevisionNote);
   const [query, setQuery] = useState('');
   const [mobileNav, setMobileNav] = useState(false);
   const [showRevision, setShowRevision] = useState(false);
-  const reviewLogs = auditLogs.filter(log => log.category === 'APPROVAL WADEK');
+  const reviewLogs = auditLogs.filter(log => log.category === 'APPROVAL WADEK' || log.category === 'Pengesahan WD1');
   const filteredSchedule = useMemo(() => schedule.filter(item => `${item.courseCode} ${item.courseName} ${item.lecturerName || item.primaryLecturer || ''} ${item.department} ${item.roomName}`.toLowerCase().includes(query.toLowerCase())), [schedule, query]);
   const title = navItems.find(item => item.id === view)?.label || 'Dashboard Eksekutif';
+
+  const totalMk = backendCourses.length || new Set(schedule.map((s) => s.courseCode)).size;
+  const totalKelas = backendClasses.length || schedule.length;
+  const semesterLabel = latestCPSATResult?.semester_label || '2026/2027 GANJIL';
+  const liveDepartments = [
+    { code: 'SI', name: 'Departemen Sistem Informasi' },
+    { code: 'IF', name: 'Departemen Informatika' },
+    { code: 'TK', name: 'Departemen Teknik Komputer' },
+  ].map((d) => {
+    const deptClasses = backendClasses.filter((c) => c.department.toUpperCase() === d.code);
+    const deptSched = schedule.filter((s) => resolveDepartment(s.department, s.courseCode) === d.code);
+    const uniqueMk = new Set(deptClasses.length ? deptClasses.map((c) => c.course_code) : deptSched.map((s) => s.courseCode)).size;
+    return {
+      ...d,
+      classes: uniqueMk,
+      groups: deptClasses.length || deptSched.length,
+      scheduled: deptSched.length,
+      hard: '100%',
+      score: 'Optimal',
+      penalty: latestCPSATResult?.penalty_breakdown?.total_weighted_penalty ?? 0,
+    };
+  });
 
   const unresolvedConflicts = conflicts.filter(c => !c.isResolved);
 
@@ -91,7 +131,7 @@ export const WadekWorkspacePage: React.FC = () => {
     {mobileNav && <button aria-label="Tutup menu" onClick={()=>setMobileNav(false)} className="fixed inset-0 bg-slate-950/30 lg:hidden"/>}
     <aside className={`fixed lg:static inset-y-0 left-0 z-50 flex w-[270px] shrink-0 flex-col border-r border-blue-100 bg-white transition-transform lg:translate-x-0 ${mobileNav?'translate-x-0':'-translate-x-full'}`}>
       <div className="flex h-[72px] items-center gap-3 border-b border-slate-100 px-5"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#082c78] text-sm font-black text-white">FTI</div><div><div className="text-xs font-extrabold text-[#082c78]">Universitas Andalas</div><div className="text-[11px] text-slate-500">Fakultas Teknologi Informasi</div></div><button onClick={()=>setMobileNav(false)} className="ml-auto lg:hidden"><X size={18}/></button></div>
-      <div className="mx-4 mt-3 flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2 text-[10px]"><span className="flex items-center gap-1.5 text-slate-700"><i className="h-2 w-2 rounded-full bg-blue-600"/>Semester Aktif</span><b className="font-mono text-blue-800">2024/2025 GANJIL</b></div>
+      <div className="mx-4 mt-3 flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2 text-[10px]"><span className="flex items-center gap-1.5 text-slate-700"><i className="h-2 w-2 rounded-full bg-blue-600"/>Semester Aktif</span><b className="font-mono text-blue-800">{semesterLabel}</b></div>
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         {navItems.map((item,index)=><React.Fragment key={item.id}>{item.section&&<div className="px-3 pb-2 pt-4 text-[10px] font-bold tracking-wider text-slate-400">{item.section}</div>}<button onClick={()=>{setView(item.id);setMobileNav(false)}} className={`mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${view===item.id?'bg-[#173e96] text-white shadow-sm':'text-slate-600 hover:bg-blue-50 hover:text-blue-900'}`}><item.icon size={16}/>{item.label}{item.id==='dashboard'&&<span className="ml-auto rounded bg-white/15 px-1.5 py-0.5 text-[9px]">WD1</span>}{item.id==='konflik'&&unresolvedConflicts.length>0&&<span className="ml-auto rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] text-white font-bold">{unresolvedConflicts.length}</span>}</button></React.Fragment>)}
       </nav>
@@ -103,18 +143,18 @@ export const WadekWorkspacePage: React.FC = () => {
         <div className="border-b border-blue-100 bg-gradient-to-r from-[#eef3ff] to-[#e5edff] px-5 py-5 md:px-8"><div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4"><div><div className="mb-2 flex items-center gap-1.5 text-[10px] text-slate-500"><span>Beranda</span><ChevronRight size={12}/><span>Portal Eksekutif</span><ChevronRight size={12}/><b className="text-blue-900">{title}</b></div><h1 className="text-xl font-extrabold tracking-tight text-[#082c78] md:text-[26px]">{view==='dashboard'?'Review & Persetujuan Draf Jadwal Perkuliahan':view==='kalender'?'Kalender Jadwal Perkuliahan':title}</h1><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-600 md:text-sm">{view==='kalender'?'Lihat jadwal dalam format kalender mingguan. Klik mata kuliah untuk mereview, pilih untuk revisi atau ACC langsung.':'Verifikasi kepatuhan hard constraint akademik, optimasi beban pengajaran dosen lintas prodi, dan otoritas pengesahan Surat Keputusan (SK) jadwal perkuliahan semester ganjil Fakultas Teknologi Informasi.'}</p></div><div className="hidden min-w-[150px] rounded-xl border border-blue-100 bg-white px-4 py-3 shadow-sm md:block"><div className="text-[9px] uppercase tracking-wider text-slate-500">Otoritas pengesahan</div><div className="mt-1 text-xs font-bold">Wakil Dekan I<br/>(Akademik)</div><div className="mt-1 font-mono text-[9px] font-bold text-blue-700">STATUS: {scheduleApprovalStatus.toUpperCase()}</div></div></div></div>
         <div className="mx-auto max-w-[1500px] space-y-5 p-4 md:p-6">
           {view==='dashboard'&&<>
-            <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-bold text-[#082c78]"><Activity size={16}/> Ringkasan Audit Kelayakan Jadwal (KPI Eksekutif)</h2><span className="hidden rounded-full bg-blue-100 px-3 py-1 font-mono text-[10px] text-slate-600 sm:inline">Algoritma GA Gen-140 · Konvergen</span></div>
+            <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-bold text-[#082c78]"><Activity size={16}/> Ringkasan Audit Kelayakan Jadwal (KPI Eksekutif)</h2><span className="hidden rounded-full bg-blue-100 px-3 py-1 font-mono text-[10px] text-slate-600 sm:inline">CP-SAT Solver · {latestCPSATResult?.version_number ? `Versi #${latestCPSATResult.version_number}` : 'Database Aktif'}</span></div>
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">{[
-              {label:'Total Mata Kuliah',value:'142',sub:'100% terakomodir',icon:BookOpen,color:'text-blue-900'},
-              {label:'Total Rombel / Kelas',value:'318',sub:'Terdistribusi di 14 ruang FTI',icon:Users,color:'text-blue-900'},
+              {label:'Total Mata Kuliah',value:String(totalMk),sub:'100% terakomodir',icon:BookOpen,color:'text-blue-900'},
+              {label:'Total Rombel / Kelas',value:String(totalKelas),sub:`Terdistribusi di ${rooms.length} ruang`,icon:Users,color:'text-blue-900'},
               {label:'Hard Constraints',value:'100%',sub:'0 pelanggaran syarat wajib',icon:ShieldCheck,color:'text-emerald-700'},
-              {label:'Soft Constraints',value:'92.4%',sub:'Kepuasan preferensi',icon:SlidersHorizontal,color:'text-blue-700'},
-              {label:'Reduksi Penalti GA',value:'184 → 42',sub:'↓ 77.2% penalti preferensi',icon:Gauge,color:'text-emerald-700'},
-              {label:'Indikator Konflik',value:'3',sub:'Soft warning perlu perhatian',icon:AlertTriangle,color:'text-amber-700'},
+              {label:'Jadwal Tersusun',value:String(schedule.length),sub:'Bebas bentrok ruang & dosen',icon:SlidersHorizontal,color:'text-blue-700'},
+              {label:'Skor Penalti CP-SAT',value:String(latestCPSATResult?.penalty_breakdown?.total_weighted_penalty ?? 0),sub:`Status: ${latestCPSATResult?.status || 'OPTIMAL'}`,icon:Gauge,color:'text-emerald-700'},
+              {label:'Status SK Saat Ini',value:scheduleApprovalStatus,sub:latestCPSATResult?.tahap || 'Siap Ditinjau',icon:AlertTriangle,color:'text-amber-700'},
             ].map(card=><div key={card.label} className="flex min-h-[116px] flex-col justify-between rounded-xl border border-slate-100 bg-white p-3 shadow-sm"><div className="flex items-start justify-between gap-1"><span className="text-[10px] leading-4 text-slate-500">{card.label}</span><card.icon size={15} className={card.color}/></div><div className={`text-xl font-extrabold tracking-tight ${card.color}`}>{card.value}</div><div className="text-[10px] leading-4 text-slate-500">{card.sub}</div></div>)}</div>
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_350px]">
               <div className="space-y-4">
-                <section className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-4"><div><h2 className="flex items-center gap-2 text-sm font-bold text-[#082c78]"><ClipboardCheck size={16}/> Daftar Usulan Jadwal Departemen</h2><p className="mt-1 text-[10px] text-slate-500">Menunggu review verifikasi dan penandatanganan Wakil Dekan I FTI</p></div><span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold text-emerald-700">● 3 Departemen Lengkap</span></div><div className="overflow-x-auto"><table className="w-full min-w-[790px] text-left text-[10px]"><thead className="bg-[#f0f4ff] font-mono uppercase tracking-wider text-slate-500"><tr>{['No','Departemen','Beban MK/Kelas','Hard Constraint','Soft Score','Penalti GA','Pengajuan','Status',''].map(label=><th key={label} className="px-3 py-3 font-medium">{label}</th>)}</tr></thead><tbody>{departments.map((dept,i)=><tr key={dept.code} className="border-t border-slate-100"><td className="px-3 py-4 text-slate-500">{i+1}</td><td className="px-3 py-4"><div className="flex items-center gap-2"><span className="rounded-md bg-blue-50 px-1.5 py-1 font-bold text-blue-800">{dept.code}</span><div className="max-w-[140px] font-bold leading-4 text-blue-900">{dept.name}<div className="font-normal text-slate-500">Ganjil 2024/2025 · Kampus Limau Manis</div></div></div></td><td className="px-3 py-4"><b>{dept.classes} MK</b><div className="text-slate-500">{dept.groups} rombel</div></td><td className="px-3 py-4"><span className="rounded-full bg-emerald-50 px-2 py-1 font-bold text-emerald-700">✓ {dept.hard} Lolos</span></td><td className="px-3 py-4 font-bold text-blue-700">{dept.score}</td><td className="px-3 py-4"><span className="rounded bg-blue-100 px-2 py-1 text-blue-900">Skor {dept.penalty}</span></td><td className="px-3 py-4 text-slate-600">{dept.date}<div className="font-mono text-[9px] text-slate-400">{dept.time}</div></td><td className="px-3 py-4"><span className="rounded-full bg-amber-50 px-2 py-1 font-medium text-amber-800">● Menunggu WD1</span></td><td className="px-3 py-4"><button onClick={()=>setView('kalender')} className="rounded bg-blue-50 px-2 py-1.5 font-bold text-blue-800 hover:bg-blue-100">Detail</button></td></tr>)}</tbody></table></div><div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3"><div className="flex max-w-xl items-start gap-2 text-[10px] text-slate-500"><ShieldCheck size={15} className="shrink-0 text-emerald-700"/><span><b className="text-slate-700">Validasi Hard Constraints Terpenuhi:</b> Tidak ada bentrok ruangan, dosen terhindar dari jadwal paralel simultan, dan kapasitas ruang memenuhi peserta rombel.</span></div><button onClick={()=>setView('validasi')} className="text-[10px] font-bold text-blue-700">Lihat Laporan Validasi Lengkap →</button></div></section>
+                <section className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-4"><div><h2 className="flex items-center gap-2 text-sm font-bold text-[#082c78]"><ClipboardCheck size={16}/> Daftar Usulan Jadwal Departemen</h2><p className="mt-1 text-[10px] text-slate-500">Klik Detail untuk meninjau jadwal mingguan atau ACC/Revisi per mata kuliah</p></div><span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold text-emerald-700">● 3 Departemen Lengkap</span></div><div className="overflow-x-auto"><table className="w-full min-w-[790px] text-left text-[10px]"><thead className="bg-[#f0f4ff] font-mono uppercase tracking-wider text-slate-500"><tr>{['No','Departemen','Beban MK/Kelas','Hard Constraint','Terjadwal','Penalti CP-SAT','Status','Aksi'].map(label=><th key={label} className="px-3 py-3 font-medium">{label}</th>)}</tr></thead><tbody>{liveDepartments.map((dept,i)=><tr key={dept.code} className="border-t border-slate-100"><td className="px-3 py-4 text-slate-500">{i+1}</td><td className="px-3 py-4"><div className="flex items-center gap-2"><span className="rounded-md bg-blue-50 px-1.5 py-1 font-bold text-blue-800">{dept.code}</span><div className="max-w-[140px] font-bold leading-4 text-blue-900">{dept.name}<div className="font-normal text-slate-500">{semesterLabel}</div></div></div></td><td className="px-3 py-4"><b>{dept.classes} MK</b><div className="text-slate-500">{dept.groups} kelas</div></td><td className="px-3 py-4"><span className="rounded-full bg-emerald-50 px-2 py-1 font-bold text-emerald-700">✓ {dept.hard} Lolos</span></td><td className="px-3 py-4 font-bold text-blue-700">{dept.scheduled} kelas</td><td className="px-3 py-4"><span className="rounded bg-blue-100 px-2 py-1 text-blue-900">Skor {dept.penalty}</span></td><td className="px-3 py-4"><span className="rounded-full bg-amber-50 px-2 py-1 font-medium text-amber-800">● {scheduleApprovalStatus}</span></td><td className="px-3 py-4"><button onClick={()=>setView('kalender')} className="rounded bg-blue-50 px-2 py-1.5 font-bold text-blue-800 hover:bg-blue-100">Review</button></td></tr>)}</tbody></table></div><div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3"><div className="flex max-w-xl items-start gap-2 text-[10px] text-slate-500"><ShieldCheck size={15} className="shrink-0 text-emerald-700"/><span><b className="text-slate-700">Validasi Hard Constraints Terpenuhi:</b> Tidak ada bentrok ruangan, dosen terhindar dari jadwal paralel simultan, dan kapasitas ruang memenuhi peserta rombel.</span></div><button onClick={()=>setView('validasi')} className="text-[10px] font-bold text-blue-700">Lihat Laporan Validasi Lengkap →</button></div></section>
                 <GAChart/>
               </div>
               <div className="space-y-4 xl:sticky xl:top-4"><section className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm"><span className="rounded-full bg-[#082c78] px-2.5 py-1 text-[9px] font-bold uppercase text-white">Keputusan Resmi Wadek I</span><h2 className="mt-2 text-sm font-bold text-[#082c78]">Pengesahan Draf Terpadu</h2><p className="mt-1 text-[10px] leading-4 text-slate-600">Tindakan berikut memiliki konsekuensi akademik. Persetujuan diteruskan ke Admin untuk proses penerbitan SK jadwal.</p><div className="mt-4 space-y-2 rounded-lg bg-[#f0f4ff] p-3 text-[10px]"><div className="flex justify-between gap-2"><span>Validasi Akademik FTI</span><b className="text-emerald-700">✓ TERVERIFIKASI</b></div><div className="flex justify-between gap-2"><span>Kesesuaian Kuota Lab IF/TK</span><b className="text-emerald-700">100% SESUAI</b></div><div className="flex justify-between gap-2"><span>Beban mengajar &gt; 16 SKS</span><b>0 Dosen (Nihil)</b></div><div className="flex justify-between gap-2"><span>Catatan soft warning</span><b className="text-amber-700">3 Dosen (Jeda singkat)</b></div></div><button disabled={scheduleApprovalStatus==='Disetujui'||scheduleApprovalStatus==='Resmi'} onClick={approve} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-3 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"><CheckCircle2 size={16}/>Setujui &amp; Sahkan SK Jadwal</button><button onClick={()=>setShowRevision(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 py-3 text-xs font-bold text-amber-800 hover:bg-blue-100"><FileText size={15}/>Kembalikan dengan Catatan Revisi</button><button onClick={()=>window.print()} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-100 py-2.5 text-xs font-semibold text-blue-900 hover:bg-slate-50"><FileText size={15}/>Cetak Lembar Verifikasi Akademik (PDF)</button><div className="mt-3 rounded-lg bg-blue-50 p-3 text-[10px] leading-4 text-slate-600"><ShieldCheck size={14} className="mr-1 inline text-blue-700"/>Tanda tangan digital BSrE diterapkan otomatis pada draf SK setelah pengesahan.</div></section>
@@ -153,11 +193,8 @@ const CalendarView: React.FC<{
   const filtered = useMemo(() => {
     let items = rows;
     if (deptFilter !== 'all') items = items.filter(r => {
-      const d = (r.department || '').toLowerCase();
-      if (deptFilter === 'SI') return d.includes('sistem informasi') || d === 'si';
-      if (deptFilter === 'IF') return d.includes('informatika') || d === 'if';
-      if (deptFilter === 'TK') return d.includes('teknik komputer') || d === 'tk';
-      return true;
+      const resolved = resolveDepartment(r.department, r.courseCode || r.code);
+      return resolved === deptFilter;
     });
     return items;
   }, [rows, deptFilter]);

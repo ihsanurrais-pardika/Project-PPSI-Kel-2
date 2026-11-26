@@ -1,6 +1,117 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { User, UserRole, CourseOffering, Room, ScheduleItem, ConflictItem, AuditLogItem, GAParameters, ClassRombel } from '../types';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User, UserRole, CourseOffering, Room, ScheduleItem, ConflictItem, AuditLogItem, GAParameters, CPSATParameters, ClassRombel } from '../types';
 import { mockCourses, mockRooms, mockScheduleGrid, mockConflicts, mockAuditLogs, initialGAParams, mockLecturers } from '../data/mockData';
+import {
+  apiService,
+  BackendClassItem,
+  BackendCourseItem,
+  BackendRoom,
+  AdjustClassPayload,
+  RoomPayload,
+  SolverResultResponse,
+  GenerateScheduleParams,
+  ValidationReportResponse,
+  ValidationSuggestion,
+} from '../services/api';
+import { resolveDepartment } from '../utils/departmentHelper';
+import {
+  evaluateManualMove,
+  evaluateSwapPair,
+  matchSessionIndex,
+  normalizeDayTitle,
+  resolveRoomForScheduleItem,
+} from '../utils/scheduleConflictHelper';
+
+export const initialCPSATParams: CPSATParameters = {
+  wGap: 10,
+  wPref: 4,
+  wSpread: 3,
+  wWaste: 1,
+  timeoutSeconds: 60,
+  numWorkers: 8,
+  linearizationLevel: 0,
+};
+
+function mapBackendRoomToRoom(r: BackendRoom): Room {
+  const bName = r.building || `Gedung ${r.gedung_code || 'FTI'}`;
+  return {
+    id: r.id,
+    code: r.code || r.name,
+    name: r.name,
+    building: bName,
+    floor: r.floor,
+    capacity: r.capacity,
+    wing: `Lantai ${r.floor}`,
+    type: r.room_type === 'Lab' ? 'Laboratorium' : 'Teori',
+    isAccessible: r.floor === 1,
+    status: 'Siap Digunakan',
+    priorityDepartment: r.department === 'SI' ? 'Sistem Informasi' : r.department === 'IF' ? 'Informatika' : r.department === 'TK' ? 'Teknik Komputer' : 'Fakultas / Bersama',
+    facilities: r.features?.length ? r.features : [bName, `Lantai ${r.floor}`, `${r.capacity} Kursi`],
+  };
+}
+
+function mapSolverScheduleToItems(res: SolverResultResponse): ScheduleItem[] {
+  return res.schedule.map((sc, idx) => ({
+    id: sc.jadwal_id ? `db-sch-${sc.jadwal_id}` : `sch-${sc.class_id}-${idx}`,
+    jadwalId: sc.jadwal_id,
+    dbRuangId: sc.db_ruang_id,
+    courseCode: sc.course_code,
+    courseName: sc.course_name,
+    classLabel: sc.class_label,
+    className: sc.class_label,
+    semester: sc.semester,
+    rombelKey: sc.group_names?.[0] || '',
+    sks: sc.sks ?? (sc.duration >= 2 ? 3 : 2),
+    studentCount: sc.size,
+    roomId: sc.room_id,
+    roomName: sc.room_name,
+    building: sc.building || (sc.floor === 1 ? 'Gedung FTI (Lantai 1)' : 'Gedung FTI'),
+    floor: sc.floor,
+    capacity: sc.room_capacity,
+    day: sc.day as any,
+    sessionIndex: (sc.start_slot_index % 6) + 1,
+    timeLabel: `${sc.start_time} - ${sc.end_time}`,
+    time: `${sc.start_time} - ${sc.end_time}`,
+    primaryLecturer: sc.lecturer_names[0] || 'Dosen Pengampu',
+    lecturerName: sc.lecturer_names.join(', '),
+    lecturerNames: sc.lecturer_names,
+    tandemLecturers: sc.lecturer_names.slice(1),
+    isTandem: sc.lecturer_names.length > 1,
+    department: resolveDepartment(sc.department, sc.course_code),
+    status: 'OK',
+    wd1Status: res.approval_status === 'Disetujui' || res.approval_status === 'Resmi' ? 'Disetujui' : res.approval_status === 'Revisi' ? 'Revisi' : 'Menunggu Review',
+  }));
+}
+
+function mapValidationToConflictItems(report: ValidationReportResponse): ConflictItem[] {
+  return report.issues.map((iss) => ({
+    id: iss.id,
+    conflictId: iss.conflict_id,
+    jenisBentrok: iss.jenis_bentrok,
+    statusBentrok: iss.status_bentrok,
+    canIgnore: iss.can_ignore,
+    type: iss.type_label,
+    severity: iss.severity,
+    title: iss.title,
+    courseCode: iss.item_1?.course_code,
+    courseName: iss.item_1?.course_name,
+    classLabel: iss.item_1?.class_label,
+    lecturerName: iss.item_1?.lecturer_names?.join(', '),
+    roomName: iss.item_1?.room_name,
+    day: iss.item_1?.day,
+    timeSlot: iss.item_1 ? `${iss.item_1.start_time} - ${iss.item_1.end_time}` : undefined,
+    details: iss.description,
+    recommendation: iss.recommendation,
+    isResolved: iss.is_resolved,
+    department: iss.item_1?.department,
+    affectedCourses: iss.item_2
+      ? [
+          `${iss.item_1?.course_code || ''} ${iss.item_1?.course_name || ''}`.trim(),
+          `${iss.item_2.course_code} ${iss.item_2.course_name}`.trim(),
+        ]
+      : undefined,
+  }));
+}
 
 interface AppContextType {
   currentUser: User;
@@ -19,6 +130,7 @@ interface AppContextType {
   conflicts: ConflictItem[];
   auditLogs: AuditLogItem[];
   gaParams: GAParameters;
+  cpsatParams: CPSATParameters;
   scheduleApprovalStatus: 'Menunggu Persetujuan' | 'Disetujui' | 'Revisi' | 'Resmi';
   wadekRevisionNote: string;
   isPublishModalOpen: boolean;
@@ -32,6 +144,32 @@ interface AppContextType {
   selectedRoomForNav: Room | null;
   setSelectedRoomForNav: (room: Room | null) => void;
 
+  // Backend API Integration State
+  backendStatus: 'connected' | 'offline' | 'checking';
+  backendClasses: BackendClassItem[];
+  backendCourses: BackendCourseItem[];
+  isBackendLoading: boolean;
+  latestCPSATResult: SolverResultResponse | null;
+  validationReport: ValidationReportResponse | null;
+  isValidationLoading: boolean;
+  pendingManualEditScheduleId: string | null;
+  setPendingManualEditScheduleId: (id: string | null) => void;
+  fetchValidationReport: (rescan?: boolean) => Promise<ValidationReportResponse | null>;
+  resolveValidationIssueById: (conflictId: number | string, decision?: string) => Promise<boolean>;
+  runAutoFixValidation: () => Promise<boolean>;
+  applyValidationSuggestion: (sug: ValidationSuggestion) => Promise<boolean>;
+  fetchBackendClasses: () => Promise<void>;
+  addBackendClass: (classItem: BackendClassItem) => Promise<boolean>;
+  adjustBackendClass: (classId: string, payload: AdjustClassPayload) => Promise<boolean>;
+  deleteBackendClass: (classId: string) => Promise<boolean>;
+  resetBackendClassesToCSV: () => Promise<void>;
+  addBackendRoom: (payload: RoomPayload) => Promise<boolean>;
+  updateBackendRoom: (roomId: string, payload: RoomPayload) => Promise<boolean>;
+  deleteBackendRoom: (roomId: string) => Promise<boolean>;
+  submitScheduleToWadek: () => Promise<boolean>;
+  updateCPSATParams: (params: CPSATParameters) => void;
+  runCPSATSolver: (params?: GenerateScheduleParams) => Promise<SolverResultResponse | null>;
+
   // Actions
   addCourse: (course: Partial<CourseOffering>) => void;
   updateCourse: (id: string, updated: Partial<CourseOffering>) => void;
@@ -44,6 +182,24 @@ interface AppContextType {
   reviewScheduleClass: (scheduleId: string, decision: 'Disetujui' | 'Revisi', note?: string) => void;
   publishOfficialSchedule: () => void;
   reassignRoomSchedule: (scheduleId: string, newRoomId: string, isPermanent: boolean) => void;
+  updateScheduleClassSksAndTime: (
+    scheduleId: string,
+    params: {
+      sks: number;
+      day: string;
+      sessionIndex: number;
+      startTime: string;
+      endTime: string;
+      roomId?: string;
+      roomName?: string;
+      reason?: string;
+    }
+  ) => Promise<boolean>;
+  swapScheduleItems: (
+    scheduleIdA: string,
+    scheduleIdB: string,
+    params?: { aSks?: number; reason?: string }
+  ) => Promise<boolean>;
   cancelClassOffering: (courseId: string, classId: string, reason: string) => void;
   addClassToCourse: (courseId: string, className: string, capacity: number) => void;
   toast: { message: string; type: 'success' | 'info' | 'error' | 'warning' } | null;
@@ -64,6 +220,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [conflicts, setConflicts] = useState<ConflictItem[]>(mockConflicts);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>(mockAuditLogs);
   const [gaParams, setGaParams] = useState<GAParameters>(initialGAParams);
+  const [cpsatParams, setCpsatParams] = useState<CPSATParameters>(initialCPSATParams);
+  
+  // Backend API Integration State
+  const [backendStatus, setBackendStatus] = useState<'connected' | 'offline' | 'checking'>('checking');
+  const [backendClasses, setBackendClasses] = useState<BackendClassItem[]>([]);
+  const [backendCourses, setBackendCourses] = useState<BackendCourseItem[]>([]);
+  const [isBackendLoading, setIsBackendLoading] = useState<boolean>(false);
+  const [latestCPSATResult, setLatestCPSATResult] = useState<SolverResultResponse | null>(null);
+  const [validationReport, setValidationReport] = useState<ValidationReportResponse | null>(null);
+  const [isValidationLoading, setIsValidationLoading] = useState<boolean>(false);
+  const [pendingManualEditScheduleId, setPendingManualEditScheduleId] = useState<string | null>(null);
   
   const [scheduleApprovalStatus, setScheduleApprovalStatus] = useState<'Menunggu Persetujuan' | 'Disetujui' | 'Revisi' | 'Resmi'>('Menunggu Persetujuan');
   const [wadekRevisionNote, setWadekRevisionNote] = useState<string>('');
@@ -180,6 +347,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setActivePage('dashboard_admin');
       showToast('Autentikasi SSO Berhasil. Selamat datang di SIPRAMA FTI UNAND', 'success');
     }
+    void fetchBackendClasses();
   };
 
   const logout = () => {
@@ -297,25 +465,143 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showToast(`Kelas berhasil dibatalkan. Alokasi ruangan dibebaskan kembali.`, 'info');
   };
 
+  const fetchValidationReport = async (rescan = false): Promise<ValidationReportResponse | null> => {
+    setIsValidationLoading(true);
+    try {
+      const rep = await apiService.getValidationReport(rescan);
+      setValidationReport(rep);
+      setConflicts(mapValidationToConflictItems(rep));
+      return rep;
+    } catch {
+      return null;
+    } finally {
+      setIsValidationLoading(false);
+    }
+  };
+
+  const resolveValidationIssueById = async (
+    conflictId: number | string,
+    decision = 'TOLERANSI_DITERIMA'
+  ): Promise<boolean> => {
+    if (currentRole !== 'admin') {
+      showToast('Hanya Admin yang dapat menindaklanjuti validasi konflik.', 'error');
+      return false;
+    }
+    if (backendStatus === 'connected') {
+      try {
+        const rep = await apiService.resolveValidationIssue(conflictId, {
+          decision,
+          actor_role: currentRole,
+          actor_email: currentUser.email,
+        });
+        setValidationReport(rep);
+        setConflicts(mapValidationToConflictItems(rep));
+        const log: AuditLogItem = {
+          id: `log-${Date.now()}`,
+          timestamp: 'Baru saja',
+          activity: `Tindak Lanjut Validasi Konflik (#${conflictId})`,
+          description: rep.message || 'Peringatan ringan ditandai sudah ditinjau di database.',
+          category: 'Penjadwalan',
+          actorName: currentUser.name,
+          actorRole: currentUser.role,
+          status: 'info',
+        };
+        setAuditLogs((prev) => [log, ...prev]);
+        showToast(rep.message || 'Peringatan berhasil ditandai selesai.', 'success');
+        return true;
+      } catch (err: any) {
+        showToast(err?.message || 'Gagal menyimpan tindak lanjut ke database.', 'error');
+        return false;
+      }
+    }
+    setConflicts((prev) =>
+      prev.map((c) => (String(c.conflictId ?? c.id) === String(conflictId) ? { ...c, isResolved: true } : c))
+    );
+    showToast('Peringatan ditandai selesai.', 'success');
+    return true;
+  };
+
+  const applyValidationSuggestion = async (sug: ValidationSuggestion): Promise<boolean> => {
+    if (currentRole !== 'admin') {
+      showToast('Hanya Admin yang dapat memindahkan jadwal.', 'error');
+      return false;
+    }
+    const targetItem =
+      schedule.find(
+        (s) =>
+          (sug.target_jadwal_id && s.jadwalId === sug.target_jadwal_id) ||
+          s.id === String(sug.target_item_id) ||
+          s.id === `db-sch-${sug.target_jadwal_id}`
+      ) || null;
+
+    const targetScheduleId = targetItem?.id || (sug.target_jadwal_id ? `db-sch-${sug.target_jadwal_id}` : '');
+    if (!targetScheduleId) {
+      showToast('Jadwal target tidak ditemukan di daftar aktif.', 'error');
+      return false;
+    }
+    return updateScheduleClassSksAndTime(targetScheduleId, {
+      sks: targetItem?.sks || 2,
+      day: sug.day,
+      sessionIndex: matchSessionIndex(sug.start_time, targetItem?.sessionIndex || 1),
+      startTime: sug.start_time,
+      endTime: sug.end_time,
+      roomId: sug.room_id,
+      roomName: sug.room_name,
+      reason: `Resolusi bentrok: ${sug.label}`,
+    });
+  };
+
+  const runAutoFixValidation = async (): Promise<boolean> => {
+    if (currentRole !== 'admin') {
+      showToast('Hanya Admin yang dapat menjalankan perbaikan bentrok otomatis.', 'error');
+      return false;
+    }
+    if (backendStatus !== 'connected') {
+      setConflicts((prev) => prev.map((c) => ({ ...c, isResolved: true })));
+      showToast('Auto-Fix Solver Berhasil (Mode Offline).', 'success');
+      return true;
+    }
+    setIsValidationLoading(true);
+    try {
+      const rep = await apiService.autoFixValidationConflicts({
+        version_id: latestCPSATResult?.version_id,
+        actor_role: currentRole,
+        actor_email: currentUser.email,
+      });
+      setValidationReport(rep);
+      setConflicts(mapValidationToConflictItems(rep));
+      const latestRes = await apiService.getLatestSchedule().catch(() => null);
+      if (latestRes && latestRes.schedule && latestRes.schedule.length > 0) {
+        setLatestCPSATResult(latestRes);
+        setSchedule(mapSolverScheduleToItems(latestRes));
+      }
+      const log: AuditLogItem = {
+        id: `log-${Date.now()}`,
+        timestamp: 'Baru saja',
+        activity: 'Perbaikan Bentrok Otomatis (Auto-Fix)',
+        description: rep.message || `${rep.fixed_count || 0} jadwal disesuaikan ke slot bebas bentrok.`,
+        category: 'Penjadwalan',
+        actorName: currentUser.name,
+        actorRole: currentUser.role,
+        status: rep.summary.hard_conflicts_count === 0 ? 'success' : 'warning',
+      };
+      setAuditLogs((prev) => [log, ...prev]);
+      showToast(rep.message || 'Auto-Fix selesai.', rep.summary.hard_conflicts_count === 0 ? 'success' : 'warning');
+      return true;
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal menjalankan perbaikan otomatis.', 'error');
+      return false;
+    } finally {
+      setIsValidationLoading(false);
+    }
+  };
+
   const resolveConflict = (conflictId: string) => {
-    setConflicts(conflicts.map(c => c.id === conflictId ? { ...c, isResolved: true } : c));
-    showToast('Konflik jadwal berhasil diselesaikan.', 'success');
+    void resolveValidationIssueById(conflictId);
   };
 
   const autoFixConflicts = () => {
-    setConflicts(conflicts.map(c => ({ ...c, isResolved: true })));
-    const log: AuditLogItem = {
-      id: `log-${Date.now()}`,
-      timestamp: 'Baru saja',
-      activity: 'Terapkan Rekomendasi Solver (Auto-Fix)',
-      description: 'Rotasi 2 slot ruangan berhasil diterapkan. Seluruh hard conflict teratasi 100%.',
-      category: 'Penjadwalan',
-      actorName: currentUser.name,
-      actorRole: currentUser.role,
-      status: 'success',
-    };
-    setAuditLogs([log, ...auditLogs]);
-    showToast('Auto-Fix Solver Berhasil: Seluruh konflik jadwal telah teratasi!', 'success');
+    void runAutoFixValidation();
   };
 
   const updateGAParams = (params: GAParameters) => {
@@ -336,17 +622,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const wadekApprove = () => {
     setScheduleApprovalStatus('Disetujui');
+    setWadekRevisionNote('');
     const log: AuditLogItem = {
       id: `log-${Date.now()}`,
       timestamp: 'Baru saja',
       activity: 'Persetujuan & Pengesahan Draf SK Jadwal oleh Wakil Dekan I',
-      description: 'Draf jadwal resmi FTI Ganjil 2024/2025 disahkan dengan tanda tangan digital BSrE.',
+      description: 'Draf jadwal resmi FTI Ganjil disahkan dan disimpan ke database.',
       category: 'Pengesahan WD1',
-      actorName: 'Dr. Eng. Rahmadi, M.T.',
+      actorName: currentUser.name,
       actorRole: 'Wakil Dekan I',
       status: 'success',
     };
     setAuditLogs([log, ...auditLogs]);
+    if (backendStatus === 'connected') {
+      void apiService.sendWadekDecision(true, '', latestCPSATResult?.version_id)
+        .then((wf) => {
+          setLatestCPSATResult((prev) => prev ? { ...prev, tahap: wf.tahap, status_versi: wf.status_versi, approval_status: wf.approval_status, revision_note: '' } : prev);
+        })
+        .catch((err) => showToast(`Peringatan sinkronisasi database: ${err.message}`, 'warning'));
+    }
     showToast('Jadwal berhasil DISETUJUI oleh Wakil Dekan I! Status siap dipublikasikan oleh Admin.', 'success');
   };
 
@@ -359,11 +653,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       activity: 'Pengembalian Jadwal dengan Catatan Revisi oleh Wadek I',
       description: `Catatan revisi: "${note}"`,
       category: 'Pengesahan WD1',
-      actorName: 'Dr. Eng. Rahmadi, M.T.',
+      actorName: currentUser.name,
       actorRole: 'Wakil Dekan I',
       status: 'warning',
     };
     setAuditLogs([log, ...auditLogs]);
+    if (backendStatus === 'connected') {
+      void apiService.sendWadekDecision(false, note, latestCPSATResult?.version_id)
+        .then((wf) => {
+          setLatestCPSATResult((prev) => prev ? { ...prev, tahap: wf.tahap, status_versi: wf.status_versi, approval_status: wf.approval_status, revision_note: note } : prev);
+        })
+        .catch((err) => showToast(`Peringatan sinkronisasi revisi ke database: ${err.message}`, 'warning'));
+    }
     showToast(`Draf jadwal dikembalikan ke Admin Fakultas untuk revisi: "${note}"`, 'warning');
   };
 
@@ -400,14 +701,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const log: AuditLogItem = {
       id: `log-${Date.now()}`,
       timestamp: 'Baru saja',
-      activity: 'Publikasi Jadwal Resmi Perkuliahan FTI Semester Ganjil 2024/2025',
-      description: 'Jadwal resmi diterbitkan secara live dan dapat diakses publik oleh Dosen & Mahasiswa.',
+      activity: 'Publikasi Jadwal Resmi Perkuliahan FTI Semester Ganjil',
+      description: 'Jadwal resmi diterbitkan secara live ke database dan dapat diakses Dosen & Mahasiswa.',
       category: 'Admin',
       actorName: currentUser.name,
       actorRole: currentUser.role,
       status: 'success',
     };
     setAuditLogs([log, ...auditLogs]);
+    if (backendStatus === 'connected') {
+      void apiService.publishSchedule(latestCPSATResult?.version_id)
+        .then((wf) => {
+          setLatestCPSATResult((prev) => prev ? { ...prev, tahap: wf.tahap, status_versi: wf.status_versi, approval_status: wf.approval_status } : prev);
+        })
+        .catch((err) => showToast(`Peringatan sinkronisasi publikasi DB: ${err.message}`, 'warning'));
+    }
     showToast('Sukses! Jadwal Perkuliahan Resmi Berhasil Dipublikasikan ke Portal Akademik.', 'success');
     setIsPublishModalOpen(false);
   };
@@ -416,6 +724,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const targetRoom = rooms.find(r => r.id === newRoomId);
     if (!targetRoom) return;
 
+    const currentItem = schedule.find(s => s.id === scheduleId);
     setSchedule(schedule.map(s => {
       if (s.id === scheduleId) {
         return {
@@ -430,6 +739,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return s;
     }));
 
+    if (isPermanent && currentItem?.jadwalId && backendStatus === 'connected' && !Number.isNaN(Number(targetRoom.id))) {
+      void apiService.updateScheduleItem(currentItem.jadwalId, { room_id: Number(targetRoom.id) }).catch(() => null);
+    }
+
     const log: AuditLogItem = {
       id: `log-${Date.now()}`,
       timestamp: 'Baru saja',
@@ -443,6 +756,420 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAuditLogs([log, ...auditLogs]);
     showToast(`Ruang pengganti berhasil dialokasikan ke ${targetRoom.name}!`, 'success');
   };
+
+  const updateScheduleClassSksAndTime = async (
+    scheduleId: string,
+    params: {
+      sks: number;
+      day: string;
+      sessionIndex: number;
+      startTime: string;
+      endTime: string;
+      roomId?: string;
+      roomName?: string;
+      reason?: string;
+    }
+  ): Promise<boolean> => {
+    if (currentRole !== 'admin') {
+      showToast('Hanya Admin yang dapat mengubah jadwal secara manual.', 'error');
+      return false;
+    }
+    const currentItem = schedule.find((item) => item.id === scheduleId);
+    if (!currentItem) {
+      showToast('Data jadwal kelas tidak ditemukan.', 'error');
+      return false;
+    }
+
+    const fallbackRoom = resolveRoomForScheduleItem(currentItem, rooms);
+    const chosenRoom =
+      rooms.find(
+        (r) =>
+          (params.roomId && (String(r.id) === String(params.roomId) || r.code === params.roomId)) ||
+          (params.roomName && r.name === params.roomName)
+      ) || fallbackRoom.room;
+
+    const evalRes = evaluateManualMove(
+      currentItem,
+      {
+        day: params.day,
+        startTime: params.startTime,
+        endTime: params.endTime,
+        room: chosenRoom,
+        roomId: chosenRoom ? String(chosenRoom.id) : params.roomId || fallbackRoom.id,
+        roomCode: chosenRoom ? chosenRoom.code : params.roomName || fallbackRoom.code,
+        roomName: chosenRoom ? chosenRoom.name : params.roomName || fallbackRoom.name,
+        roomCapacity: chosenRoom ? chosenRoom.capacity : fallbackRoom.capacity,
+      },
+      schedule,
+      rooms
+    );
+
+    if (!evalRes.isValid) {
+      const msg =
+        evalRes.capacityMessage ||
+        evalRes.conflicts[0]?.reasons[0] ||
+        'Slot atau ruangan masih mengalami bentrok.';
+      showToast(`Tidak bisa disimpan: ${msg}`, 'error');
+      return false;
+    }
+
+    const normDay = normalizeDayTitle(params.day);
+    const numericRoom =
+      chosenRoom && !Number.isNaN(Number(chosenRoom.id))
+        ? Number(chosenRoom.id)
+        : params.roomId && !Number.isNaN(Number(params.roomId))
+          ? Number(params.roomId)
+          : currentItem.dbRuangId;
+
+    if (currentItem.jadwalId && backendStatus === 'connected') {
+      try {
+        await apiService.updateScheduleItem(currentItem.jadwalId, {
+          day: normDay,
+          start_time: params.startTime,
+          end_time: params.endTime,
+          ...(numericRoom ? { room_id: numericRoom } : {}),
+          sks: params.sks,
+          reason: params.reason,
+          actor_role: currentRole,
+          actor_email: currentUser.email,
+        });
+      } catch (err: any) {
+        showToast(err?.message || 'Jadwal bentrok dan ditolak oleh server.', 'error');
+        return false;
+      }
+    }
+
+    const newRoomCode = chosenRoom?.code || params.roomName || fallbackRoom.code;
+    const newRoomId = chosenRoom ? String(chosenRoom.id) : params.roomId || currentItem.roomId;
+    setSchedule((prev) =>
+      prev.map((item) => {
+        if (item.id === scheduleId) {
+          return {
+            ...item,
+            sks: params.sks,
+            day: normDay as any,
+            sessionIndex: params.sessionIndex || matchSessionIndex(params.startTime, item.sessionIndex),
+            timeLabel: `${params.startTime} - ${params.endTime}`,
+            time: `${params.startTime} - ${params.endTime}`,
+            roomId: newRoomId,
+            dbRuangId: numericRoom ?? item.dbRuangId,
+            roomName: newRoomCode,
+            building: chosenRoom?.building || item.building,
+            floor: chosenRoom?.floor ?? item.floor,
+            capacity: chosenRoom?.capacity ?? item.capacity,
+            isManualEdited: true,
+          };
+        }
+        return item;
+      })
+    );
+
+    const log: AuditLogItem = {
+      id: `log-${Date.now()}`,
+      timestamp: 'Baru saja',
+      activity: `Edit Jadwal Manual — ${currentItem.courseName} (${currentItem.classLabel || 'A'})`,
+      description: `Dipindah ke ${normDay} ${params.startTime}-${params.endTime} di ${newRoomCode}.${params.reason ? ` Alasan: ${params.reason}` : ''}`,
+      category: 'Admin',
+      actorName: currentUser.name,
+      actorRole: currentUser.role,
+      status: 'info',
+    };
+    setAuditLogs((prev) => [log, ...prev]);
+    if (backendStatus === 'connected') {
+      void fetchValidationReport(true);
+    }
+    showToast(
+      `Jadwal ${currentItem.courseName} berhasil disimpan ke ${normDay} ${params.startTime}–${params.endTime} (${newRoomCode}).`,
+      'success'
+    );
+    return true;
+  };
+
+  const swapScheduleItems = async (
+    scheduleIdA: string,
+    scheduleIdB: string,
+    params?: { aSks?: number; reason?: string }
+  ): Promise<boolean> => {
+    if (currentRole !== 'admin') {
+      showToast('Hanya Admin yang dapat menukar jadwal perkuliahan.', 'error');
+      return false;
+    }
+    const itemA = schedule.find((s) => s.id === scheduleIdA);
+    const itemB = schedule.find((s) => s.id === scheduleIdB);
+    if (!itemA || !itemB || itemA.id === itemB.id) {
+      showToast('Pilih dua kelas berbeda untuk ditukar.', 'error');
+      return false;
+    }
+
+    const swapEval = evaluateSwapPair(itemA, itemB, schedule, rooms, params?.aSks);
+    if (!swapEval.isSafe) {
+      showToast(
+        swapEval.blockingReasons[0] || 'Pertukaran jadwal memicu bentrok baru.',
+        'error'
+      );
+      return false;
+    }
+
+    if (itemA.jadwalId && itemB.jadwalId && backendStatus === 'connected') {
+      try {
+        await apiService.swapScheduleItems({
+          jadwal_id_a: itemA.jadwalId,
+          jadwal_id_b: itemB.jadwalId,
+          a_sks: params?.aSks,
+          reason: params?.reason,
+          actor_role: currentRole,
+          actor_email: currentUser.email,
+        });
+      } catch (err: any) {
+        showToast(err?.message || 'Gagal menukar jadwal di database.', 'error');
+        return false;
+      }
+    }
+
+    const { aAfter, bAfter } = swapEval;
+    const roomB = resolveRoomForScheduleItem(itemB, rooms);
+    const roomA = resolveRoomForScheduleItem(itemA, rooms);
+
+    setSchedule((prev) =>
+      prev.map((item) => {
+        if (item.id === itemA.id) {
+          return {
+            ...item,
+            sks: params?.aSks || item.sks,
+            day: aAfter.dayLabel as any,
+            sessionIndex: matchSessionIndex(aAfter.startTime, itemB.sessionIndex),
+            timeLabel: `${aAfter.startTime} - ${aAfter.endTime}`,
+            time: `${aAfter.startTime} - ${aAfter.endTime}`,
+            roomId: roomB.id,
+            dbRuangId: roomB.room && !Number.isNaN(Number(roomB.room.id)) ? Number(roomB.room.id) : itemB.dbRuangId,
+            roomName: aAfter.roomCode,
+            building: roomB.building,
+            floor: roomB.room?.floor ?? itemB.floor,
+            capacity: aAfter.capacity,
+            isManualEdited: true,
+          };
+        }
+        if (item.id === itemB.id) {
+          return {
+            ...item,
+            day: bAfter.dayLabel as any,
+            sessionIndex: matchSessionIndex(bAfter.startTime, itemA.sessionIndex),
+            timeLabel: `${bAfter.startTime} - ${bAfter.endTime}`,
+            time: `${bAfter.startTime} - ${bAfter.endTime}`,
+            roomId: roomA.id,
+            dbRuangId: roomA.room && !Number.isNaN(Number(roomA.room.id)) ? Number(roomA.room.id) : itemA.dbRuangId,
+            roomName: bAfter.roomCode,
+            building: roomA.building,
+            floor: roomA.room?.floor ?? itemA.floor,
+            capacity: bAfter.capacity,
+            isManualEdited: true,
+          };
+        }
+        return item;
+      })
+    );
+
+    const log: AuditLogItem = {
+      id: `log-${Date.now()}`,
+      timestamp: 'Baru saja',
+      activity: `Tukar Jadwal — ${itemA.courseName} ⇄ ${itemB.courseName}`,
+      description: `${itemA.courseName} (${itemA.classLabel || 'A'}) -> ${aAfter.dayLabel} ${aAfter.startTime} (${aAfter.roomCode}); ${itemB.courseName} (${itemB.classLabel || 'B'}) -> ${bAfter.dayLabel} ${bAfter.startTime} (${bAfter.roomCode}).${params?.reason ? ` Alasan: ${params.reason}` : ''}`,
+      category: 'Admin',
+      actorName: currentUser.name,
+      actorRole: currentUser.role,
+      status: 'success',
+    };
+    setAuditLogs((prev) => [log, ...prev]);
+    if (backendStatus === 'connected') {
+      void fetchValidationReport(true);
+    }
+    showToast(
+      `Jadwal ${itemA.courseName} (${itemA.classLabel || 'A'}) berhasil ditukar dengan ${itemB.courseName} (${itemB.classLabel || 'B'}).`,
+      'success'
+    );
+    return true;
+  };
+
+  const fetchBackendClasses = async () => {
+    setIsBackendLoading(true);
+    try {
+      const [classesData, coursesData, roomsData, latestRes, valRep] = await Promise.all([
+        apiService.getClasses(),
+        apiService.getCourses().catch(() => [] as BackendCourseItem[]),
+        apiService.getRooms().catch(() => [] as BackendRoom[]),
+        apiService.getLatestSchedule().catch(() => null),
+        apiService.getValidationReport(false).catch(() => null),
+      ]);
+      setBackendClasses(classesData);
+      if (coursesData.length > 0) setBackendCourses(coursesData);
+      if (roomsData.length > 0) {
+        setRooms(roomsData.map(mapBackendRoomToRoom));
+      }
+      if (latestRes && latestRes.schedule && latestRes.schedule.length > 0) {
+        setLatestCPSATResult(latestRes);
+        setSchedule(mapSolverScheduleToItems(latestRes));
+        if (latestRes.approval_status) {
+          setScheduleApprovalStatus(latestRes.approval_status);
+        }
+        if (typeof latestRes.revision_note === 'string') {
+          setWadekRevisionNote(latestRes.revision_note);
+        }
+      }
+      if (valRep) {
+        setValidationReport(valRep);
+        setConflicts(mapValidationToConflictItems(valRep));
+      }
+      setBackendStatus('connected');
+    } catch (err) {
+      console.warn('Backend API is currently offline:', err);
+      setBackendStatus('offline');
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  const addBackendClass = async (classItem: BackendClassItem): Promise<boolean> => {
+    try {
+      const created = await apiService.addClass(classItem);
+      setBackendClasses((prev) => [...prev, created]);
+      showToast(`Kelas ${created.course_code} (${created.class_label}) berhasil disimpan ke database!`, 'success');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal menambah kelas: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const adjustBackendClass = async (classId: string, payload: AdjustClassPayload): Promise<boolean> => {
+    try {
+      const updated = await apiService.adjustClass(classId, payload);
+      setBackendClasses(prev => prev.map(c => c.id === classId ? updated : c));
+      showToast(`Kelas ${updated.course_code} (${updated.class_label}) berhasil disesuaikan!`, 'success');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal menyesuaikan kelas: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const deleteBackendClass = async (classId: string): Promise<boolean> => {
+    try {
+      await apiService.deleteClass(classId);
+      setBackendClasses(prev => prev.filter(c => c.id !== classId));
+      showToast(`Kelas ${classId} berhasil dibatalkan dari alokasi jadwal.`, 'info');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal membatalkan kelas: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const resetBackendClassesToCSV = async () => {
+    setIsBackendLoading(true);
+    try {
+      const res = await apiService.resetClassesToCSV();
+      await fetchBackendClasses();
+      showToast(`Data kelas berhasil disinkronkan ulang (${res.total_classes} kelas).`, 'success');
+    } catch (err: any) {
+      showToast(`Gagal reset ke CSV: ${err.message}`, 'error');
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  const addBackendRoom = async (payload: RoomPayload): Promise<boolean> => {
+    try {
+      const created = await apiService.createRoom(payload);
+      setRooms((prev) => [...prev, mapBackendRoomToRoom(created)]);
+      showToast(`Ruang ${created.code || created.name} berhasil ditambahkan ke database!`, 'success');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal menambah ruang: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const updateBackendRoom = async (roomId: string, payload: RoomPayload): Promise<boolean> => {
+    try {
+      const updated = await apiService.updateRoom(roomId, payload);
+      setRooms((prev) => prev.map((r) => (r.id === roomId ? mapBackendRoomToRoom(updated) : r)));
+      showToast(`Data ruang ${updated.code || updated.name} berhasil diperbarui!`, 'success');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal memperbarui ruang: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const deleteBackendRoom = async (roomId: string): Promise<boolean> => {
+    try {
+      await apiService.deleteRoom(roomId);
+      setRooms((prev) => prev.filter((r) => r.id !== roomId));
+      showToast('Ruang berhasil dihapus dari database.', 'info');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal menghapus ruang: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const submitScheduleToWadek = async (): Promise<boolean> => {
+    try {
+      const wf = await apiService.submitScheduleToWadek(latestCPSATResult?.version_id);
+      setScheduleApprovalStatus(wf.approval_status);
+      setWadekRevisionNote('');
+      setLatestCPSATResult((prev) =>
+        prev ? { ...prev, version_id: wf.version_id, version_number: wf.version_number, tahap: wf.tahap, status_versi: wf.status_versi, approval_status: wf.approval_status } : prev
+      );
+      showToast(wf.message, 'success');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal mengajukan jadwal ke Wadek I: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const updateCPSATParams = (params: CPSATParameters) => {
+    setCpsatParams(params);
+    showToast('Parameter solver CP-SAT berhasil disimpan.', 'success');
+  };
+
+  const runCPSATSolver = async (params?: GenerateScheduleParams): Promise<SolverResultResponse | null> => {
+    setIsBackendLoading(true);
+    try {
+      const payload: GenerateScheduleParams = {
+        w_gap: cpsatParams.wGap,
+        w_pref: cpsatParams.wPref,
+        w_spread: cpsatParams.wSpread,
+        w_waste: cpsatParams.wWaste,
+        max_time_seconds: cpsatParams.timeoutSeconds,
+        num_workers: cpsatParams.numWorkers,
+        ...params,
+      };
+      const res = await apiService.generateScheduleCPSAT(payload);
+      setLatestCPSATResult(res);
+
+      if (res.status === 'OPTIMAL' || res.status === 'FEASIBLE') {
+        setSchedule(mapSolverScheduleToItems(res));
+        setScheduleApprovalStatus(res.approval_status || 'Menunggu Persetujuan');
+        setWadekRevisionNote('');
+        void fetchValidationReport(true);
+        showToast(`Penjadwalan CP-SAT tersimpan ke DB (Versi #${res.version_number || 1}): ${res.scheduled_classes} kelas dalam ${res.wall_time_seconds} detik!`, 'success');
+      } else {
+        showToast(`Penyusunan jadwal memerlukan penyesuaian batasan atau kapasitas ruang (Status: ${res.status}).`, 'warning');
+      }
+      return res;
+    } catch (err: any) {
+      showToast(`Gagal memproses penjadwalan otomatis: ${err.message}`, 'error');
+      return null;
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBackendClasses();
+  }, []);
 
   return (
     <AppContext.Provider
@@ -461,6 +1188,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         conflicts,
         auditLogs,
         gaParams,
+        cpsatParams,
+        backendStatus,
+        backendClasses,
+        backendCourses,
+        isBackendLoading,
+        latestCPSATResult,
+        validationReport,
+        isValidationLoading,
+        pendingManualEditScheduleId,
+        setPendingManualEditScheduleId,
+        fetchValidationReport,
+        resolveValidationIssueById,
+        runAutoFixValidation,
+        applyValidationSuggestion,
+        fetchBackendClasses,
+        addBackendClass,
+        adjustBackendClass,
+        deleteBackendClass,
+        resetBackendClassesToCSV,
+        addBackendRoom,
+        updateBackendRoom,
+        deleteBackendRoom,
+        submitScheduleToWadek,
+        updateCPSATParams,
+        runCPSATSolver,
         scheduleApprovalStatus,
         wadekRevisionNote,
         isPublishModalOpen,
@@ -484,6 +1236,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         reviewScheduleClass,
         publishOfficialSchedule,
         reassignRoomSchedule,
+        updateScheduleClassSksAndTime,
+        swapScheduleItems,
         cancelClassOffering,
         addClassToCourse,
         toast,

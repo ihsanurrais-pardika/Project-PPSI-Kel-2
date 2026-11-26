@@ -115,20 +115,26 @@ export const Navbar: React.FC = () => {
           <span>2024/2025 Ganjil</span>
         </div>
 
-        {/* Notification bell */}
-        <button
-          onClick={() => setActivePage('validasi_konflik')}
-          title={`${unresolvedCount} Peringatan konflik memerlukan perhatian`}
-          className="relative p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-        >
-          <Bell className="w-4 h-4" />
-          {unresolvedCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full animate-ping" />
-          )}
-          {unresolvedCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full" />
-          )}
-        </button>
+        {/* Notification bell (Khusus Admin menuju Validasi & Konflik) */}
+        {currentUser.role === 'admin' && (
+          <button
+            onClick={() => setActivePage('validasi_konflik')}
+            title={
+              unresolvedCount > 0
+                ? `${unresolvedCount} peringatan atau bentrok jadwal perlu ditindaklanjuti`
+                : 'Tidak ada bentrok jadwal aktif'
+            }
+            className="relative p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+          >
+            <Bell className="w-4 h-4" />
+            {unresolvedCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full animate-ping" />
+            )}
+            {unresolvedCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full" />
+            )}
+          </button>
+        )}
 
         {/* Clean Profile Badge & Dropdown */}
         <div className="relative">

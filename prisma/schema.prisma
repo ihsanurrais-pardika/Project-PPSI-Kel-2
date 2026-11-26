@@ -122,20 +122,13 @@ model SemesterAkademik {
 }
 
 model Ruang {
-  id_ruang           Int      @id @default(autoincrement())
-  id_prodi_pengelola Int?     @db.SmallInt
-  kode_ruang         String   @unique @db.VarChar(30)
-  nama_ruang         String   @db.VarChar(150)
-  gedung             String   @db.VarChar(100)
-  lantai             Int      @db.SmallInt
-  kapasitas          Int      @db.SmallInt
-  jenis_ruang        String   @db.VarChar(50)
-  bisa_dipakai_bersama Boolean @default(false)
-  aksesibel          Boolean  @default(false)
-  latitude           Decimal? @db.Decimal(10, 7)
-  longitude          Decimal? @db.Decimal(10, 7)
-  petunjuk_rute      String?  @db.Text
-  denah_url          String?  @db.VarChar(500)
+  id_ruang           Int    @id @default(autoincrement())
+  id_prodi_pengelola Int?   @db.SmallInt
+  kode_ruang         String @unique @db.VarChar(30)
+  nama_ruang         String @db.VarChar(150)
+  gedung             String @db.VarChar(100)
+  lantai             Int    @db.SmallInt
+  kapasitas          Int    @db.SmallInt
 
   prodi_pengelola ProgramStudi? @relation(fields: [id_prodi_pengelola], references: [id_prodi])
 

@@ -1,672 +1,763 @@
-import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ShieldCheck,
   AlertTriangle,
-  CheckCircle2,
-  RefreshCw,
-  Wand2,
-  Clock,
-  Users,
-  Check,
+  ArrowLeftRight,
   ArrowRight,
-  Info,
   Building2,
-  List,
-  Layers,
   Calendar,
-  X,
-  MapPin,
-  Zap,
-  BookOpen,
-  FileText,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
   Download,
-  ChevronRight,
-  Activity,
-  BarChart3,
+  RefreshCw,
+  Search,
+  Send,
+  ShieldAlert,
+  ShieldCheck,
+  Users,
+  Wand2,
 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { ValidationIssueDTO, ValidationSuggestion } from '../services/api';
+import {
+  DepartmentCode,
+  getDepartmentBadgeStyle,
+  resolveDepartment,
+} from '../utils/departmentHelper';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-type TabKey = 'all' | 'hard' | 'capacity' | 'time_pref';
+type FilterTab = 'unresolved' | 'hard' | 'soft' | 'resolved';
+type DeptScope = DepartmentCode | 'ALL';
 
-interface ConflictCardData {
-  id: string;
-  category: TabKey;
-  categoryLabel: string;
-  categoryColor: string;
-  severity: 'hard' | 'soft' | 'info';
-  icon: React.ReactNode;
-  title: string;
-  courseCode: string;
-  courseName: string;
-  classLabel: string;
-  lecturer: string;
-  room: string;
-  day: string;
-  time: string;
-  details: string;
-  recommendation: string;
-  primaryAction: string;
-  secondaryAction: string;
-  isResolved: boolean;
+const PAGE_SIZE = 8;
+
+const DEPT_TABS: Array<{ key: DeptScope; label: string; shortLabel: string }> = [
+  { key: 'SI', label: 'Sistem Informasi', shortLabel: 'SI' },
+  { key: 'IF', label: 'Informatika', shortLabel: 'IF' },
+  { key: 'TK', label: 'Teknik Komputer', shortLabel: 'TK' },
+  { key: 'ALL', label: 'Semua FTI', shortLabel: 'Semua FTI' },
+];
+
+function getIssueDepartments(issue: ValidationIssueDTO): DepartmentCode[] {
+  const depts: DepartmentCode[] = [];
+  if (issue.item_1) {
+    depts.push(resolveDepartment(issue.item_1.department, issue.item_1.course_code));
+  }
+  if (issue.item_2) {
+    const d2 = resolveDepartment(issue.item_2.department, issue.item_2.course_code);
+    if (!depts.includes(d2)) {
+      depts.push(d2);
+    }
+  }
+  return depts.length > 0 ? depts : ['SI'];
 }
 
-// ─── Mock conflict data matching screenshot ──────────────────────────────────
-const conflictCards: ConflictCardData[] = [
-  {
-    id: 'cf-01',
-    category: 'capacity',
-    categoryLabel: 'Kapasitas Ruang',
-    categoryColor: 'orange',
-    severity: 'soft',
-    icon: <Building2 className="w-4 h-4" />,
-    title: 'IF-202 Rekayasa Perangkat Lunak (Kelas A – 48 Mahasiswa)',
-    courseCode: 'IF-202',
-    courseName: 'Rekayasa Perangkat Lunak',
-    classLabel: 'Kelas A',
-    lecturer: 'Dr. Ir. Wahyudi, S.T., M.T.',
-    room: 'G-203 (Kapasitas 50 Kursi)',
-    day: 'Senin',
-    time: '09:20 – 11:00 WIB',
-    details:
-      'Estimasi Mahasiswa Mendekati Kapasitas Maksimal. Ruang Dialokasikan: G-203 (Kapasitas 50). Mahasiswa: 48. Tersisa buffer 2 kursi. Disarankan memindahkan ke G-101/80 Kursi jika ada lonjakan KRS mahasiswa semester pendek/atas.',
-    recommendation:
-      'Tukar Ruang Alternatif',
-    primaryAction: 'Tukar Ruang Alternatif',
-    secondaryAction: 'Abaikan (Tetap Gunakan)',
-    isResolved: false,
-  },
-  {
-    id: 'cf-02',
-    category: 'time_pref',
-    categoryLabel: 'Preferensi Jadwal',
-    categoryColor: 'blue',
-    severity: 'soft',
-    icon: <Clock className="w-4 h-4" />,
-    title: 'TK-101 Rangkaian Logika Digital (Kelas B)',
-    courseCode: 'TK-101',
-    courseName: 'Rangkaian Logika Digital',
-    classLabel: 'Kelas B',
-    lecturer: 'Darwison, M.T.',
-    room: 'Ruang H-102',
-    day: 'Kamis',
-    time: '08:00 WIB',
-    details:
-      'Deviasi Minor Preferensi Hari Mengajar: Dosen mengajukan preferensi hari Rabu pagi, namun dialokasikan pada Kamis 08:00 WIB agar tidak bentrok dengan slot penggunaan laboratorium perangkat keras.',
-    recommendation: 'Toleransi Soft Constraint Diterima',
-    primaryAction: 'Lihat Slot Rabu Tersedia',
-    secondaryAction: 'Terima Alokasi',
-    isResolved: true,
-  },
-  {
-    id: 'cf-03',
-    category: 'time_pref',
-    categoryLabel: 'Jarak / Interval',
-    categoryColor: 'purple',
-    severity: 'soft',
-    icon: <MapPin className="w-4 h-4" />,
-    title: 'Dr. Eng. Rahmad, M.T. — Sistem Basis Data',
-    courseCode: 'SI-211',
-    courseName: 'Sistem Basis Data',
-    classLabel: 'Kelas A',
-    lecturer: 'Dr. Eng. Rahmad, M.T.',
-    room: 'G-203 ke Gedung B Lt. 2',
-    day: 'Senin',
-    time: 'Jeda < 30 menit',
-    details:
-      'Jeda Mengajar Singkat (< 30 menit): Terdeteksi jeda transit 15 menit antara sesi Basis Data di ruang G-203 ke sesi lanjutan di Gedung B Lt. 2. Estimasi waktu jalan antar gedung 7 menit, menyisakan margin istirahat yang sangat minim untuk persiapan mengajar.',
-    recommendation: 'Sesuaikan Ruang Terdekat',
-    primaryAction: 'Sesuaikan Ruang Terdekat',
-    secondaryAction: 'Pertahankan',
-    isResolved: false,
-  },
-];
-
-// ─── Room utilization data ───────────────────────────────────────────────────
-const roomUtilData = [
-  { name: 'Ruang G-101 (Auditorium Mini)', pct: 78, capacity: 60, color: 'emerald' },
-  { name: 'Ruang G-203 (Lab Teori)', pct: 96, capacity: 50, color: 'rose' },
-  { name: 'Ruang G-204 (Multimedia)', pct: 64, capacity: 45, color: 'blue' },
-];
-
-// ─── Document readiness ──────────────────────────────────────────────────────
-const docReadiness = [
-  { label: 'Validasi Kurikulum OBE', status: 'LULUS', color: 'emerald' },
-  { label: 'Batas SKS Dosen Maks', status: 'SESUAI', color: 'emerald' },
-  { label: 'Ketersediaan Ruang Ujian', status: 'TERLAKSANA', color: 'blue' },
-];
-
-// ─── Helper: color tokens ────────────────────────────────────────────────────
-const categoryColors: Record<string, { badge: string; border: string; iconBg: string; iconText: string }> = {
-  orange: {
-    badge: 'bg-orange-100 text-orange-700',
-    border: 'border-orange-200',
-    iconBg: 'bg-orange-100',
-    iconText: 'text-orange-600',
-  },
-  blue: {
-    badge: 'bg-blue-100 text-blue-700',
-    border: 'border-blue-200',
-    iconBg: 'bg-blue-100',
-    iconText: 'text-blue-600',
-  },
-  purple: {
-    badge: 'bg-purple-100 text-purple-700',
-    border: 'border-purple-200',
-    iconBg: 'bg-purple-100',
-    iconText: 'text-purple-600',
-  },
-  rose: {
-    badge: 'bg-rose-100 text-rose-700',
-    border: 'border-rose-200',
-    iconBg: 'bg-rose-100',
-    iconText: 'text-rose-600',
-  },
-};
-
-const utilColors: Record<string, string> = {
-  emerald: 'bg-emerald-500',
-  rose: 'bg-rose-500',
-  blue: 'bg-blue-500',
-};
-
-const utilTextColors: Record<string, string> = {
-  emerald: 'text-emerald-700',
-  rose: 'text-rose-700',
-  blue: 'text-blue-700',
-};
-
-const docBadgeColors: Record<string, string> = {
-  emerald: 'bg-emerald-100 text-emerald-700',
-  blue: 'bg-blue-100 text-blue-700',
-};
-
-// ─── Component ───────────────────────────────────────────────────────────────
 export const ValidasiKonflikPage: React.FC = () => {
-  const { showToast } = useApp();
+  const {
+    currentRole,
+    backendStatus,
+    validationReport,
+    isValidationLoading,
+    fetchValidationReport,
+    resolveValidationIssueById,
+    runAutoFixValidation,
+    applyValidationSuggestion,
+    submitScheduleToWadek,
+    setActivePage,
+    setPendingManualEditScheduleId,
+    scheduleApprovalStatus,
+    latestCPSATResult,
+    schedule,
+    showToast,
+  } = useApp();
 
-  const [cards, setCards] = useState<ConflictCardData[]>(conflictCards);
-  const [activeTab, setActiveTab] = useState<TabKey>('all');
-  const [solverRunning, setSolverRunning] = useState(false);
+  const [deptFilter, setDeptFilter] = useState<DeptScope>('SI');
+  const [activeTab, setActiveTab] = useState<FilterTab>('unresolved');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [visibleLimit, setVisibleLimit] = useState<number>(PAGE_SIZE);
+  const [busyIssueKey, setBusyIssueKey] = useState<string | null>(null);
+  const [submittingWadek, setSubmittingWadek] = useState(false);
+  const hasAutoSelectedDept = useRef(false);
 
-  const unresolved = cards.filter((c) => !c.isResolved);
-  const resolved = cards.filter((c) => c.isResolved);
+  // Muat hasil validasi nyata dari database saat halaman dibuka
+  useEffect(() => {
+    if (backendStatus === 'connected' && !validationReport) {
+      void fetchValidationReport(false);
+    }
+  }, [backendStatus]);
 
-  // hard constraint: 100% bebas bentrok (none in mock)
-  const hardConflicts = cards.filter((c) => c.category === 'hard');
-  const softWarnings = cards.filter((c) => c.category !== 'hard' && !c.isResolved);
+  const issues: ValidationIssueDTO[] = validationReport?.issues ?? [];
 
-  const handleResolve = (id: string, action: string) => {
-    setCards((prev) => prev.map((c) => (c.id === id ? { ...c, isResolved: true } : c)));
-    showToast(`Rekomendasi "${action}" berhasil diterapkan oleh Solver.`, 'success');
+  // Hitung jumlah bentrok aktif per jurusan (bentrok lintas prodi muncul di kedua tab terkait)
+  const deptUnresolvedCounts = useMemo(() => {
+    const map: Record<DeptScope, number> = { SI: 0, IF: 0, TK: 0, ALL: 0 };
+    for (const iss of issues) {
+      if (iss.is_resolved) continue;
+      map.ALL += 1;
+      for (const d of getIssueDepartments(iss)) {
+        map[d] += 1;
+      }
+    }
+    return map;
+  }, [issues]);
+
+  // Saat pertama kali report masuk, arahkan ke jurusan pertama yang masih punya catatan aktif
+  useEffect(() => {
+    if (!validationReport || hasAutoSelectedDept.current) return;
+    hasAutoSelectedDept.current = true;
+    const firstNeedsWork = (['SI', 'IF', 'TK'] as DepartmentCode[]).find(
+      (d) => deptUnresolvedCounts[d] > 0
+    );
+    if (firstNeedsWork) {
+      setDeptFilter(firstNeedsWork);
+    }
+  }, [validationReport, deptUnresolvedCounts]);
+
+  // Reset jumlah kartu tampil setiap filter berubah agar tampilan tetap ringan
+  useEffect(() => {
+    setVisibleLimit(PAGE_SIZE);
+  }, [deptFilter, activeTab, searchQuery]);
+
+  // Ringkasan menyeluruh FTI (dari DB)
+  const globalCounts = useMemo(() => {
+    const unresolved = issues.filter((i) => !i.is_resolved);
+    return {
+      unresolved: unresolved.length,
+      hard: unresolved.filter((i) => i.severity === 'hard').length,
+      soft: unresolved.filter((i) => i.severity === 'soft').length,
+      resolved: issues.filter((i) => i.is_resolved).length,
+    };
+  }, [issues]);
+
+  const summary = validationReport?.summary ?? {
+    total_active_classes: latestCPSATResult?.total_classes || schedule.length,
+    scheduled_classes: latestCPSATResult?.scheduled_classes || schedule.length,
+    unassigned_count: 0,
+    hard_conflicts_count: globalCounts.hard,
+    soft_warnings_count: globalCounts.soft,
+    unresolved_total: globalCounts.unresolved,
+    resolved_count: globalCounts.resolved,
+    total_penalty: latestCPSATResult?.penalty_breakdown?.total_weighted_penalty || 0,
+    compliance_pct: 100,
   };
 
-  const handleIgnore = (id: string) => {
-    showToast('Peringatan diabaikan sementara. Harap tinjau sebelum SK diterbitkan.', 'warning');
+  // Issue sesuai jurusan yang sedang dibuka
+  const deptScopedIssues = useMemo(() => {
+    if (deptFilter === 'ALL') return issues;
+    return issues.filter((iss) => getIssueDepartments(iss).includes(deptFilter));
+  }, [issues, deptFilter]);
+
+  // Hitungan status khusus jurusan yang sedang aktif
+  const scopedCounts = useMemo(() => {
+    const unresolved = deptScopedIssues.filter((i) => !i.is_resolved);
+    return {
+      unresolved: unresolved.length,
+      hard: unresolved.filter((i) => i.severity === 'hard').length,
+      soft: unresolved.filter((i) => i.severity === 'soft').length,
+      resolved: deptScopedIssues.filter((i) => i.is_resolved).length,
+    };
+  }, [deptScopedIssues]);
+
+  const filteredIssues = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return deptScopedIssues.filter((iss) => {
+      if (activeTab === 'unresolved' && iss.is_resolved) return false;
+      if (activeTab === 'hard' && (iss.is_resolved || iss.severity !== 'hard')) return false;
+      if (activeTab === 'soft' && (iss.is_resolved || iss.severity !== 'soft')) return false;
+      if (activeTab === 'resolved' && !iss.is_resolved) return false;
+
+      if (!q) return true;
+      const hay = [
+        iss.title,
+        iss.description,
+        iss.type_label,
+        iss.item_1?.course_name,
+        iss.item_1?.course_code,
+        iss.item_1?.room_name,
+        ...(iss.item_1?.lecturer_names || []),
+        iss.item_2?.course_name,
+        iss.item_2?.course_code,
+        iss.item_2?.room_name,
+        ...(iss.item_2?.lecturer_names || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [deptScopedIssues, activeTab, searchQuery]);
+
+  const visibleIssues = useMemo(
+    () => filteredIssues.slice(0, visibleLimit),
+    [filteredIssues, visibleLimit]
+  );
+
+  const nextPendingDept = useMemo(() => {
+    return DEPT_TABS.find(
+      (t) => t.key !== 'ALL' && t.key !== deptFilter && deptUnresolvedCounts[t.key] > 0
+    );
+  }, [deptFilter, deptUnresolvedCounts]);
+
+  const handleApplySuggestion = async (issueId: string, sug: ValidationSuggestion) => {
+    if (busyIssueKey) return;
+    setBusyIssueKey(issueId);
+    try {
+      await applyValidationSuggestion(sug);
+    } finally {
+      setBusyIssueKey(null);
+    }
   };
 
-  const handleAutoFix = () => {
-    setSolverRunning(true);
-    setTimeout(() => {
-      setCards((prev) => prev.map((c) => ({ ...c, isResolved: true })));
-      setSolverRunning(false);
-      showToast('Auto-Fix Solver Selesai: Seluruh peringatan & konflik jadwal telah teratasi!', 'success');
-    }, 1800);
+  const handleAcceptSoft = async (issue: ValidationIssueDTO) => {
+    if (busyIssueKey) return;
+    setBusyIssueKey(issue.id);
+    try {
+      await resolveValidationIssueById(issue.conflict_id, 'TOLERANSI_DITERIMA');
+    } finally {
+      setBusyIssueKey(null);
+    }
   };
 
-  const handleRerunSolver = () => {
-    setSolverRunning(true);
-    setTimeout(() => {
-      setSolverRunning(false);
-      showToast('Validasi Ulang Selesai: 318 Rombel × 4 Hard Constraints telah dievaluasi.', 'info');
-    }, 1500);
+  const handleOpenManualEdit = (jadwalId?: number, itemId?: number | string) => {
+    const targetScheduleId = jadwalId ? `db-sch-${jadwalId}` : String(itemId || '');
+    if (targetScheduleId) {
+      setPendingManualEditScheduleId(targetScheduleId);
+    }
+    setActivePage('jadwal_kuliah');
   };
 
-  const filteredCards = (() => {
-    if (activeTab === 'all') return cards;
-    if (activeTab === 'hard') return cards.filter((c) => c.category === 'hard');
-    if (activeTab === 'capacity') return cards.filter((c) => c.category === 'capacity');
-    if (activeTab === 'time_pref') return cards.filter((c) => c.category === 'time_pref');
-    return cards;
-  })();
+  const handleSendToWadek = async () => {
+    if (summary.hard_conflicts_count > 0 || submittingWadek) return;
+    setSubmittingWadek(true);
+    try {
+      const ok = await submitScheduleToWadek();
+      if (ok) {
+        setActivePage('approval_wadek');
+      }
+    } finally {
+      setSubmittingWadek(false);
+    }
+  };
 
-  const tabs: { key: TabKey; label: string; count: number }[] = [
-    { key: 'all', label: 'Semua Catatan', count: cards.length },
-    { key: 'hard', label: 'Bentrok Dosen', count: hardConflicts.length },
-    { key: 'capacity', label: 'Kapasitas Ruang', count: cards.filter((c) => c.category === 'capacity').length },
-    { key: 'time_pref', label: 'Preferensi Waktu', count: cards.filter((c) => c.category === 'time_pref').length },
-  ];
+  const handleDownloadSummary = () => {
+    const verText = validationReport?.version_number
+      ? `Versi #${validationReport.version_number} (${validationReport.semester_label})`
+      : 'Jadwal Aktif';
+    const lines = [
+      `BERITA ACARA VALIDASI JADWAL - SIPRAMA FTI UNAND`,
+      `Jadwal       : ${verText}`,
+      `Status       : ${validationReport?.approval_status || scheduleApprovalStatus}`,
+      `Kelas        : ${summary.scheduled_classes} / ${summary.total_active_classes} terjadwal`,
+      `Bentrok Wajib: ${summary.hard_conflicts_count}`,
+      `Peringatan   : ${summary.soft_warnings_count}`,
+      `Penalti      : ${summary.total_penalty}`,
+      '',
+      'DAFTAR CATATAN VALIDASI:',
+      ...(issues.length === 0
+        ? ['- Tidak ada bentrok atau peringatan ditemukan.']
+        : issues.map(
+            (it, idx) =>
+              `${idx + 1}. [${it.status_bentrok}] ${it.type_label} - ${it.title}\n   ${it.description}`
+          )),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `berita-acara-validasi-v${validationReport?.version_number || 1}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Ringkasan berita acara validasi berhasil diunduh.', 'success');
+  };
+
+  if (currentRole !== 'admin') {
+    return (
+      <div className="max-w-3xl mx-auto bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-2">
+        <ShieldAlert className="w-8 h-8 text-rose-600 mx-auto" />
+        <h2 className="text-base font-bold text-slate-900">Halaman Khusus Admin</h2>
+        <p className="text-xs text-slate-500">
+          Validasi dan penyelesaian bentrok jadwal hanya dapat diakses oleh Admin Fakultas.
+        </p>
+      </div>
+    );
+  }
+
+  const versionTitle = validationReport?.version_number
+    ? `Versi #${validationReport.version_number} · ${validationReport.semester_label}`
+    : 'Belum ada jadwal di database';
+  const hasHardConflicts = summary.hard_conflicts_count > 0;
+  const isAlreadySentToWadek =
+    scheduleApprovalStatus === 'Disetujui' || scheduleApprovalStatus === 'Resmi';
+  const activeDeptMeta = DEPT_TABS.find((d) => d.key === deptFilter) || DEPT_TABS[0];
 
   return (
-    <div className="space-y-6">
-
-      {/* ── Breadcrumb ────────────────────────────────────────────── */}
-      <nav className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-        <span>Beranda</span>
-        <ChevronRight className="w-3 h-3" />
-        <span>Penjadwalan Terpadu</span>
-        <ChevronRight className="w-3 h-3" />
-        <span className="text-slate-700 font-semibold">Validasi &amp; Resolusi Konflik</span>
-      </nav>
-
-      {/* ── Page Header ──────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-        <div className="space-y-1">
-          {/* Solver badge */}
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-700">
-            <Zap className="w-3 h-3" />
-            Grei Solver #2024-B
-          </div>
-
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight leading-tight">
-            Validasi &amp; Resolusi Konflik Jadwal
+    <div className="max-w-6xl mx-auto space-y-5 pb-10">
+      {/* Header Ringkas */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+            Validasi &amp; Konflik Jadwal
           </h1>
-          <p className="text-sm text-slate-500 max-w-2xl leading-relaxed">
-            Pemeriksaan kepatuhan hard constraints (tanpa bentrok) dan penanganan soft constraints sebelum pengajuan ke pimpinan.
+          <p className="text-xs text-slate-500 mt-1">
+            {versionTitle} · Pemeriksaan bentrok per jurusan sebelum diajukan ke Wakil Dekan I.
           </p>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
-            onClick={handleRerunSolver}
-            disabled={solverRunning}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-sm transition-colors disabled:opacity-60"
+            type="button"
+            onClick={() => void fetchValidationReport(true)}
+            disabled={isValidationLoading}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-60"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${solverRunning ? 'animate-spin text-blue-500' : 'text-slate-500'}`} />
-            Jalankan Ulang Solver
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isValidationLoading ? 'animate-spin text-blue-700' : 'text-slate-500'}`}
+            />
+            <span>{isValidationLoading ? 'Memeriksa...' : 'Validasi Ulang'}</span>
           </button>
+
           <button
-            onClick={handleAutoFix}
-            disabled={unresolved.length === 0 || solverRunning}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-700 rounded-lg hover:bg-blue-800 shadow-sm transition-colors disabled:opacity-50"
+            type="button"
+            onClick={handleSendToWadek}
+            disabled={hasHardConflicts || submittingWadek || summary.scheduled_classes === 0}
+            title={
+              hasHardConflicts
+                ? 'Selesaikan seluruh bentrok wajib FTI terlebih dahulu'
+                : 'Ajukan jadwal bebas bentrok ke Wakil Dekan I'
+            }
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-[#082c78] hover:bg-blue-900 rounded-xl shadow-xs transition-colors disabled:bg-slate-200 disabled:text-slate-600 disabled:cursor-not-allowed"
           >
-            <Wand2 className="w-3.5 h-3.5" />
-            Sahkan Draf Bebas Konflik
+            <Send className="w-3.5 h-3.5" />
+            <span>
+              {hasHardConflicts
+                ? 'Selesaikan Bentrok FTI'
+                : isAlreadySentToWadek
+                  ? 'Lihat di Approval Wadek I'
+                  : submittingWadek
+                    ? 'Mengirim...'
+                    : 'Kirim ke Wadek I'}
+            </span>
           </button>
         </div>
       </div>
 
-      {/* ── 4 Metric Cards ───────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Hard Constraints */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Hard Constraints</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+      {/* 3 Ringkasan Kesiapan FTI */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div
+          className={`rounded-2xl border p-4 flex items-center justify-between gap-3 ${
+            hasHardConflicts
+              ? 'bg-rose-50/70 border-rose-200'
+              : 'bg-emerald-50/70 border-emerald-200'
+          }`}
+        >
+          <div>
+            <div
+              className={`text-xs font-bold ${
+                hasHardConflicts ? 'text-rose-800' : 'text-emerald-800'
+              }`}
+            >
+              Bentrok Wajib FTI (Harus 0)
+            </div>
+            <div
+              className={`text-2xl font-black mt-0.5 tabular-nums ${
+                hasHardConflicts ? 'text-rose-950' : 'text-emerald-950'
+              }`}
+            >
+              {summary.hard_conflicts_count}
+            </div>
+            <div
+              className={`text-[11px] mt-0.5 ${
+                hasHardConflicts ? 'text-rose-700' : 'text-emerald-700'
+              }`}
+            >
+              {hasHardConflicts
+                ? 'Selesaikan sebelum kirim ke Wadek I'
+                : 'Semua aturan mutlak FTI terpenuhi'}
             </div>
           </div>
-          <div className="text-3xl font-black text-emerald-600">100%</div>
-          <div className="text-xs font-bold text-emerald-700">Bebas Bentrok</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-500">
-            <Check className="w-3 h-3 text-emerald-500" />
-            0 Konflik Mutlak
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              hasHardConflicts ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+            }`}
+          >
+            {hasHardConflicts ? <ShieldAlert className="w-5 h-5" /> : <ShieldCheck className="w-5 h-5" />}
           </div>
         </div>
 
-        {/* Soft Constraints */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Soft Constraints</span>
-            <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
-              <Activity className="w-4 h-4 text-blue-600" />
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold text-slate-600">Peringatan Ringan</div>
+            <div className="text-2xl font-black text-amber-700 mt-0.5 tabular-nums">
+              {summary.soft_warnings_count}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5">
+              Kapasitas mepet atau jeda antar-gedung
             </div>
           </div>
-          <div className="text-3xl font-black text-blue-700">92.4%</div>
-          <div className="text-xs font-bold text-blue-700">Kepatuhan</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-500">
-            <BarChart3 className="w-3 h-3 text-blue-400" />
-            Skor Penalti: –18.2
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5" />
           </div>
         </div>
 
-        {/* Peringatan Ringan */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Peringatan Ringan</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4 text-amber-600" />
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-slate-600">Kelas Terjadwal</div>
+            <div className="text-2xl font-black text-slate-900 mt-0.5 tabular-nums">
+              {summary.scheduled_classes} / {summary.total_active_classes}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
+              <span className="tabular-nums">Penalti: {summary.total_penalty}</span>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={handleDownloadSummary}
+                className="inline-flex items-center gap-1 font-bold text-blue-700 hover:underline"
+              >
+                <Download className="w-3 h-3" />
+                Berita Acara
+              </button>
             </div>
           </div>
-          <div className="text-3xl font-black text-amber-600">{unresolved.length}</div>
-          <div className="text-xs font-bold text-amber-700">Perhatian</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-500">
-            <Info className="w-3 h-3 text-amber-400" />
-            Dapat Diluluskan
-          </div>
-        </div>
-
-        {/* Total Rombel */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Rombel Kelas</span>
-            <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
-              <List className="w-4 h-4 text-slate-600" />
-            </div>
-          </div>
-          <div className="text-3xl font-black text-slate-800">318 / 318</div>
-          <div className="text-xs font-bold text-slate-700">Total Rombel Kelas</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-500">
-            <Check className="w-3 h-3 text-emerald-500" />
-            100% Terpetakan
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
       </div>
 
-      {/* ── Recommendation Banner ────────────────────────────────── */}
-      {unresolved.length > 0 && (
-        <div className="rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-              <Wand2 className="w-5 h-5 text-blue-200" />
+      {/* Bar Auto-Fix ringkas (muncul hanya jika ada bentrok wajib) */}
+      {hasHardConflicts && (
+        <div className="rounded-2xl bg-blue-50/80 border border-blue-200 px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center shrink-0">
+              <Wand2 className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-black text-white uppercase tracking-wider">Rekomendasi Penukaran Slot Otomatis oleh Engine</span>
-                <span className="px-2 py-0.5 rounded bg-emerald-500 text-white text-[9px] font-extrabold uppercase">Solusi Optimal</span>
-              </div>
-              <p className="text-xs text-blue-200 leading-relaxed max-w-2xl">
-                Engine menyarankan rotasi 2 slot ruangan pada hari Kamis antara G-203 &amp; G-183. Tindakan ini secara matematis mengeliminasi kapasitas ruang IF-202 dan melanggarak jeda mengajar Dr. Eng. Rahmad tanpa menimbulkan bentrok baru.
+              <h2 className="text-sm font-extrabold text-slate-900">
+                Rapikan bentrok secara otomatis atau pilih per jurusan di bawah
+              </h2>
+              <p className="text-xs text-slate-600">
+                Sistem dapat memindahkan kelas bentrok ke ruang dan sesi kosong terdekat di seluruh FTI.
               </p>
-              <div className="flex flex-wrap items-center gap-4 mt-2 text-[11px] text-blue-300">
-                <span>↑ Efisiensi Ruang: +6.8%</span>
-                <span>• Penuranan Beban Jalan Kaki: -350m</span>
-                <span>• Tingkat Risiko Sampingan: 0.0%</span>
-              </div>
             </div>
           </div>
           <button
-            onClick={handleAutoFix}
-            disabled={solverRunning}
-            className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold rounded-lg shadow transition-colors disabled:opacity-60"
+            type="button"
+            onClick={() => void runAutoFixValidation()}
+            disabled={isValidationLoading}
+            className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-white bg-[#082c78] hover:bg-blue-900 rounded-xl shadow-xs transition-colors disabled:opacity-60"
           >
-            {solverRunning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            Terapkan Rekomendasi Solver (Auto-Fix)
+            <Wand2 className="w-3.5 h-3.5" />
+            <span>{isValidationLoading ? 'Memperbaiki...' : 'Auto-Fix Bentrok'}</span>
           </button>
         </div>
       )}
 
-      {/* ── Tabs + Conflict List + Side Panel ────────────────────── */}
-      <div className="flex flex-col xl:flex-row gap-5">
-        {/* Left: Conflict list */}
-        <div className="flex-1 min-w-0 space-y-4">
-          {/* Tab bar */}
-          <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 pb-3">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 ${
-                  activeTab === tab.key
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {tab.label}
-                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
-                  activeTab === tab.key ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600'
-                }`}>
-                  {tab.count}
-                </span>
-              </button>
-            ))}
-            <span className="ml-auto text-[11px] text-slate-400 font-medium">
-              Menampilkan {filteredCards.length} isu non-kritis &nbsp;•&nbsp; Semester Ganjil 2024/2025
-            </span>
-          </div>
-
-          {/* Cards */}
-          {filteredCards.length === 0 ? (
-            <div className="bg-white rounded-xl border border-dashed border-slate-200 p-14 text-center">
-              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3">
-                <ShieldCheck className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-slate-800">Tidak Ada Konflik pada Kategori Ini</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Seluruh jadwal mata kuliah telah mematuhi aturan akademik dan bebas tumpang tindih.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredCards.map((card) => {
-                const col = categoryColors[card.categoryColor] ?? categoryColors['blue'];
-                const isResolved = card.isResolved;
-                return (
-                  <div
-                    key={card.id}
-                    className={`bg-white rounded-xl border shadow-sm transition-all ${
-                      isResolved
-                        ? 'border-emerald-200 bg-emerald-50/30'
-                        : col.border
+      {/* Filter Terpusat: Row 1 Tab Jurusan, Row 2 Status & Pencarian */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-3.5 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {DEPT_TABS.map((dept) => {
+              const active = deptFilter === dept.key;
+              const pendingCount = deptUnresolvedCounts[dept.key];
+              return (
+                <button
+                  key={dept.key}
+                  type="button"
+                  onClick={() => setDeptFilter(dept.key)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-2 transition-colors ${
+                    active
+                      ? 'bg-[#082c78] text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>{dept.label}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold tabular-nums ${
+                      active
+                        ? 'bg-white/20 text-white'
+                        : pendingCount === 0
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-white text-slate-700'
                     }`}
                   >
-                    <div className="p-5 space-y-4">
-                      {/* Header */}
-                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <div className={`w-9 h-9 rounded-xl ${col.iconBg} ${col.iconText} flex items-center justify-center shrink-0 mt-0.5`}>
-                            {card.icon}
-                          </div>
-                          <div className="min-w-0 flex-1 space-y-1.5">
-                            {/* Badges row */}
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${col.badge}`}>
-                                {card.categoryLabel}
-                              </span>
-                              <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                                {card.courseCode}
-                              </span>
-                              {isResolved ? (
-                                <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
-                                  <Check className="w-3 h-3" /> Toleransi Soft Constraint Diterima
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
-                                  Perlu Ditinjau
-                                </span>
-                              )}
-                            </div>
+                    {pendingCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-                            <h3 className="text-sm font-bold text-slate-800 leading-snug">{card.title}</h3>
-                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-                              <span className="flex items-center gap-1">
-                                <Users className="w-3 h-3" /> Dosen: <strong>{card.lecturer}</strong>
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Building2 className="w-3 h-3" /> {card.room}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" /> {card.day}, {card.time}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex flex-row md:flex-col gap-2 shrink-0">
-                          {isResolved ? (
-                            <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1 py-1">
-                              <CheckCircle2 className="w-4 h-4" /> Telah Diintervensi
-                            </span>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => handleResolve(card.id, card.primaryAction)}
-                                className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1.5"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                {card.primaryAction}
-                              </button>
-                              <button
-                                onClick={() => handleIgnore(card.id)}
-                                className="px-3.5 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-medium rounded-lg transition-colors text-center"
-                              >
-                                {card.secondaryAction}
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Detail box */}
-                      <div className="bg-slate-50 rounded-lg border border-slate-100 p-3.5 flex items-start gap-2.5 text-xs">
-                        <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
-                        <div>
-                          <span className="font-bold text-slate-700 block mb-0.5">Detail Anomali:</span>
-                          <span className="text-slate-600 leading-relaxed">{card.details}</span>
-                        </div>
-                      </div>
-
-                      {/* Recommendation footer */}
-                      <div className={`flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg ${
-                        isResolved ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
-                      }`}>
-                        <ArrowRight className="w-3.5 h-3.5 shrink-0" />
-                        Rekomendasi Solver: {card.recommendation}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <span className="text-[11px] text-slate-500">
+            Menampilkan catatan untuk <strong className="text-slate-700">{activeDeptMeta.label}</strong>
+          </span>
         </div>
 
-        {/* Right: Side panels */}
-        <div className="xl:w-72 space-y-4 shrink-0">
-          {/* Room utilization */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                Sebaran Utilisasi Ruang FTI Terkait
-              </h3>
-              <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                Gedung Jurusan Sistem Informasi &amp; TI
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {roomUtilData.map((room) => (
-                <div key={room.name} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-700 font-semibold truncate max-w-[70%]">{room.name}</span>
-                    <span className="text-slate-500 font-medium shrink-0">Kapasitas {room.capacity}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${utilColors[room.color]} transition-all`}
-                        style={{ width: `${room.pct}%` }}
-                      />
-                    </div>
-                    <span className={`text-xs font-black shrink-0 ${utilTextColors[room.color]}`}>
-                      {room.pct}%
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-[10px] text-slate-400 leading-relaxed border-t border-slate-100 pt-2">
-              Batas keamanan kapasitas gedung terpelihara sesuai protokol K3 UNAND.{' '}
-              <button
-                onClick={() => showToast('Membuka Heatmap Utilisasi Ruang FTI…', 'info')}
-                className="text-blue-600 hover:underline font-semibold"
-              >
-                Lihat Heatmap Menyeluruh →
-              </button>
-            </p>
-          </div>
-
-          {/* Document readiness */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-slate-500" />
-              <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Kesiapan Dokumen</h3>
-            </div>
-
-            <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-              <p className="text-xs font-bold text-emerald-800">🏁 Siap Menuju Wadek I</p>
-              <p className="text-[11px] text-emerald-700 mt-0.5">
-                3 departemen (SI, IF, TK) telah mengirimkan konfirmasi usulan final.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              {docReadiness.map((doc) => (
-                <div key={doc.label} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600 font-medium">{doc.label}</span>
-                  <span className={`font-black px-2 py-0.5 rounded text-[10px] uppercase ${docBadgeColors[doc.color]}`}>
-                    {doc.status}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { key: 'unresolved' as const, label: 'Perlu Ditangani', count: scopedCounts.unresolved },
+              { key: 'hard' as const, label: 'Bentrok Wajib', count: scopedCounts.hard },
+              { key: 'soft' as const, label: 'Ringan', count: scopedCounts.soft },
+              { key: 'resolved' as const, label: 'Selesai', count: scopedCounts.resolved },
+            ].map((tab) => {
+              const active = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors ${
+                    active
+                      ? 'bg-blue-700 text-white'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] tabular-nums ${
+                      active ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {tab.count}
                   </span>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => showToast('Mengunduh Berita Acara Validasi (PDF)…', 'info')}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Unduh Berita Acara Validasi (PDF)
-            </button>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Summary stats */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
-            <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-slate-400" />
-              Ringkasan Status
-            </h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Total Konflik Aktif</span>
-                <span className={`font-black ${unresolved.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  {unresolved.length} Peringatan
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Telah Diselesaikan</span>
-                <span className="font-black text-emerald-600">{resolved.length} Isu</span>
-              </div>
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Rombel Feasible</span>
-                <span className="font-black text-blue-700">318 / 318</span>
-              </div>
-              <div className="flex justify-between items-center py-1.5">
-                <span className="text-slate-500">Status Mitigasi</span>
-                <span className={`font-black ${unresolved.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  {unresolved.length > 0 ? 'Perlu Intervensi' : '✓ Semua Beres'}
-                </span>
-              </div>
-            </div>
+          <div className="relative w-full lg:w-72">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari MK, ruang, atau dosen..."
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+            />
           </div>
         </div>
       </div>
 
-      {/* ── All-Clear Banner ─────────────────────────────────────── */}
-      {unresolved.length === 0 && (
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl p-5 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-              <ShieldCheck className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-sm font-black">🎉 Jadwal 100% Bebas Konflik!</h3>
-              <p className="text-xs text-emerald-100 mt-0.5">
-                Seluruh 318 rombel telah divalidasi dan siap untuk persetujuan Wakil Dekan I.
-              </p>
-            </div>
+      {/* Daftar Catatan Ringkas & Bertahap (8 per tampil) */}
+      {filteredIssues.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-9 text-center space-y-3">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto">
+            <ShieldCheck className="w-6 h-6" />
           </div>
-          <button
-            onClick={() => showToast('Meneruskan draf jadwal ke Wakil Dekan I untuk persetujuan…', 'success')}
-            className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-white text-emerald-700 font-bold text-xs rounded-lg hover:bg-emerald-50 transition-colors shadow"
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            Kirim ke Approval Wadek I
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          <h3 className="text-base font-extrabold text-slate-900">
+            {activeTab === 'unresolved' && summary.unresolved_total === 0
+              ? 'Seluruh bentrok FTI telah teratasi'
+              : activeTab === 'unresolved' && deptFilter !== 'ALL' && scopedCounts.unresolved === 0
+                ? `Catatan ${activeDeptMeta.label} sudah bersih`
+                : 'Tidak ada catatan di filter ini'}
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            {summary.hard_conflicts_count === 0
+              ? 'Seluruh jadwal FTI sudah memenuhi aturan wajib dan siap diteruskan ke Wakil Dekan I.'
+              : nextPendingDept
+                ? `Masih ada ${deptUnresolvedCounts[nextPendingDept.key]} catatan aktif di jurusan ${nextPendingDept.label}.`
+                : 'Silakan pilih tab status lain atau ubah kata kunci pencarian Anda.'}
+          </p>
+          <div className="pt-1 flex flex-wrap items-center justify-center gap-2.5">
+            {nextPendingDept && activeTab === 'unresolved' && (
+              <button
+                type="button"
+                onClick={() => setDeptFilter(nextPendingDept.key)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#082c78] hover:bg-blue-900 rounded-xl transition-colors"
+              >
+                <span>Lanjut ke {nextPendingDept.label} ({deptUnresolvedCounts[nextPendingDept.key]})</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {summary.hard_conflicts_count === 0 && (
+              <button
+                type="button"
+                onClick={handleSendToWadek}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#082c78] hover:bg-blue-900 rounded-xl transition-colors"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isAlreadySentToWadek ? 'Buka Approval Wadek I' : 'Kirim ke Approval Wadek I'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setActivePage('jadwal_kuliah')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+            >
+              <span>Buka Jadwal Terpadu</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {visibleIssues.map((issue) => {
+            const isHard = issue.severity === 'hard';
+            const isBusy = busyIssueKey === issue.id;
+            const depts = getIssueDepartments(issue);
+            const deptLabel = depts.join(' ↔ ');
+            return (
+              <article
+                key={issue.id}
+                className={`bg-white rounded-2xl border p-4 space-y-3 transition-colors ${
+                  issue.is_resolved
+                    ? 'border-slate-200 bg-slate-50/40'
+                    : isHard
+                      ? 'border-rose-200'
+                      : 'border-amber-200'
+                }`}
+              >
+                {/* Baris Judul, Jurusan, & Status */}
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                        issue.is_resolved
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : isHard
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                      }`}
+                    >
+                      {issue.type_label}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                      {deptLabel}
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {issue.is_resolved
+                        ? issue.status_bentrok === 'TOLERANSI_DITERIMA'
+                          ? 'Diterima sebagai toleransi'
+                          : 'Sudah teratasi'
+                        : isHard
+                          ? 'Wajib diperbaiki'
+                          : 'Peringatan ringan'}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-extrabold text-slate-900">{issue.title}</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">{issue.description}</p>
+                </div>
+
+                {/* Perbandingan Ringkas Kelas Terlibat */}
+                {(issue.item_1 || issue.item_2) && (
+                  <div
+                    className={`rounded-xl bg-slate-50 border border-slate-200/80 grid grid-cols-1 ${
+                      issue.item_2
+                        ? 'md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200'
+                        : ''
+                    }`}
+                  >
+                    {[issue.item_1, issue.item_2].map((item, idx) => {
+                      if (!item) return null;
+                      const itemDept = resolveDepartment(item.department, item.course_code);
+                      const badgeStyle = getDepartmentBadgeStyle(itemDept);
+                      return (
+                        <div key={`${issue.id}-part-${idx}`} className="p-3 space-y-1 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-slate-900 truncate">
+                              {item.course_name} ({item.class_label})
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${badgeStyle.badge}`}
+                            >
+                              {itemDept}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 tabular-nums">
+                            <span className="inline-flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-slate-400" />
+                              {item.day}, {item.start_time}–{item.end_time}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-slate-400" />
+                              {item.room_name} ({item.student_count}/{item.room_capacity} mhs)
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Users className="w-3 h-3 text-slate-400" />
+                              {item.lecturer_names.join(', ')}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Tindak Lanjut Nyata */}
+                {!issue.is_resolved && (
+                  <div className="pt-0.5 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {issue.suggestions &&
+                        issue.suggestions.slice(0, 2).map((sug, sIdx) => (
+                          <button
+                            key={`${issue.id}-sug-${sIdx}`}
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => void handleApplySuggestion(issue.id, sug)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-colors disabled:opacity-50"
+                          >
+                            <Clock className="w-3 h-3 text-blue-700 shrink-0" />
+                            <span className="tabular-nums">{sug.label}</span>
+                          </button>
+                        ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {issue.item_1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleOpenManualEdit(
+                              issue.item_2?.jadwal_id || issue.item_1?.jadwal_id,
+                              issue.item_2?.item_id || issue.item_1?.item_id
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-[#082c78] hover:bg-blue-900 rounded-xl transition-colors"
+                        >
+                          <ArrowLeftRight className="w-3.5 h-3.5" />
+                          <span>Atur / Tukar Manual</span>
+                        </button>
+                      )}
+
+                      {issue.can_ignore && (
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => void handleAcceptSoft(issue)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors disabled:opacity-50"
+                        >
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>{isBusy ? 'Menyimpan...' : 'Terima Toleransi'}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+
+          {/* Kontrol Paginasi Ringan */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 px-1 text-xs text-slate-500">
+            <span className="tabular-nums">
+              Menampilkan <strong className="text-slate-700">{visibleIssues.length}</strong> dari{' '}
+              <strong className="text-slate-700">{filteredIssues.length}</strong> catatan (
+              {activeDeptMeta.shortLabel})
+            </span>
+
+            {visibleIssues.length < filteredIssues.length && (
+              <button
+                type="button"
+                onClick={() => setVisibleLimit((prev) => prev + PAGE_SIZE)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-colors self-start sm:self-auto"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+                <span>
+                  Tampilkan {Math.min(PAGE_SIZE, filteredIssues.length - visibleIssues.length)} berikutnya
+                </span>
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

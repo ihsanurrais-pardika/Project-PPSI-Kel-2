@@ -1,5 +1,6 @@
 import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardAdminPage } from './pages/DashboardAdminPage';
@@ -61,7 +62,7 @@ const AppContent: React.FC = () => {
       case 'optimasi_ga':
         return <GeneratorJadwalPage />;
       case 'validasi_konflik':
-        return <ValidasiKonflikPage />;
+        return currentRole === 'admin' ? <ValidasiKonflikPage /> : <DashboardAdminPage />;
       case 'approval_wadek':
         return <ApprovalWadekPage />;
       case 'jadwal_kuliah':
@@ -78,8 +79,10 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

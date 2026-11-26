@@ -104,9 +104,9 @@ const OFFICIAL_ACCOUNTS: RegisteredAccount[] = [
   },
   {
     id: 'usr-admin',
-    email: 'admin@it.unand.ac.id',
+    email: 'admin@gmail.com',
     nipOrNim: '12345678',
-    password: 'adminftiunand',
+    password: 'password_admin_anda',
     name: 'Admin',
     role: 'admin',
     roleLabel: 'Administrator Sistem FTI',
@@ -118,8 +118,8 @@ const OFFICIAL_ACCOUNTS: RegisteredAccount[] = [
 export const LoginPage: React.FC = () => {
   const { login, showToast } = useApp();
 
-  const [username, setUsername] = useState('Wadek1@it.unand.ac.id');
-  const [password, setPassword] = useState('wadek1ftiunand');
+  const [username, setUsername] = useState('admin@gmail.com');
+  const [password, setPassword] = useState('password_admin_anda');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

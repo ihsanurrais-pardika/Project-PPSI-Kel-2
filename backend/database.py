@@ -11,7 +11,30 @@ import pymysql
 import pymysql.cursors
 import bcrypt
 
-# Konfigurasi Database (Mendukung .env atau default Laragon MySQL)
+
+def _load_root_env():
+    """Memuat variabel dari file .env di root project jika belum ada di environment."""
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if not os.path.exists(env_path):
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except Exception:
+        pass
+
+
+_load_root_env()
+
+# Konfigurasi Database (Mendukung .env atau default Laragon/XAMPP MySQL)
 DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
 DB_PORT = int(os.environ.get("DB_PORT", 3306))
 DB_USER = os.environ.get("DB_USER", "root")
