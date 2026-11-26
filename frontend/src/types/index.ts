@@ -105,7 +105,11 @@ export interface ScheduleItem {
 
 export interface ConflictItem {
   id: string;
-  type: 'Kapasitas Ruang' | 'Preferensi Jadwal' | 'Jarak / Interval' | 'Bentrok Dosen' | 'Bentrok Rombel' | 'Hard Constraint' | 'Soft Constraint' | string;
+  conflictId?: number | string;
+  jenisBentrok?: string;
+  statusBentrok?: string;
+  canIgnore?: boolean;
+  type: 'Bentrok Ruang' | 'Bentrok Dosen' | 'Bentrok Mahasiswa' | 'Kapasitas Ruang' | 'Preferensi Jadwal' | 'Jarak / Interval' | 'Bentrok Rombel' | 'Hard Constraint' | 'Soft Constraint' | string;
   severity: 'hard' | 'soft' | 'warning' | 'Tinggi' | 'Sedang' | 'Rendah' | string;
   title: string;
   courseCode?: string;

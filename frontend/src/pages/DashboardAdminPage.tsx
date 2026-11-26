@@ -43,6 +43,7 @@ export const DashboardAdminPage: React.FC = () => {
   } = useApp();
 
   const unresolvedCount = conflicts.filter((c) => !c.isResolved).length;
+  const hardConflictCount = conflicts.filter((c) => !c.isResolved && c.severity === 'hard').length;
   const totalCoursesCount = backendCourses.length || 99;
   const totalClassesCount = backendClasses.length || schedule.length || 196;
   const activeRoomClassesCount = backendClasses.filter((c) => c.requires_room).length || totalClassesCount;
@@ -208,27 +209,59 @@ export const DashboardAdminPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 6. Indikator Catatan Jadwal */}
+        {/* 6. Indikator Validasi & Konflik */}
         <div
           onClick={() => setActivePage('validasi_konflik')}
           className={`p-4 rounded-2xl border shadow-xs transition-all cursor-pointer group ${
-            unresolvedCount > 0
-              ? 'bg-amber-50/70 border-amber-200 hover:bg-amber-100/70'
-              : 'bg-white border-slate-200/80 hover:border-blue-300'
+            hardConflictCount > 0
+              ? 'bg-rose-50/70 border-rose-200 hover:bg-rose-100/70'
+              : unresolvedCount > 0
+                ? 'bg-amber-50/70 border-amber-200 hover:bg-amber-100/70'
+                : 'bg-emerald-50/60 border-emerald-200 hover:bg-emerald-100/60'
           }`}
         >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Catatan Jadwal</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 group-hover:scale-105 transition-transform">
-              <AlertTriangle className="w-3.5 h-3.5" />
+            <span
+              className={`text-[10px] font-bold uppercase tracking-wider ${
+                hardConflictCount > 0 ? 'text-rose-800' : unresolvedCount > 0 ? 'text-amber-800' : 'text-emerald-800'
+              }`}
+            >
+              Validasi & Konflik
+            </span>
+            <div
+              className={`w-7 h-7 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform ${
+                hardConflictCount > 0
+                  ? 'bg-rose-100 text-rose-700'
+                  : unresolvedCount > 0
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-emerald-100 text-emerald-700'
+              }`}
+            >
+              {unresolvedCount === 0 ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
             </div>
           </div>
-          <div className="text-2xl font-black text-amber-900 tracking-tight">
-            {unresolvedCount} <span className="text-xs font-semibold text-amber-700">Catatan</span>
+          <div
+            className={`text-2xl font-black tracking-tight ${
+              hardConflictCount > 0 ? 'text-rose-900' : unresolvedCount > 0 ? 'text-amber-900' : 'text-emerald-900'
+            }`}
+          >
+            {unresolvedCount} <span className="text-xs font-semibold">{hardConflictCount > 0 ? 'Bentrok' : 'Isu'}</span>
           </div>
-          <div className="text-[11px] text-amber-800 font-medium mt-1 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            Preferensi Waktu Dosen
+          <div
+            className={`text-[11px] font-medium mt-1 flex items-center gap-1 ${
+              hardConflictCount > 0 ? 'text-rose-800' : unresolvedCount > 0 ? 'text-amber-800' : 'text-emerald-800'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                hardConflictCount > 0 ? 'bg-rose-500 animate-pulse' : unresolvedCount > 0 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+              }`}
+            />
+            {hardConflictCount > 0
+              ? `${hardConflictCount} bentrok mutlak perlu diperbaiki`
+              : unresolvedCount > 0
+                ? 'Hanya peringatan ringan tersisa'
+                : 'Semua jadwal bebas bentrok'}
           </div>
         </div>
       </div>

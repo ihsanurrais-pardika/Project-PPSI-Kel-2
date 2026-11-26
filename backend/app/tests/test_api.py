@@ -263,3 +263,61 @@ class TestSchedulingAPI:
             if swapped_ok:
                 break
         assert swapped_ok is True
+
+    def test_validation_scan_resolve_and_autofix(self):
+        # Generate small schedule in memory store
+        res_gen = client.post(
+            "/api/schedule/generate",
+            json={"max_classes": 12, "max_time_seconds": 10.0},
+        )
+        assert res_gen.status_code == 200
+
+        # 1. Scan initial validation report
+        res_val = client.get("/api/schedule/validation")
+        assert res_val.status_code == 200
+        report = res_val.json()
+        assert "summary" in report and "issues" in report
+        assert report["summary"]["scheduled_classes"] == 12
+
+        # 2. Simulate an actual overlap conflict on the in-memory schedule to verify detection & auto-fix
+        sched_items = data_store.latest_schedule_result.schedule
+        sched_items[0].day = "Senin"
+        sched_items[0].start_time = "10:00"
+        sched_items[0].end_time = "11:40"
+        sched_items[1].day = "Senin"
+        sched_items[1].start_time = "11:10"
+        sched_items[1].end_time = "12:50"
+        sched_items[1].room_id = sched_items[0].room_id
+        sched_items[1].room_name = sched_items[0].room_name
+
+        res_scan = client.post("/api/schedule/validation/scan")
+        assert res_scan.status_code == 200
+        scan_data = res_scan.json()
+        assert scan_data["summary"]["hard_conflicts_count"] >= 1
+        hard_issue = next((i for i in scan_data["issues"] if i["severity"] == "hard"), None)
+        assert hard_issue is not None
+        assert len(hard_issue["suggestions"]) >= 1
+
+        # 3. Attempting to ignore a hard conflict must return 400
+        res_ignore_hard = client.post(
+            f"/api/schedule/validation/{hard_issue['conflict_id']}/resolve",
+            json={"decision": "TOLERANSI_DITERIMA", "actor_role": "admin"},
+        )
+        assert res_ignore_hard.status_code == 400
+
+        # 4. Non-admin auto-fix must be blocked (403)
+        res_forb = client.post(
+            "/api/schedule/validation/auto-fix",
+            json={"actor_role": "dosen"},
+        )
+        assert res_forb.status_code == 403
+
+        # 5. Admin auto-fix must eliminate hard conflict and drop count to 0
+        res_fix = client.post(
+            "/api/schedule/validation/auto-fix",
+            json={"actor_role": "admin"},
+        )
+        assert res_fix.status_code == 200
+        fixed_report = res_fix.json()
+        assert fixed_report["fixed_count"] >= 1
+        assert fixed_report["summary"]["hard_conflicts_count"] == 0

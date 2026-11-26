@@ -28,6 +28,8 @@ from app.engine.manual_schedule import (
     minutes_to_hhmm,
     normalize_day_name,
     parse_time_to_minutes,
+    plan_autofix_moves,
+    scan_schedule_issues,
 )
 
 
@@ -61,6 +63,7 @@ class InMemoryDataStore:
         self.lecturers: Dict[str, Lecturer] = {}
         self.groups: Dict[str, StudentGroup] = {}
         self.latest_schedule_result: Optional[SolverResultOutput] = None
+        self.accepted_soft_keys: set[str] = set()
 
         self._init_rooms()
         self._init_slots()
@@ -543,6 +546,120 @@ class InMemoryDataStore:
             "a": a_new,
             "b": b_new,
         }
+
+    def get_validation_report(self, version_id: Optional[int] = None) -> Dict[str, Any]:
+        snapshot = self._build_schedule_snapshot()
+        for sc, it in zip(self.latest_schedule_result.schedule if self.latest_schedule_result else [], snapshot):
+            it["building"] = sc.building or f"Gedung Lt.{sc.floor}"
+            it["department"] = sc.department
+        room_rows = [
+            {
+                "id": r.id,
+                "name": r.name,
+                "capacity": r.capacity,
+                "building": f"Gedung Lt.{r.floor}",
+            }
+            for r in self.rooms
+        ]
+        scanned = scan_schedule_issues(snapshot, room_rows, include_suggestions=True)
+        formatted_issues: List[Dict[str, Any]] = []
+        for idx, iss in enumerate(scanned):
+            soft_key = f"{iss['jenis_bentrok']}:{iss['id_1']}:{iss['id_2']}"
+            is_ignored = iss["severity"] == "soft" and soft_key in self.accepted_soft_keys
+            formatted_issues.append(
+                {
+                    "id": soft_key,
+                    "conflict_id": idx + 1,
+                    "jenis_bentrok": iss["jenis_bentrok"],
+                    "type_label": iss["type_label"],
+                    "severity": iss["severity"],
+                    "title": iss["title"],
+                    "description": iss["description"],
+                    "recommendation": iss["recommendation"],
+                    "status_bentrok": "TOLERANSI_DITERIMA" if is_ignored else "TERDETEKSI",
+                    "is_resolved": is_ignored,
+                    "can_ignore": iss["severity"] == "soft",
+                    "item_1": iss["item_1"],
+                    "item_2": iss["item_2"],
+                    "suggestions": [] if is_ignored else iss["suggestions"],
+                }
+            )
+        hard_cnt = sum(1 for x in formatted_issues if x["severity"] == "hard" and not x["is_resolved"])
+        soft_cnt = sum(1 for x in formatted_issues if x["severity"] == "soft" and not x["is_resolved"])
+        resolved_cnt = sum(1 for x in formatted_issues if x["is_resolved"])
+        sched_cnt = len(snapshot)
+        total_active = len([c for c in self.classes.values() if c.requires_room]) or sched_cnt
+        res = self.latest_schedule_result
+        return {
+            "version_id": res.version_id if res else None,
+            "version_number": res.version_number if res else 1,
+            "tahap": res.tahap if res else "DRAFT_ADMIN",
+            "status_versi": res.status_versi if res else "DRAFT",
+            "approval_status": res.approval_status if res else "Menunggu Persetujuan",
+            "semester_label": res.semester_label if res else "2026/2027 Ganjil",
+            "summary": {
+                "total_active_classes": total_active,
+                "scheduled_classes": sched_cnt,
+                "unassigned_count": max(0, total_active - sched_cnt) if sched_cnt > 0 else 0,
+                "hard_conflicts_count": hard_cnt,
+                "soft_warnings_count": soft_cnt,
+                "unresolved_total": hard_cnt + soft_cnt,
+                "resolved_count": resolved_cnt,
+                "total_penalty": res.penalty_breakdown.total_weighted_penalty if res else 0,
+                "compliance_pct": round(((sched_cnt - hard_cnt) / max(1, sched_cnt)) * 100.0, 1) if sched_cnt else 100.0,
+            },
+            "issues": formatted_issues,
+        }
+
+    def resolve_validation_issue(
+        self,
+        conflict_id: str | int,
+        decision: str = "TOLERANSI_DITERIMA",
+        actor_role: Optional[str] = "admin",
+        actor_email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if actor_role and actor_role.strip().lower() not in ("admin", "superadmin"):
+            raise PermissionError("Hanya Admin yang dapat menindaklanjuti validasi konflik.")
+        report = self.get_validation_report()
+        target = next(
+            (x for x in report["issues"] if str(x["conflict_id"]) == str(conflict_id) or str(x["id"]) == str(conflict_id)),
+            None,
+        )
+        if not target:
+            raise LookupError("Catatan konflik tidak ditemukan.")
+        if target["severity"] == "hard":
+            raise ValueError("Bentrok mutlak tidak dapat diabaikan. Pindahkan atau tukar salah satu jadwal.")
+        self.accepted_soft_keys.add(str(target["id"]))
+        refreshed = self.get_validation_report()
+        refreshed["message"] = "Peringatan ringan berhasil ditandai sudah ditinjau."
+        return refreshed
+
+    def auto_fix_conflicts(
+        self,
+        version_id: Optional[int] = None,
+        actor_role: Optional[str] = "admin",
+        actor_email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if actor_role and actor_role.strip().lower() not in ("admin", "superadmin"):
+            raise PermissionError("Hanya Admin yang dapat menjalankan perbaikan otomatis.")
+        snapshot = self._build_schedule_snapshot()
+        room_rows = [{"id": r.id, "name": r.name, "capacity": r.capacity, "building": f"Gedung Lt.{r.floor}"} for r in self.rooms]
+        planned = plan_autofix_moves(snapshot, room_rows)
+        for mv in planned:
+            sc = self._find_schedule_entry(str(mv["item_id"]))
+            rm = next((r for r in self.rooms if str(r.id) == str(mv["room_id"])), None)
+            if sc and rm:
+                sc.day = mv["day"]
+                sc.start_time = mv["start_time"]
+                sc.end_time = mv["end_time"]
+                sc.room_id = rm.id
+                sc.room_name = rm.name
+                sc.room_capacity = rm.capacity
+                sc.floor = rm.floor
+        report = self.get_validation_report()
+        report["fixed_count"] = len(planned)
+        report["message"] = f"Berhasil memperbaiki {len(planned)} bentrok secara otomatis."
+        return report
 
 
 # Singleton instance

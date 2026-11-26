@@ -62,7 +62,7 @@ const AppContent: React.FC = () => {
       case 'optimasi_ga':
         return <GeneratorJadwalPage />;
       case 'validasi_konflik':
-        return <ValidasiKonflikPage />;
+        return currentRole === 'admin' ? <ValidasiKonflikPage /> : <DashboardAdminPage />;
       case 'approval_wadek':
         return <ApprovalWadekPage />;
       case 'jadwal_kuliah':

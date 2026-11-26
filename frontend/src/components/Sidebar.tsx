@@ -34,6 +34,7 @@ export const Sidebar: React.FC = () => {
   const { activePage, setActivePage, currentUser, conflicts, scheduleApprovalStatus, logout } = useApp();
 
   const unresolvedConflictsCount = conflicts.filter(c => !c.isResolved).length;
+  const hardConflictsCount = conflicts.filter(c => !c.isResolved && c.severity === 'hard').length;
 
   const adminMenuSections: MenuSection[] = [
     {
@@ -215,7 +216,11 @@ export const Sidebar: React.FC = () => {
 
                     <div className="flex items-center gap-1.5">
                       {item.alertBadge && (
-                        <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-bold">
+                        <span
+                          className={`px-1.5 py-0.2 rounded-full text-white text-[10px] font-bold tabular-nums ${
+                            hardConflictsCount > 0 ? 'bg-rose-600' : 'bg-amber-500'
+                          }`}
+                        >
                           {item.alertBadge}
                         </span>
                       )}

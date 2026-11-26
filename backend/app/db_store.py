@@ -37,6 +37,8 @@ from app.engine.manual_schedule import (
     minutes_to_hhmm,
     normalize_day_name,
     parse_time_to_minutes,
+    plan_autofix_moves,
+    scan_schedule_issues,
 )
 
 SLOT_TIMES = [
@@ -1323,7 +1325,7 @@ class MySQLDataStore:
                 k.kode_kelas, k.target_angkatan, k.estimasi_mahasiswa, k.jumlah_peserta, k.status_kelas,
                 mk.kode_mk, mk.nama_mk, mk.sks, mk.semester_paket, mk.jenis_mk,
                 pr_pengaju.kode_prodi AS dept_code,
-                r.kode_ruang, r.kapasitas,
+                r.kode_ruang, r.gedung, r.kapasitas,
                 sa.tahun_ajaran, sa.jenis_semester
             FROM jadwal_kuliah jk
             JOIN jadwal_versi jv ON jk.id_versi = jv.id_versi
@@ -1384,6 +1386,8 @@ class MySQLDataStore:
                     "room_id": str(jr["id_ruang"]),
                     "room_name": jr["kode_ruang"],
                     "room_capacity": int(jr["kapasitas"]),
+                    "building": f"Gedung {jr['gedung']}" if len(jr["gedung"]) <= 2 else jr["gedung"],
+                    "department": dept,
                     "day": normalize_day_name(jr["hari"]),
                     "start_min": parse_time_to_minutes(start_t),
                     "end_min": parse_time_to_minutes(end_t),
@@ -1621,6 +1625,429 @@ class MySQLDataStore:
                 "a": a_new,
                 "b": b_new,
             }
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    # -----------------------------------------------------------------
+    # Validasi Jadwal & Sinkronisasi Tabel `deteksi_bentrok` (UC-08)
+    # -----------------------------------------------------------------
+    def _sync_and_build_validation(self, cursor, id_versi: int) -> Dict[str, Any]:
+        cursor.execute(
+            """
+            SELECT jv.*, sa.tahun_ajaran, sa.jenis_semester
+            FROM jadwal_versi jv
+            JOIN semester_akademik sa ON jv.id_semester = sa.id_semester
+            WHERE jv.id_versi = %s LIMIT 1;
+            """,
+            (id_versi,),
+        )
+        ver = cursor.fetchone()
+        if not ver:
+            raise LookupError("Versi jadwal tidak ditemukan.")
+
+        snapshot = self._build_version_snapshot(cursor, id_versi)
+        cursor.execute("SELECT id_ruang, kode_ruang, nama_ruang, gedung, lantai, kapasitas FROM ruang ORDER BY kode_ruang ASC;")
+        room_rows = [
+            {
+                "id": str(r["id_ruang"]),
+                "name": r["kode_ruang"],
+                "capacity": int(r["kapasitas"]),
+                "building": f"Gedung {r['gedung']}" if len(r["gedung"]) <= 2 else r["gedung"],
+            }
+            for r in cursor.fetchall()
+        ]
+
+        cursor.execute("SELECT COUNT(*) AS total FROM kelas WHERE status_kelas <> 'NON_RUANG';")
+        total_active = int(cursor.fetchone()["total"])
+
+        cursor.execute(
+            """
+            SELECT po.penalti_sesudah
+            FROM proses_optimasi po
+            WHERE po.id_versi_hasil = %s
+            ORDER BY po.id_proses DESC LIMIT 1;
+            """,
+            (id_versi,),
+        )
+        proc_row = cursor.fetchone()
+        total_penalty = int(float(proc_row["penalti_sesudah"])) if proc_row and proc_row.get("penalti_sesudah") is not None else 0
+
+        scanned = scan_schedule_issues(snapshot, room_rows, include_suggestions=True)
+
+        cursor.execute(
+            """
+            SELECT db.*
+            FROM deteksi_bentrok db
+            JOIN jadwal_kuliah jk1 ON db.id_jadwal_1 = jk1.id_jadwal
+            WHERE jk1.id_versi = %s
+            ORDER BY db.id_bentrok DESC;
+            """,
+            (id_versi,),
+        )
+        db_rows = cursor.fetchall()
+
+        existing_by_key: Dict[Tuple[int, int, str], Dict[str, Any]] = {}
+        wadek_notes: List[Dict[str, Any]] = []
+        for row in db_rows:
+            j1 = int(row["id_jadwal_1"])
+            j2 = int(row["id_jadwal_2"])
+            jenis = (row["jenis_bentrok"] or "").upper()
+            if jenis == "CATATAN_WADEK1":
+                wadek_notes.append(row)
+                continue
+            lo, hi = (j1, j2) if j1 <= j2 else (j2, j1)
+            key = (lo, hi, jenis)
+            if key not in existing_by_key:
+                existing_by_key[key] = row
+
+        active_keys: Set[Tuple[int, int, str]] = set()
+        formatted_issues: List[Dict[str, Any]] = []
+
+        for issue in scanned:
+            j1 = int(issue["jadwal_id_1"])
+            j2 = int(issue["jadwal_id_2"])
+            lo, hi = (j1, j2) if j1 <= j2 else (j2, j1)
+            jenis = issue["jenis_bentrok"]
+            key = (lo, hi, jenis)
+            active_keys.add(key)
+
+            existing = existing_by_key.get(key)
+            if existing:
+                db_id = int(existing["id_bentrok"])
+                cur_status = (existing["status_bentrok"] or "TERDETEKSI").upper()
+                if cur_status == "TOLERANSI_DITERIMA" and issue["severity"] == "soft":
+                    status_bentrok = "TOLERANSI_DITERIMA"
+                    is_resolved = True
+                else:
+                    status_bentrok = "TERDETEKSI"
+                    is_resolved = False
+                    if cur_status != "TERDETEKSI":
+                        cursor.execute(
+                            "UPDATE deteksi_bentrok SET status_bentrok = 'TERDETEKSI', deskripsi = %s, selesai_pada = NULL WHERE id_bentrok = %s;",
+                            (issue["description"], db_id),
+                        )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO deteksi_bentrok (id_jadwal_1, id_jadwal_2, jenis_bentrok, deskripsi, status_bentrok)
+                    VALUES (%s, %s, %s, %s, 'TERDETEKSI');
+                    """,
+                    (lo, hi, jenis, issue["description"]),
+                )
+                db_id = int(cursor.lastrowid)
+                status_bentrok = "TERDETEKSI"
+                is_resolved = False
+
+            formatted_issues.append(
+                {
+                    "id": f"db-conf-{db_id}",
+                    "conflict_id": db_id,
+                    "jenis_bentrok": jenis,
+                    "type_label": issue["type_label"],
+                    "severity": issue["severity"],
+                    "title": issue["title"],
+                    "description": issue["description"],
+                    "recommendation": issue["recommendation"],
+                    "status_bentrok": status_bentrok,
+                    "is_resolved": is_resolved,
+                    "can_ignore": issue["severity"] == "soft",
+                    "item_1": issue["item_1"],
+                    "item_2": issue["item_2"],
+                    "suggestions": [] if is_resolved else issue["suggestions"],
+                }
+            )
+
+        # Tandai baris deteksi_bentrok lama yang sudah tidak bentrok sebagai TERATASI
+        snap_by_id = {int(s["item_id"]): s for s in snapshot}
+        resolved_history: List[Dict[str, Any]] = []
+        for key, row in existing_by_key.items():
+            if key in active_keys:
+                continue
+            db_id = int(row["id_bentrok"])
+            cur_status = (row["status_bentrok"] or "").upper()
+            if cur_status in ("TERDETEKSI", "REVISI"):
+                cursor.execute(
+                    "UPDATE deteksi_bentrok SET status_bentrok = 'TERATASI', selesai_pada = NOW() WHERE id_bentrok = %s;",
+                    (db_id,),
+                )
+            jenis = (row["jenis_bentrok"] or "").upper()
+            s1 = snap_by_id.get(int(row["id_jadwal_1"]))
+            s2 = snap_by_id.get(int(row["id_jadwal_2"])) if int(row["id_jadwal_2"]) != int(row["id_jadwal_1"]) else None
+            if s1 and len(resolved_history) < 25:
+                resolved_history.append(
+                    {
+                        "id": f"db-conf-{db_id}",
+                        "conflict_id": db_id,
+                        "jenis_bentrok": jenis,
+                        "type_label": jenis.replace("_", " ").title(),
+                        "severity": "hard" if jenis in ("ROOM", "LECTURER", "ROMBEL", "CAPACITY") else "soft",
+                        "title": f"{s1['course_name']} ({s1['class_label']})" + (f" ↔ {s2['course_name']}" if s2 else ""),
+                        "description": row.get("deskripsi") or "Bentrok telah diperbaiki.",
+                        "recommendation": "Sudah diatasi",
+                        "status_bentrok": "TERATASI",
+                        "is_resolved": True,
+                        "can_ignore": False,
+                        "item_1": {
+                            "item_id": s1["item_id"],
+                            "jadwal_id": s1["jadwal_id"],
+                            "course_code": s1["course_code"],
+                            "course_name": s1["course_name"],
+                            "class_label": s1["class_label"],
+                            "department": s1.get("department") or "SI",
+                            "day": s1["day"],
+                            "start_time": minutes_to_hhmm(s1["start_min"]),
+                            "end_time": minutes_to_hhmm(s1["end_min"]),
+                            "room_id": s1["room_id"],
+                            "room_name": s1["room_name"],
+                            "room_capacity": s1["room_capacity"],
+                            "building": s1.get("building") or "Gedung FTI",
+                            "student_count": s1["student_count"],
+                            "lecturer_names": s1["lecturer_names"],
+                            "sks": s1["sks"],
+                        },
+                        "item_2": None,
+                        "suggestions": [],
+                    }
+                )
+
+        # Sertakan catatan revisi aktif dari Wadek I jika ada
+        for wn in wadek_notes:
+            cur_st = (wn.get("status_bentrok") or "REVISI").upper()
+            is_res = cur_st in ("TERATASI", "TOLERANSI_DITERIMA")
+            s1 = snap_by_id.get(int(wn["id_jadwal_1"]))
+            formatted_issues.append(
+                {
+                    "id": f"db-conf-{int(wn['id_bentrok'])}",
+                    "conflict_id": int(wn["id_bentrok"]),
+                    "jenis_bentrok": "CATATAN_WADEK1",
+                    "type_label": "Catatan Revisi Wadek I",
+                    "severity": "soft",
+                    "title": "Catatan Revisi dari Wakil Dekan I",
+                    "description": wn.get("deskripsi") or "Harap tinjau ulang jadwal sesuai masukan Wadek I.",
+                    "recommendation": "Sesuaikan jadwal yang dimaksud lalu kirim ulang ke Wadek I.",
+                    "status_bentrok": cur_st,
+                    "is_resolved": is_res,
+                    "can_ignore": True,
+                    "item_1": {
+                        "item_id": s1["item_id"],
+                        "jadwal_id": s1["jadwal_id"],
+                        "course_code": s1["course_code"],
+                        "course_name": s1["course_name"],
+                        "class_label": s1["class_label"],
+                        "department": s1.get("department") or "SI",
+                        "day": s1["day"],
+                        "start_time": minutes_to_hhmm(s1["start_min"]),
+                        "end_time": minutes_to_hhmm(s1["end_min"]),
+                        "room_id": s1["room_id"],
+                        "room_name": s1["room_name"],
+                        "room_capacity": s1["room_capacity"],
+                        "building": s1.get("building") or "Gedung FTI",
+                        "student_count": s1["student_count"],
+                        "lecturer_names": s1["lecturer_names"],
+                        "sks": s1["sks"],
+                    } if s1 else None,
+                    "item_2": None,
+                    "suggestions": [],
+                }
+            )
+
+        all_items = formatted_issues + resolved_history
+        hard_active = sum(1 for x in formatted_issues if x["severity"] == "hard" and not x["is_resolved"])
+        soft_active = sum(1 for x in formatted_issues if x["severity"] == "soft" and not x["is_resolved"])
+        resolved_cnt = sum(1 for x in all_items if x["is_resolved"])
+        unassigned_cnt = max(0, total_active - len(snapshot))
+        sched_cnt = len(snapshot)
+        compliance = round(max(0.0, ((sched_cnt - hard_active) / max(1, sched_cnt)) * 100.0), 1)
+
+        return {
+            "version_id": id_versi,
+            "version_number": int(ver["nomor_versi"]),
+            "tahap": ver["tahap"],
+            "status_versi": ver["status_versi"],
+            "approval_status": map_status_versi_to_ui(ver["status_versi"], ver["tahap"]),
+            "semester_label": f"{ver['tahun_ajaran']} {ver['jenis_semester']}",
+            "summary": {
+                "total_active_classes": total_active or sched_cnt,
+                "scheduled_classes": sched_cnt,
+                "unassigned_count": unassigned_cnt,
+                "hard_conflicts_count": hard_active,
+                "soft_warnings_count": soft_active,
+                "unresolved_total": hard_active + soft_active,
+                "resolved_count": resolved_cnt,
+                "total_penalty": total_penalty,
+                "compliance_pct": compliance,
+            },
+            "issues": all_items,
+        }
+
+    def get_validation_report(self, version_id: Optional[int] = None) -> Dict[str, Any]:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                try:
+                    vid = self._get_target_versi_id(cursor, version_id)
+                except ValueError:
+                    return {
+                        "version_id": None,
+                        "version_number": None,
+                        "tahap": None,
+                        "status_versi": None,
+                        "approval_status": "Menunggu Persetujuan",
+                        "semester_label": "2026/2027 Ganjil",
+                        "summary": {
+                            "total_active_classes": 0,
+                            "scheduled_classes": 0,
+                            "unassigned_count": 0,
+                            "hard_conflicts_count": 0,
+                            "soft_warnings_count": 0,
+                            "unresolved_total": 0,
+                            "resolved_count": 0,
+                            "total_penalty": 0,
+                            "compliance_pct": 100.0,
+                        },
+                        "issues": [],
+                    }
+                report = self._sync_and_build_validation(cursor, vid)
+            conn.commit()
+            return report
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def resolve_validation_issue(
+        self,
+        conflict_id: int,
+        decision: str = "TOLERANSI_DITERIMA",
+        actor_role: Optional[str] = "admin",
+        actor_email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if actor_role and actor_role.strip().lower() not in ("admin", "superadmin"):
+            raise PermissionError("Hanya Admin yang dapat menindaklanjuti validasi konflik.")
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT db.*, jk.id_versi
+                    FROM deteksi_bentrok db
+                    JOIN jadwal_kuliah jk ON db.id_jadwal_1 = jk.id_jadwal
+                    WHERE db.id_bentrok = %s LIMIT 1;
+                    """,
+                    (int(conflict_id),),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    raise LookupError(f"Catatan konflik {conflict_id} tidak ditemukan.")
+
+                jenis = (row["jenis_bentrok"] or "").upper()
+                if jenis in ("ROOM", "LECTURER", "ROMBEL", "CAPACITY"):
+                    raise ValueError(
+                        "Bentrok mutlak (ruang/dosen/rombel/kapasitas) tidak dapat diabaikan. "
+                        "Gunakan pilihan perbaikan slot atau tukar jadwal."
+                    )
+
+                admin_id = self._resolve_admin_actor_id(cursor, actor_email)
+                target_status = "TERATASI" if decision == "TERATASI" else "TOLERANSI_DITERIMA"
+                cursor.execute(
+                    """
+                    UPDATE deteksi_bentrok
+                    SET status_bentrok = %s, id_penindak = %s, selesai_pada = NOW()
+                    WHERE id_bentrok = %s;
+                    """,
+                    (target_status, admin_id, int(conflict_id)),
+                )
+                report = self._sync_and_build_validation(cursor, int(row["id_versi"]))
+            conn.commit()
+            report["message"] = "Peringatan berhasil ditandai sudah ditinjau."
+            return report
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def auto_fix_conflicts(
+        self,
+        version_id: Optional[int] = None,
+        actor_role: Optional[str] = "admin",
+        actor_email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if actor_role and actor_role.strip().lower() not in ("admin", "superadmin"):
+            raise PermissionError("Hanya Admin yang dapat menjalankan perbaikan bentrok otomatis.")
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                vid = self._get_target_versi_id(cursor, version_id)
+                snapshot = self._build_version_snapshot(cursor, vid)
+                cursor.execute("SELECT id_ruang, kode_ruang, nama_ruang, gedung, lantai, kapasitas FROM ruang ORDER BY kode_ruang ASC;")
+                room_rows = [
+                    {
+                        "id": str(r["id_ruang"]),
+                        "name": r["kode_ruang"],
+                        "capacity": int(r["kapasitas"]),
+                        "building": f"Gedung {r['gedung']}" if len(r["gedung"]) <= 2 else r["gedung"],
+                    }
+                    for r in cursor.fetchall()
+                ]
+
+                planned_moves = plan_autofix_moves(snapshot, room_rows)
+                admin_id = self._resolve_admin_actor_id(cursor, actor_email)
+
+                for mv in planned_moves:
+                    jid = int(mv["jadwal_id"])
+                    cursor.execute(
+                        """
+                        UPDATE jadwal_kuliah
+                        SET hari = %s, jam_mulai = %s, jam_selesai = %s, id_ruang = %s
+                        WHERE id_jadwal = %s;
+                        """,
+                        (
+                            mv["day"],
+                            f"{mv['start_time']}:00",
+                            f"{mv['end_time']}:00",
+                            int(mv["room_id"]),
+                            jid,
+                        ),
+                    )
+                    if admin_id is not None:
+                        cursor.execute(
+                            """
+                            INSERT INTO perubahan_jadwal (
+                                id_jadwal, id_pengguna, hari_lama, jam_mulai_lama,
+                                hari_baru, jam_mulai_baru, id_ruang_lama, id_ruang_baru, alasan
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+                            """,
+                            (
+                                jid,
+                                admin_id,
+                                mv["old_day"],
+                                f"{mv['old_start']}:00",
+                                mv["day"],
+                                f"{mv['start_time']}:00",
+                                int(mv["old_room_id"]),
+                                int(mv["room_id"]),
+                                mv["reason"],
+                            ),
+                        )
+
+                report = self._sync_and_build_validation(cursor, vid)
+            conn.commit()
+            report["fixed_count"] = len(planned_moves)
+            rem = report["summary"]["hard_conflicts_count"]
+            if len(planned_moves) == 0 and rem == 0:
+                report["message"] = "Tidak ada bentrok mutlak yang perlu diperbaiki."
+            elif rem == 0:
+                report["message"] = f"Berhasil memindahkan {len(planned_moves)} jadwal. Seluruh bentrok mutlak telah teratasi."
+            else:
+                report["message"] = f"Berhasil memperbaiki {len(planned_moves)} jadwal, tersisa {rem} bentrok yang perlu ditukar manual."
+            return report
         except Exception:
             conn.rollback()
             raise

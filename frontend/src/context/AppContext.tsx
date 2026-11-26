@@ -10,6 +10,8 @@ import {
   RoomPayload,
   SolverResultResponse,
   GenerateScheduleParams,
+  ValidationReportResponse,
+  ValidationSuggestion,
 } from '../services/api';
 import { resolveDepartment } from '../utils/departmentHelper';
 import {
@@ -81,6 +83,36 @@ function mapSolverScheduleToItems(res: SolverResultResponse): ScheduleItem[] {
   }));
 }
 
+function mapValidationToConflictItems(report: ValidationReportResponse): ConflictItem[] {
+  return report.issues.map((iss) => ({
+    id: iss.id,
+    conflictId: iss.conflict_id,
+    jenisBentrok: iss.jenis_bentrok,
+    statusBentrok: iss.status_bentrok,
+    canIgnore: iss.can_ignore,
+    type: iss.type_label,
+    severity: iss.severity,
+    title: iss.title,
+    courseCode: iss.item_1?.course_code,
+    courseName: iss.item_1?.course_name,
+    classLabel: iss.item_1?.class_label,
+    lecturerName: iss.item_1?.lecturer_names?.join(', '),
+    roomName: iss.item_1?.room_name,
+    day: iss.item_1?.day,
+    timeSlot: iss.item_1 ? `${iss.item_1.start_time} - ${iss.item_1.end_time}` : undefined,
+    details: iss.description,
+    recommendation: iss.recommendation,
+    isResolved: iss.is_resolved,
+    department: iss.item_1?.department,
+    affectedCourses: iss.item_2
+      ? [
+          `${iss.item_1?.course_code || ''} ${iss.item_1?.course_name || ''}`.trim(),
+          `${iss.item_2.course_code} ${iss.item_2.course_name}`.trim(),
+        ]
+      : undefined,
+  }));
+}
+
 interface AppContextType {
   currentUser: User;
   currentRole: UserRole;
@@ -118,6 +150,14 @@ interface AppContextType {
   backendCourses: BackendCourseItem[];
   isBackendLoading: boolean;
   latestCPSATResult: SolverResultResponse | null;
+  validationReport: ValidationReportResponse | null;
+  isValidationLoading: boolean;
+  pendingManualEditScheduleId: string | null;
+  setPendingManualEditScheduleId: (id: string | null) => void;
+  fetchValidationReport: (rescan?: boolean) => Promise<ValidationReportResponse | null>;
+  resolveValidationIssueById: (conflictId: number | string, decision?: string) => Promise<boolean>;
+  runAutoFixValidation: () => Promise<boolean>;
+  applyValidationSuggestion: (sug: ValidationSuggestion) => Promise<boolean>;
   fetchBackendClasses: () => Promise<void>;
   addBackendClass: (classItem: BackendClassItem) => Promise<boolean>;
   adjustBackendClass: (classId: string, payload: AdjustClassPayload) => Promise<boolean>;
@@ -188,6 +228,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [backendCourses, setBackendCourses] = useState<BackendCourseItem[]>([]);
   const [isBackendLoading, setIsBackendLoading] = useState<boolean>(false);
   const [latestCPSATResult, setLatestCPSATResult] = useState<SolverResultResponse | null>(null);
+  const [validationReport, setValidationReport] = useState<ValidationReportResponse | null>(null);
+  const [isValidationLoading, setIsValidationLoading] = useState<boolean>(false);
+  const [pendingManualEditScheduleId, setPendingManualEditScheduleId] = useState<string | null>(null);
   
   const [scheduleApprovalStatus, setScheduleApprovalStatus] = useState<'Menunggu Persetujuan' | 'Disetujui' | 'Revisi' | 'Resmi'>('Menunggu Persetujuan');
   const [wadekRevisionNote, setWadekRevisionNote] = useState<string>('');
@@ -422,25 +465,143 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showToast(`Kelas berhasil dibatalkan. Alokasi ruangan dibebaskan kembali.`, 'info');
   };
 
+  const fetchValidationReport = async (rescan = false): Promise<ValidationReportResponse | null> => {
+    setIsValidationLoading(true);
+    try {
+      const rep = await apiService.getValidationReport(rescan);
+      setValidationReport(rep);
+      setConflicts(mapValidationToConflictItems(rep));
+      return rep;
+    } catch {
+      return null;
+    } finally {
+      setIsValidationLoading(false);
+    }
+  };
+
+  const resolveValidationIssueById = async (
+    conflictId: number | string,
+    decision = 'TOLERANSI_DITERIMA'
+  ): Promise<boolean> => {
+    if (currentRole !== 'admin') {
+      showToast('Hanya Admin yang dapat menindaklanjuti validasi konflik.', 'error');
+      return false;
+    }
+    if (backendStatus === 'connected') {
+      try {
+        const rep = await apiService.resolveValidationIssue(conflictId, {
+          decision,
+          actor_role: currentRole,
+          actor_email: currentUser.email,
+        });
+        setValidationReport(rep);
+        setConflicts(mapValidationToConflictItems(rep));
+        const log: AuditLogItem = {
+          id: `log-${Date.now()}`,
+          timestamp: 'Baru saja',
+          activity: `Tindak Lanjut Validasi Konflik (#${conflictId})`,
+          description: rep.message || 'Peringatan ringan ditandai sudah ditinjau di database.',
+          category: 'Penjadwalan',
+          actorName: currentUser.name,
+          actorRole: currentUser.role,
+          status: 'info',
+        };
+        setAuditLogs((prev) => [log, ...prev]);
+        showToast(rep.message || 'Peringatan berhasil ditandai selesai.', 'success');
+        return true;
+      } catch (err: any) {
+        showToast(err?.message || 'Gagal menyimpan tindak lanjut ke database.', 'error');
+        return false;
+      }
+    }
+    setConflicts((prev) =>
+      prev.map((c) => (String(c.conflictId ?? c.id) === String(conflictId) ? { ...c, isResolved: true } : c))
+    );
+    showToast('Peringatan ditandai selesai.', 'success');
+    return true;
+  };
+
+  const applyValidationSuggestion = async (sug: ValidationSuggestion): Promise<boolean> => {
+    if (currentRole !== 'admin') {
+      showToast('Hanya Admin yang dapat memindahkan jadwal.', 'error');
+      return false;
+    }
+    const targetItem =
+      schedule.find(
+        (s) =>
+          (sug.target_jadwal_id && s.jadwalId === sug.target_jadwal_id) ||
+          s.id === String(sug.target_item_id) ||
+          s.id === `db-sch-${sug.target_jadwal_id}`
+      ) || null;
+
+    const targetScheduleId = targetItem?.id || (sug.target_jadwal_id ? `db-sch-${sug.target_jadwal_id}` : '');
+    if (!targetScheduleId) {
+      showToast('Jadwal target tidak ditemukan di daftar aktif.', 'error');
+      return false;
+    }
+    return updateScheduleClassSksAndTime(targetScheduleId, {
+      sks: targetItem?.sks || 2,
+      day: sug.day,
+      sessionIndex: matchSessionIndex(sug.start_time, targetItem?.sessionIndex || 1),
+      startTime: sug.start_time,
+      endTime: sug.end_time,
+      roomId: sug.room_id,
+      roomName: sug.room_name,
+      reason: `Resolusi bentrok: ${sug.label}`,
+    });
+  };
+
+  const runAutoFixValidation = async (): Promise<boolean> => {
+    if (currentRole !== 'admin') {
+      showToast('Hanya Admin yang dapat menjalankan perbaikan bentrok otomatis.', 'error');
+      return false;
+    }
+    if (backendStatus !== 'connected') {
+      setConflicts((prev) => prev.map((c) => ({ ...c, isResolved: true })));
+      showToast('Auto-Fix Solver Berhasil (Mode Offline).', 'success');
+      return true;
+    }
+    setIsValidationLoading(true);
+    try {
+      const rep = await apiService.autoFixValidationConflicts({
+        version_id: latestCPSATResult?.version_id,
+        actor_role: currentRole,
+        actor_email: currentUser.email,
+      });
+      setValidationReport(rep);
+      setConflicts(mapValidationToConflictItems(rep));
+      const latestRes = await apiService.getLatestSchedule().catch(() => null);
+      if (latestRes && latestRes.schedule && latestRes.schedule.length > 0) {
+        setLatestCPSATResult(latestRes);
+        setSchedule(mapSolverScheduleToItems(latestRes));
+      }
+      const log: AuditLogItem = {
+        id: `log-${Date.now()}`,
+        timestamp: 'Baru saja',
+        activity: 'Perbaikan Bentrok Otomatis (Auto-Fix)',
+        description: rep.message || `${rep.fixed_count || 0} jadwal disesuaikan ke slot bebas bentrok.`,
+        category: 'Penjadwalan',
+        actorName: currentUser.name,
+        actorRole: currentUser.role,
+        status: rep.summary.hard_conflicts_count === 0 ? 'success' : 'warning',
+      };
+      setAuditLogs((prev) => [log, ...prev]);
+      showToast(rep.message || 'Auto-Fix selesai.', rep.summary.hard_conflicts_count === 0 ? 'success' : 'warning');
+      return true;
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal menjalankan perbaikan otomatis.', 'error');
+      return false;
+    } finally {
+      setIsValidationLoading(false);
+    }
+  };
+
   const resolveConflict = (conflictId: string) => {
-    setConflicts(conflicts.map(c => c.id === conflictId ? { ...c, isResolved: true } : c));
-    showToast('Konflik jadwal berhasil diselesaikan.', 'success');
+    void resolveValidationIssueById(conflictId);
   };
 
   const autoFixConflicts = () => {
-    setConflicts(conflicts.map(c => ({ ...c, isResolved: true })));
-    const log: AuditLogItem = {
-      id: `log-${Date.now()}`,
-      timestamp: 'Baru saja',
-      activity: 'Terapkan Rekomendasi Solver (Auto-Fix)',
-      description: 'Rotasi 2 slot ruangan berhasil diterapkan. Seluruh hard conflict teratasi 100%.',
-      category: 'Penjadwalan',
-      actorName: currentUser.name,
-      actorRole: currentUser.role,
-      status: 'success',
-    };
-    setAuditLogs([log, ...auditLogs]);
-    showToast('Auto-Fix Solver Berhasil: Seluruh konflik jadwal telah teratasi!', 'success');
+    void runAutoFixValidation();
   };
 
   const updateGAParams = (params: GAParameters) => {
@@ -714,6 +875,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       status: 'info',
     };
     setAuditLogs((prev) => [log, ...prev]);
+    if (backendStatus === 'connected') {
+      void fetchValidationReport(true);
+    }
     showToast(
       `Jadwal ${currentItem.courseName} berhasil disimpan ke ${normDay} ${params.startTime}–${params.endTime} (${newRoomCode}).`,
       'success'
@@ -816,6 +980,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       status: 'success',
     };
     setAuditLogs((prev) => [log, ...prev]);
+    if (backendStatus === 'connected') {
+      void fetchValidationReport(true);
+    }
     showToast(
       `Jadwal ${itemA.courseName} (${itemA.classLabel || 'A'}) berhasil ditukar dengan ${itemB.courseName} (${itemB.classLabel || 'B'}).`,
       'success'
@@ -826,11 +993,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const fetchBackendClasses = async () => {
     setIsBackendLoading(true);
     try {
-      const [classesData, coursesData, roomsData, latestRes] = await Promise.all([
+      const [classesData, coursesData, roomsData, latestRes, valRep] = await Promise.all([
         apiService.getClasses(),
         apiService.getCourses().catch(() => [] as BackendCourseItem[]),
         apiService.getRooms().catch(() => [] as BackendRoom[]),
         apiService.getLatestSchedule().catch(() => null),
+        apiService.getValidationReport(false).catch(() => null),
       ]);
       setBackendClasses(classesData);
       if (coursesData.length > 0) setBackendCourses(coursesData);
@@ -846,6 +1014,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (typeof latestRes.revision_note === 'string') {
           setWadekRevisionNote(latestRes.revision_note);
         }
+      }
+      if (valRep) {
+        setValidationReport(valRep);
+        setConflicts(mapValidationToConflictItems(valRep));
       }
       setBackendStatus('connected');
     } catch (err) {
@@ -981,6 +1153,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setSchedule(mapSolverScheduleToItems(res));
         setScheduleApprovalStatus(res.approval_status || 'Menunggu Persetujuan');
         setWadekRevisionNote('');
+        void fetchValidationReport(true);
         showToast(`Penjadwalan CP-SAT tersimpan ke DB (Versi #${res.version_number || 1}): ${res.scheduled_classes} kelas dalam ${res.wall_time_seconds} detik!`, 'success');
       } else {
         showToast(`Penyusunan jadwal memerlukan penyesuaian batasan atau kapasitas ruang (Status: ${res.status}).`, 'warning');
@@ -1021,6 +1194,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         backendCourses,
         isBackendLoading,
         latestCPSATResult,
+        validationReport,
+        isValidationLoading,
+        pendingManualEditScheduleId,
+        setPendingManualEditScheduleId,
+        fetchValidationReport,
+        resolveValidationIssueById,
+        runAutoFixValidation,
+        applyValidationSuggestion,
         fetchBackendClasses,
         addBackendClass,
         adjustBackendClass,

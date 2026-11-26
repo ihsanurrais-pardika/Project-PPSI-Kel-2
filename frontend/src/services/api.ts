@@ -172,6 +172,80 @@ export interface WorkflowResponse {
   revision_note?: string;
 }
 
+export interface ValidationScheduleBrief {
+  item_id: number | string;
+  jadwal_id?: number;
+  course_code: string;
+  course_name: string;
+  class_label: string;
+  department: string;
+  day: string;
+  start_time: string;
+  end_time: string;
+  room_id: string;
+  room_name: string;
+  room_capacity: number;
+  building: string;
+  student_count: number;
+  lecturer_names: string[];
+  sks: number;
+}
+
+export interface ValidationSuggestion {
+  action_type: 'move' | 'swap';
+  target_item_id: number | string;
+  target_jadwal_id?: number;
+  course_name: string;
+  class_label: string;
+  day: string;
+  start_time: string;
+  end_time: string;
+  room_id: string;
+  room_name: string;
+  room_capacity: number;
+  label: string;
+}
+
+export interface ValidationIssueDTO {
+  id: string;
+  conflict_id: number;
+  jenis_bentrok: string;
+  type_label: string;
+  severity: 'hard' | 'soft';
+  title: string;
+  description: string;
+  recommendation: string;
+  status_bentrok: string;
+  is_resolved: boolean;
+  can_ignore: boolean;
+  item_1: ValidationScheduleBrief | null;
+  item_2: ValidationScheduleBrief | null;
+  suggestions: ValidationSuggestion[];
+}
+
+export interface ValidationReportResponse {
+  version_id: number | null;
+  version_number: number | null;
+  tahap: string | null;
+  status_versi: string | null;
+  approval_status: string;
+  semester_label: string;
+  message?: string;
+  fixed_count?: number;
+  summary: {
+    total_active_classes: number;
+    scheduled_classes: number;
+    unassigned_count: number;
+    hard_conflicts_count: number;
+    soft_warnings_count: number;
+    unresolved_total: number;
+    resolved_count: number;
+    total_penalty: number;
+    compliance_pct: number;
+  };
+  issues: ValidationIssueDTO[];
+}
+
 export const apiService = {
   async checkHealth(): Promise<{ status: string; engine: string; database?: string; total_classes: number; total_rooms: number }> {
     const res = await fetch(`${API_BASE_URL}/api/health`);
@@ -373,6 +447,43 @@ export const apiService = {
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(await parseError(res, 'Gagal menukar posisi dua jadwal'));
+    return res.json();
+  },
+
+  async getValidationReport(rescan = false, versionId?: number): Promise<ValidationReportResponse> {
+    const query = versionId ? `?version_id=${versionId}` : '';
+    const url = rescan
+      ? `${API_BASE_URL}/api/schedule/validation/scan${query}`
+      : `${API_BASE_URL}/api/schedule/validation${query}`;
+    const res = await fetch(url, { method: rescan ? 'POST' : 'GET' });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat hasil validasi bentrok'));
+    return res.json();
+  },
+
+  async resolveValidationIssue(
+    conflictId: number | string,
+    payload: { decision?: string; actor_role?: string; actor_email?: string }
+  ): Promise<ValidationReportResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/schedule/validation/${conflictId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menandai peringatan selesai'));
+    return res.json();
+  },
+
+  async autoFixValidationConflicts(payload: {
+    version_id?: number;
+    actor_role?: string;
+    actor_email?: string;
+  }): Promise<ValidationReportResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/schedule/validation/auto-fix`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menjalankan perbaikan otomatis'));
     return res.json();
   },
 };
