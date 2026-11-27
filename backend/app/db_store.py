@@ -3052,6 +3052,7 @@ class MySQLDataStore:
                             "class_label": slot_cls.get("class_label"),
                             "department": slot_cls.get("department"),
                             "lecturer_name": slot_cls.get("lecturer_name"),
+                            "lecturer_names": list(slot_cls.get("lecturer_names") or []),
                             "enrolled_count": enrolled,
                             "capacity": cap,
                         })
@@ -3070,6 +3071,7 @@ class MySQLDataStore:
                             "class_label": None,
                             "department": None,
                             "lecturer_name": None,
+                            "lecturer_names": [],
                             "enrolled_count": None,
                             "capacity": cap,
                         })
@@ -3315,6 +3317,7 @@ class MySQLDataStore:
                             "class_label": r["kode_kelas"],
                             "department": r["dept_code"] or "FTI",
                             "lecturer_name": ", ".join(lects) if lects else "Dosen Pengampu",
+                            "lecturer_names": list(lects),
                             "enrolled": int(r["enrolled"] or 40),
                             "capacity": int(r["kapasitas"] or 45),
                         })

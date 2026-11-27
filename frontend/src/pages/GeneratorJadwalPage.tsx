@@ -154,9 +154,6 @@ export const GeneratorJadwalPage: React.FC = () => {
               Penjadwalan Otomatis FTI UNAND
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight mt-1">
-            Buat Jadwal Perkuliahan Otomatis (CP-SAT Solver)
-          </h1>
           <p className="text-sm text-slate-500 mt-0.5 max-w-4xl">
             Sistem penjadwalan presisi matematis mematuhi 7 Batasan Keras mutlak (bebas bentrok ruang, dosen, & rombel mahasiswa) dan meminimalkan 4 Batasan Lunak (jeda mahasiswa, preferensi dosen, sebaran mengajar, dan efisiensi kursi).
           </p>

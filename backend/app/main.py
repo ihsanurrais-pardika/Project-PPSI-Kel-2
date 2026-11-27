@@ -870,3 +870,59 @@ def auto_fix_validation_conflicts(req: AutoFixValidationRequest = AutoFixValidat
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+
+
+# -------------------------------------------------------------
+# Jadwal per Pertemuan & Jadwal Pengganti (tabel pertemuan_kuliah)
+# -------------------------------------------------------------
+from app import pertemuan_service  # noqa: E402
+
+
+class PenggantiPayload(BaseModel):
+    email: str
+    id_jadwal: int
+    pertemuan_ke: int
+    tanggal: str
+    jam_mulai: str
+    jam_selesai: str
+    id_ruang: int
+    keterangan: Optional[str] = None
+
+
+@app.get("/api/pertemuan/jadwal-saya")
+def get_jadwal_saya(email: str = Query(..., description="Email akun dosen/mahasiswa")):
+    try:
+        return pertemuan_service.get_jadwal_saya(email)
+    except pertemuan_service.PertemuanError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@app.get("/api/pertemuan/ruang-tersedia")
+def get_ruang_tersedia(
+    tanggal: str,
+    jam_mulai: str,
+    jam_selesai: str,
+    min_kapasitas: int = 0,
+    id_jadwal: Optional[int] = None,
+    pertemuan_ke: Optional[int] = None,
+):
+    try:
+        return pertemuan_service.get_ruang_tersedia(tanggal, jam_mulai, jam_selesai, min_kapasitas, id_jadwal, pertemuan_ke)
+    except pertemuan_service.PertemuanError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@app.post("/api/pertemuan/pengganti")
+def simpan_jadwal_pengganti(req: PenggantiPayload):
+    try:
+        return pertemuan_service.simpan_pengganti(req.model_dump())
+    except pertemuan_service.PertemuanError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@app.get("/api/pertemuan/okupansi")
+def get_okupansi_tanggal(tanggal: str):
+    try:
+        return pertemuan_service.get_okupansi_tanggal(tanggal)
+    except pertemuan_service.PertemuanError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

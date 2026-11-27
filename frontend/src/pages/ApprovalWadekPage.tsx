@@ -79,13 +79,6 @@ export const ApprovalWadekPage: React.FC = () => {
             <span>/</span>
             <span className="font-semibold text-blue-700">Review &amp; Approval Jadwal</span>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-6 bg-blue-700 rounded-full" />
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-              Review &amp; Persetujuan Draf Jadwal Perkuliahan
-            </h1>
-          </div>
           <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">
             Verifikasi kepatuhan <strong>hard constraint</strong> akademik, optimasi beban pengajaran dosen lintas prodi, dan otoritas pengesahan Surat Keputusan (SK) jadwal perkuliahan semester ganjil Fakultas Teknologi Informasi.
           </p>

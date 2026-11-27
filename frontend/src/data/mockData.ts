@@ -158,7 +158,7 @@ export const mockRooms: Room[] = [
     isAccessible: true,
     status: 'Siap Digunakan',
     priorityDepartment: 'Sistem Informasi',
-    facilities: ['2 AC', 'Smart TV 75"', 'Sound System', 'Wi-Fi Eduroam', 'Akses Tangga Gedung (Timur)'],
+    facilities: ['2 AC', 'Smart TV 75"', 'Sound System', 'Wi-Fi Eduroam', 'Akses Tangga Gedung'],
   },
   {
     id: 'r-204',
@@ -172,7 +172,7 @@ export const mockRooms: Room[] = [
     isAccessible: true,
     status: 'Siap Digunakan',
     priorityDepartment: 'Sistem Informasi',
-    facilities: ['2 AC', 'Proyektor', 'Whiteboard Magnetic', 'Wi-Fi Eduroam', 'Akses Tangga Gedung (Timur)'],
+    facilities: ['2 AC', 'Proyektor', 'Whiteboard Magnetic', 'Wi-Fi Eduroam', 'Akses Tangga Gedung'],
   },
   {
     id: 'r-205',
@@ -214,7 +214,7 @@ export const mockRooms: Room[] = [
     isAccessible: false,
     status: 'Siap Digunakan',
     priorityDepartment: 'Teknik Komputer',
-    facilities: ['35 Meja Praktikum Modul Workbench', 'Oscilloscope', 'Kit IoT ESP32', 'Smart TV', 'Soldering Station', 'Akses Tangga Barat'],
+    facilities: ['35 Meja Praktikum Modul Workbench', 'Oscilloscope', 'Kit IoT ESP32', 'Smart TV', 'Soldering Station', 'Akses Tangga Gedung'],
   },
   {
     id: 'r-301',

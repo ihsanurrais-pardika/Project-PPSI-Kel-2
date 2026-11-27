@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Bell, LogOut, ChevronDown, User, ShieldCheck } from 'lucide-react';
+import { Bell, LogOut, ChevronDown, User, ShieldCheck } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const { activePage, currentUser, conflicts, setActivePage, logout, latestCPSATResult } = useApp();
@@ -16,9 +16,9 @@ export const Navbar: React.FC = () => {
       case 'jadwal_kuliah':
         return {
           title: currentUser.role === 'dosen'
-            ? 'Jadwal Mengajar Pribadi'
+            ? 'Jadwal Mengajar'
             : currentUser.role === 'mahasiswa'
-            ? 'Jadwal Kuliah Pribadi (KRS)'
+            ? 'Jadwal Kuliah'
             : 'Jadwal Perkuliahan Terpadu',
           category: currentUser.role === 'dosen' || currentUser.role === 'mahasiswa' ? 'Portal Akademik Pribadi' : 'Penjadwalan Terpadu'
         };
@@ -38,7 +38,7 @@ export const Navbar: React.FC = () => {
             ? 'Cari Ruang Kosong & Pengganti'
             : currentUser.role === 'mahasiswa'
             ? 'Cari Ruang Kosong & Belajar'
-            : 'Utilisasi Heatmap Mingguan',
+            : 'Utilisasi Ruang',
           category: 'Manajemen & Layanan Ruang'
         };
       case 'kebutuhan_departemen':
@@ -97,19 +97,6 @@ export const Navbar: React.FC = () => {
 
       {/* Right controls */}
       <div className="flex items-center gap-3">
-        {/* Search bar */}
-        <div className="relative hidden md:block">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Cari ruang, mata kuliah, dosen..."
-            className="w-56 pl-8 pr-12 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-blue-500 focus:outline-hidden transition-all placeholder:text-slate-400"
-          />
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 bg-slate-200/70 rounded">
-            Ctrl+K
-          </span>
-        </div>
-
         {/* Academic year indicator */}
         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-900 text-xs font-semibold">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />

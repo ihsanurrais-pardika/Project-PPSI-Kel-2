@@ -84,6 +84,7 @@ class RoomSlotDetail(BaseModel):
     class_label: Optional[str] = None
     department: Optional[str] = None
     lecturer_name: Optional[str] = None
+    lecturer_names: List[str] = []
     enrolled_count: Optional[int] = None
     capacity: Optional[int] = None
 

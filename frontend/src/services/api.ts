@@ -718,6 +718,55 @@ export const apiService = {
     return res.json();
   },
 
+  // ── Jadwal per pertemuan & jadwal pengganti (tabel pertemuan_kuliah) ──────
+  async getJadwalSaya(email: string): Promise<JadwalSayaResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/pertemuan/jadwal-saya?email=${encodeURIComponent(email)}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat jadwal pribadi'));
+    return res.json();
+  },
+
+  async getRuangTersedia(params: {
+    tanggal: string;
+    jam_mulai: string;
+    jam_selesai: string;
+    min_kapasitas?: number;
+    id_jadwal?: number;
+    pertemuan_ke?: number;
+  }): Promise<RuangTersediaResponse> {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+    });
+    const res = await fetch(`${API_BASE_URL}/api/pertemuan/ruang-tersedia?${q.toString()}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal mencari ruang kosong'));
+    return res.json();
+  },
+
+  async getOkupansiTanggal(tanggal: string): Promise<OkupansiTanggalResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/pertemuan/okupansi?tanggal=${encodeURIComponent(tanggal)}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat okupansi ruang'));
+    return res.json();
+  },
+
+  async simpanJadwalPengganti(payload: {
+    email: string;
+    id_jadwal: number;
+    pertemuan_ke: number;
+    tanggal: string;
+    jam_mulai: string;
+    jam_selesai: string;
+    id_ruang: number;
+    keterangan?: string;
+  }): Promise<{ message: string; kode_ruang: string; tanggal: string; pertemuan_ke: number }> {
+    const res = await fetch(`${API_BASE_URL}/api/pertemuan/pengganti`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal menyimpan jadwal pengganti'));
+    return res.json();
+  },
+
   async getRoomStatistics(params?: {
     version_id?: number;
     day?: string;
@@ -751,6 +800,7 @@ export interface RoomSlotDetail {
   class_label?: string;
   department?: string;
   lecturer_name?: string;
+  lecturer_names?: string[];
   enrolled_count?: number;
   capacity?: number;
 }
@@ -821,4 +871,82 @@ export interface RoomStatisticsResponse {
   peak_hours: PeakHourStat[];
   semester_label?: string;
   approval_status?: string;
+}
+
+// ── Jadwal per pertemuan ─────────────────────────────────────────────────────
+export interface PertemuanItem {
+  pertemuan_ke: number;
+  tanggal_asli: string;
+  tanggal: string;
+  hari: string;
+  jam_mulai: string;
+  jam_selesai: string;
+  id_ruang: number;
+  kode_ruang: string;
+  status: string;
+  is_pengganti: boolean;
+  keterangan?: string | null;
+}
+
+export interface JadwalSayaKelas {
+  id_jadwal: number;
+  id_kelas: number;
+  course_code: string;
+  course_name: string;
+  class_label: string;
+  sks: number;
+  semester: number;
+  department: string;
+  day: string;
+  start_time: string;
+  end_time: string;
+  room_id: number;
+  room_code: string;
+  building: string;
+  floor: number;
+  capacity: number;
+  enrolled: number;
+  lecturers: string[];
+  current_meeting: number;
+  total_meetings: number;
+  meetings: PertemuanItem[];
+}
+
+export interface JadwalSayaResponse {
+  role: string;
+  user_name: string;
+  semester: { label: string; tgl_mulai: string; tgl_selesai: string } | null;
+  today?: string;
+  classes: JadwalSayaKelas[];
+}
+
+export interface RuangTersediaResponse {
+  tanggal: string;
+  hari: string;
+  jam_mulai: string;
+  jam_selesai: string;
+  rooms: { id_ruang: number; kode_ruang: string; gedung: string; lantai: number; kapasitas: number }[];
+}
+
+export interface OkupansiItem {
+  id_jadwal: number;
+  pertemuan_ke: number;
+  tanggal_asli: string;
+  is_pengganti: boolean;
+  id_ruang: number;
+  kode_ruang: string;
+  jam_mulai: string;
+  jam_selesai: string;
+  course_code: string;
+  course_name: string;
+  class_label: string;
+  department: string;
+  enrolled: number;
+  lecturers: string[];
+}
+
+export interface OkupansiTanggalResponse {
+  tanggal: string;
+  hari: string;
+  items: OkupansiItem[];
 }

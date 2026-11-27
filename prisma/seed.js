@@ -346,11 +346,6 @@ async function main() {
     { kode_ruang: 'G-2.2', nama_ruang: '2.2', gedung: 'G', lantai: 2, kapasitas: 55 },
     { kode_ruang: 'G-2.3', nama_ruang: '2.3', gedung: 'G', lantai: 2, kapasitas: 60 },
     { kode_ruang: 'G-2.4', nama_ruang: '2.4', gedung: 'G', lantai: 2, kapasitas: 60 },
-    { kode_ruang: 'LAB-SW-1', nama_ruang: 'Lab Software 1 (Lab Terpadu)', gedung: 'LAB', lantai: 1, kapasitas: 50 },
-    { kode_ruang: 'LAB-SW-2', nama_ruang: 'Lab Software 2', gedung: 'LAB', lantai: 1, kapasitas: 50 },
-    { kode_ruang: 'LAB-DASAR', nama_ruang: 'Lab Komputer Dasar FTI', gedung: 'LAB', lantai: 1, kapasitas: 60 },
-    { kode_ruang: 'LAB-HW-1', nama_ruang: 'Lab Hardware & IoT', gedung: 'LAB', lantai: 3, kapasitas: 50 },
-    { kode_ruang: 'LAB-JARKOM', nama_ruang: 'Lab Jaringan & Cloud', gedung: 'LAB', lantai: 3, kapasitas: 50 },
   ];
 
   for (const r of roomsSeed) {
