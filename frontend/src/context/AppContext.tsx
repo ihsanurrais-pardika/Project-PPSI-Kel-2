@@ -5,8 +5,12 @@ import {
   apiService,
   BackendClassItem,
   BackendCourseItem,
+  BackendLecturer,
   BackendRoom,
   AdjustClassPayload,
+  CreateOfferingPayload,
+  CreateOfferingResponse,
+  ActiveSemesterInfo,
   RoomPayload,
   SolverResultResponse,
   GenerateScheduleParams,
@@ -148,6 +152,8 @@ interface AppContextType {
   backendStatus: 'connected' | 'offline' | 'checking';
   backendClasses: BackendClassItem[];
   backendCourses: BackendCourseItem[];
+  backendLecturers: BackendLecturer[];
+  activeSemesterInfo: ActiveSemesterInfo | null;
   isBackendLoading: boolean;
   latestCPSATResult: SolverResultResponse | null;
   validationReport: ValidationReportResponse | null;
@@ -161,8 +167,12 @@ interface AppContextType {
   fetchBackendClasses: () => Promise<void>;
   addBackendClass: (classItem: BackendClassItem) => Promise<boolean>;
   adjustBackendClass: (classId: string, payload: AdjustClassPayload) => Promise<boolean>;
+  cancelBackendClass: (classId: string, reason: string) => Promise<boolean>;
+  restoreBackendClass: (classId: string) => Promise<boolean>;
+  createDepartemenOffering: (payload: CreateOfferingPayload) => Promise<CreateOfferingResponse | null>;
   deleteBackendClass: (classId: string) => Promise<boolean>;
   resetBackendClassesToCSV: () => Promise<void>;
+  refreshRooms: () => Promise<boolean>;
   addBackendRoom: (payload: RoomPayload) => Promise<boolean>;
   updateBackendRoom: (roomId: string, payload: RoomPayload) => Promise<boolean>;
   deleteBackendRoom: (roomId: string) => Promise<boolean>;
@@ -226,6 +236,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [backendStatus, setBackendStatus] = useState<'connected' | 'offline' | 'checking'>('checking');
   const [backendClasses, setBackendClasses] = useState<BackendClassItem[]>([]);
   const [backendCourses, setBackendCourses] = useState<BackendCourseItem[]>([]);
+  const [backendLecturers, setBackendLecturers] = useState<BackendLecturer[]>([]);
+  const [activeSemesterInfo, setActiveSemesterInfo] = useState<ActiveSemesterInfo | null>(null);
   const [isBackendLoading, setIsBackendLoading] = useState<boolean>(false);
   const [latestCPSATResult, setLatestCPSATResult] = useState<SolverResultResponse | null>(null);
   const [validationReport, setValidationReport] = useState<ValidationReportResponse | null>(null);
@@ -330,7 +342,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (newRole === 'wadek1') {
       setActivePage('approval_wadek');
     } else if (newRole === 'dosen' || newRole === 'mahasiswa') {
-      setActivePage('portal_akademik');
+      setActivePage('jadwal_kuliah');
     } else if (newRole.startsWith('departemen')) {
       setActivePage('kebutuhan_departemen');
     } else {
@@ -993,15 +1005,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const fetchBackendClasses = async () => {
     setIsBackendLoading(true);
     try {
-      const [classesData, coursesData, roomsData, latestRes, valRep] = await Promise.all([
+      const [classesData, coursesData, lecturersData, semInfo, roomsData, latestRes, valRep] = await Promise.all([
         apiService.getClasses(),
         apiService.getCourses().catch(() => [] as BackendCourseItem[]),
+        apiService.getLecturers().catch(() => [] as BackendLecturer[]),
+        apiService.getActiveSemester().catch(() => null),
         apiService.getRooms().catch(() => [] as BackendRoom[]),
         apiService.getLatestSchedule().catch(() => null),
         apiService.getValidationReport(false).catch(() => null),
       ]);
       setBackendClasses(classesData);
       if (coursesData.length > 0) setBackendCourses(coursesData);
+      if (lecturersData.length > 0) setBackendLecturers(lecturersData);
+      if (semInfo) setActiveSemesterInfo(semInfo);
       if (roomsData.length > 0) {
         setRooms(roomsData.map(mapBackendRoomToRoom));
       }
@@ -1042,13 +1058,61 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const adjustBackendClass = async (classId: string, payload: AdjustClassPayload): Promise<boolean> => {
     try {
-      const updated = await apiService.adjustClass(classId, payload);
+      const updated = await apiService.adjustClass(classId, {
+        ...payload,
+        actor_email: payload.actor_email || currentUser.email,
+      });
       setBackendClasses(prev => prev.map(c => c.id === classId ? updated : c));
       showToast(`Kelas ${updated.course_code} (${updated.class_label}) berhasil disesuaikan!`, 'success');
       return true;
     } catch (err: any) {
       showToast(`Gagal menyesuaikan kelas: ${err.message}`, 'error');
       return false;
+    }
+  };
+
+  const cancelBackendClass = async (classId: string, reason: string): Promise<boolean> => {
+    try {
+      const cancelled = await apiService.cancelClassSoft(classId, reason, currentUser.email);
+      setBackendClasses(prev => prev.filter(c => c.id !== classId));
+      showToast(`Kelas ${cancelled.id} dibatalkan dan dicatat ke log perubahan.`, 'info');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal membatalkan kelas: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const restoreBackendClass = async (classId: string): Promise<boolean> => {
+    try {
+      const restored = await apiService.restoreClass(classId, currentUser.email);
+      setBackendClasses(prev => {
+        const exists = prev.some(c => c.id === restored.id);
+        return exists ? prev.map(c => (c.id === restored.id ? restored : c)) : [...prev, restored];
+      });
+      showToast(`Kelas ${restored.id} berhasil diaktifkan kembali.`, 'success');
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal memulihkan kelas: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  const createDepartemenOffering = async (payload: CreateOfferingPayload): Promise<CreateOfferingResponse | null> => {
+    try {
+      const res = await apiService.createOffering({
+        ...payload,
+        actor_email: payload.actor_email || currentUser.email,
+      });
+      await fetchBackendClasses();
+      showToast(res.message, 'success');
+      if (res.warnings && res.warnings.length > 0) {
+        setTimeout(() => showToast(res.warnings[0], 'warning'), 400);
+      }
+      return res;
+    } catch (err: any) {
+      showToast(`Gagal menyimpan usulan MK: ${err.message}`, 'error');
+      return null;
     }
   };
 
@@ -1074,6 +1138,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       showToast(`Gagal reset ke CSV: ${err.message}`, 'error');
     } finally {
       setIsBackendLoading(false);
+    }
+  };
+
+  // Muat ulang daftar ruang langsung dari database (tanpa data contoh)
+  const refreshRooms = async (): Promise<boolean> => {
+    try {
+      const data = await apiService.getRooms();
+      setRooms(data.map(mapBackendRoomToRoom));
+      return true;
+    } catch (err) {
+      console.warn('Gagal memuat ruang dari database:', err);
+      return false;
     }
   };
 
@@ -1192,6 +1268,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         backendStatus,
         backendClasses,
         backendCourses,
+        backendLecturers,
+        activeSemesterInfo,
         isBackendLoading,
         latestCPSATResult,
         validationReport,
@@ -1205,8 +1283,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchBackendClasses,
         addBackendClass,
         adjustBackendClass,
+        cancelBackendClass,
+        restoreBackendClass,
+        createDepartemenOffering,
         deleteBackendClass,
         resetBackendClassesToCSV,
+        refreshRooms,
         addBackendRoom,
         updateBackendRoom,
         deleteBackendRoom,

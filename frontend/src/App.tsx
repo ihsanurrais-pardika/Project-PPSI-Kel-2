@@ -2,6 +2,7 @@ import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
+import { Toast } from './components/Toast';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardAdminPage } from './pages/DashboardAdminPage';
 import { FormUsulanMKPage } from './pages/FormUsulanMKPage';
@@ -16,6 +17,7 @@ import { PortalAkademikPage } from './pages/PortalAkademikPage';
 import { UtilisasiHeatmapPage } from './pages/UtilisasiHeatmapPage';
 import { WadekWorkspacePage } from './pages/WadekWorkspacePage';
 import { DepartemenWorkspacePage } from './pages/DepartemenWorkspacePage';
+import { PengaturanSistemPage } from './pages/PengaturanSistemPage';
 
 const AppContent: React.FC = () => {
   const { isLoggedIn, activePage, currentRole } = useApp();
@@ -69,6 +71,8 @@ const AppContent: React.FC = () => {
         return <JadwalTerpaduPage />;
       case 'portal_akademik':
         return <PortalAkademikPage />;
+      case 'pengaturan':
+        return <PengaturanSistemPage />;
       default:
         return <DashboardAdminPage />;
     }
@@ -82,6 +86,7 @@ export default function App() {
     <ErrorBoundary>
       <AppProvider>
         <AppContent />
+        <Toast />
       </AppProvider>
     </ErrorBoundary>
   );

@@ -1,24 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   BookOpen,
   Users,
-  UserCheck,
-  CheckCircle2,
-  Send,
   Plus,
   Search,
-  Filter,
   FileSpreadsheet,
   FileText,
-  ChevronRight,
-  Eye,
-  Edit2,
   Trash2,
-  Calendar,
-  Clock,
-  AlertCircle,
-  HelpCircle,
   Sliders,
   X,
   RefreshCw,
@@ -27,35 +16,84 @@ import {
   Check,
   Download,
   Tag,
+  AlertTriangle,
+  ChevronDown,
+  MoreVertical,
+  Layers,
+  List,
+  History,
 } from 'lucide-react';
-import { BackendClassItem, AdjustClassPayload } from '../services/api';
+import { apiService, BackendClassItem, AdjustClassPayload, DepartemenLogItem } from '../services/api';
+import { mockLecturers } from '../data/mockData';
+
+const MIN_CLASS_QUOTA = 15;
 
 export const KebutuhanDepartemenPage: React.FC = () => {
   const {
     backendClasses,
     backendCourses,
+    backendLecturers,
+    activeSemesterInfo,
     backendStatus,
     addBackendClass,
     adjustBackendClass,
-    deleteBackendClass,
+    cancelBackendClass,
+    restoreBackendClass,
     resetBackendClassesToCSV,
     setActivePage,
     showToast,
   } = useApp();
 
+  const minQuota = activeSemesterInfo?.kuota_minimum_kelas ?? MIN_CLASS_QUOTA;
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
+  const [deptLogs, setDeptLogs] = useState<DepartemenLogItem[]>([]);
+  const [cancelledClasses, setCancelledClasses] = useState<BackendClassItem[]>([]);
+  const [showCancelledPanel, setShowCancelledPanel] = useState(false);
+
   const [activeDeptTab, setActiveDeptTab] = useState<'SI' | 'IF' | 'TK'>('SI');
   const [selectedPrefixFilter, setSelectedPrefixFilter] = useState<string>('all');
+
+  const loadCancelledAndLogs = async () => {
+    if (backendStatus !== 'connected') return;
+    try {
+      const [allCls, logs] = await Promise.all([
+        apiService.getClasses({ department: activeDeptTab, include_cancelled: true }).catch(() => []),
+        apiService.getDepartemenLogs(activeDeptTab, 50).catch(() => []),
+      ]);
+      setCancelledClasses(allCls.filter((c) => c.status_kelas === 'DIBATALKAN'));
+      setDeptLogs(logs);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    void loadCancelledAndLogs();
+  }, [backendStatus, activeDeptTab]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
   const [selectedRoomType, setSelectedRoomType] = useState<string>('all');
   const [selectedRequiresRoom, setSelectedRequiresRoom] = useState<string>('all');
+  const [belowQuotaOnly, setBelowQuotaOnly] = useState(false);
+  const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped');
+  const [expandedCourses, setExpandedCourses] = useState<Record<string, boolean>>({});
 
-  // Modal for class adjustment (F-14 / F-15)
+  // Header dropdowns & safety modals
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+
+  // Modal for class adjustment
   const [editingClass, setEditingClass] = useState<BackendClassItem | null>(null);
   const [editForm, setEditForm] = useState<AdjustClassPayload>({});
 
+  // Modal for safe class cancellation
+  const [cancelingClass, setCancelingClass] = useState<BackendClassItem | null>(null);
+  const [cancelReason, setCancelReason] = useState('Kuota peserta di bawah batas minimum kelas');
+
   // Modal for adding a new class
   const [isAddClassModalOpen, setIsAddClassModalOpen] = useState(false);
+  const [showAllProdiCourses, setShowAllProdiCourses] = useState(false);
   const [newClassForm, setNewClassForm] = useState({
     course_code: '',
     name: '',
@@ -66,50 +104,136 @@ export const KebutuhanDepartemenPage: React.FC = () => {
     room_type_needed: 'Teori',
     rombel_key: 'SI-S1-A',
     requires_room: true,
-    lecturer_names: 'Dosen Departemen',
+    lecturer_names: '',
   });
+
+  const masterCoursesForModal = useMemo(() => {
+    if (showAllProdiCourses) return backendCourses;
+    return backendCourses.filter(
+      (mk) => mk.kode_prodi.toUpperCase() === activeDeptTab || mk.lintas_prodi
+    );
+  }, [backendCourses, activeDeptTab, showAllProdiCourses]);
+
+  const existingLabelsForNewCourse = useMemo(() => {
+    const code = newClassForm.course_code.trim().toUpperCase();
+    if (!code) return [];
+    return backendClasses
+      .filter((c) => c.course_code.toUpperCase() === code)
+      .map((c) => c.class_label)
+      .sort();
+  }, [backendClasses, newClassForm.course_code]);
+
+  const isDuplicateNewClassLabel = useMemo(() => {
+    const lbl = newClassForm.class_label.trim().toUpperCase();
+    if (!lbl) return false;
+    return existingLabelsForNewCourse.some((ex) => ex.toUpperCase() === lbl);
+  }, [existingLabelsForNewCourse, newClassForm.class_label]);
+
+  // Known lecturer names from DB lecturers + classes + mock list
+  const knownLecturers = useMemo(() => {
+    const names = new Set<string>(backendLecturers.map((l) => l.name));
+    if (names.size === 0) {
+      mockLecturers.forEach((l) => names.add(l.name));
+    }
+    backendClasses.forEach((c) => {
+      c.lecturer_names.forEach((n) => {
+        if (n && !n.toLowerCase().includes('placeholder')) names.add(n);
+      });
+    });
+    return Array.from(names).sort();
+  }, [backendLecturers, backendClasses]);
 
   const handleSelectDeptTab = (dept: 'SI' | 'IF' | 'TK') => {
     setActiveDeptTab(dept);
     setSelectedPrefixFilter('all');
+    setExpandedCourses({});
   };
 
-  // Filter backend classes (from CSV)
-  const filteredClasses = backendClasses.filter((c) => {
-    if (c.department.toUpperCase() !== activeDeptTab) return false;
+  // Filter backend classes
+  const filteredClasses = useMemo(() => {
+    return backendClasses.filter((c) => {
+      if (c.department.toUpperCase() !== activeDeptTab) return false;
 
-    // Filter by Course Code Prefix
-    if (selectedPrefixFilter !== 'all') {
-      const p = c.course_code.toUpperCase().slice(0, 3);
-      if (selectedPrefixFilter === 'MKU') {
-        if (!['MWU', 'AND'].includes(p)) return false;
-      } else {
-        if (p !== selectedPrefixFilter) return false;
+      if (selectedPrefixFilter !== 'all') {
+        const p = c.course_code.toUpperCase().slice(0, 3);
+        if (selectedPrefixFilter === 'MKU') {
+          if (!['MWU', 'AND'].includes(p)) return false;
+        } else if (p !== selectedPrefixFilter) {
+          return false;
+        }
       }
-    }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchCode = c.course_code.toLowerCase().includes(q);
-      const matchName = c.name.toLowerCase().includes(q);
-      const matchLec = c.lecturer_names.some((l) => l.toLowerCase().includes(q));
-      const matchRombel = c.rombel_key.toLowerCase().includes(q);
-      if (!matchCode && !matchName && !matchLec && !matchRombel) return false;
-    }
-    if (selectedSemester !== 'all' && c.semester.toString() !== selectedSemester) return false;
-    if (selectedRoomType !== 'all' && c.room_type_needed.toLowerCase() !== selectedRoomType.toLowerCase()) return false;
-    if (selectedRequiresRoom !== 'all') {
-      const req = selectedRequiresRoom === 'true';
-      if (c.requires_room !== req) return false;
-    }
-    return true;
-  });
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchCode = c.course_code.toLowerCase().includes(q);
+        const matchName = c.name.toLowerCase().includes(q);
+        const matchLec = c.lecturer_names.some((l) => l.toLowerCase().includes(q));
+        const matchRombel = c.rombel_key.toLowerCase().includes(q);
+        if (!matchCode && !matchName && !matchLec && !matchRombel) return false;
+      }
+
+      if (selectedSemester !== 'all' && c.semester.toString() !== selectedSemester) return false;
+      if (selectedRoomType !== 'all' && c.room_type_needed.toLowerCase() !== selectedRoomType.toLowerCase()) return false;
+      if (selectedRequiresRoom !== 'all') {
+        const req = selectedRequiresRoom === 'true';
+        if (c.requires_room !== req) return false;
+      }
+      if (belowQuotaOnly && (!c.requires_room || c.enrolled_count >= MIN_CLASS_QUOTA)) {
+        return false;
+      }
+      return true;
+    });
+  }, [
+    backendClasses,
+    activeDeptTab,
+    selectedPrefixFilter,
+    searchQuery,
+    selectedSemester,
+    selectedRoomType,
+    selectedRequiresRoom,
+    belowQuotaOnly,
+  ]);
+
+  // Group filtered classes by course_code for compact view
+  const groupedCourses = useMemo(() => {
+    const map = new Map<string, BackendClassItem[]>();
+    filteredClasses.forEach((cls) => {
+      const list = map.get(cls.course_code) || [];
+      list.push(cls);
+      map.set(cls.course_code, list);
+    });
+    return Array.from(map.entries()).map(([code, classes]) => {
+      const sorted = [...classes].sort((a, b) => a.class_label.localeCompare(b.class_label));
+      const first = sorted[0];
+      const totalMhs = sorted.reduce((acc, c) => acc + c.enrolled_count, 0);
+      const hasBelowQuota = sorted.some((c) => c.requires_room && c.enrolled_count < MIN_CLASS_QUOTA);
+      const lecturers = Array.from(new Set(sorted.flatMap((c) => c.lecturer_names)));
+      return {
+        code,
+        name: first.name,
+        semester: first.semester,
+        sks: first.sks,
+        is_mandatory: first.is_mandatory,
+        room_type_needed: first.room_type_needed,
+        requires_accessibility: first.requires_accessibility,
+        classes: sorted,
+        totalMhs,
+        hasBelowQuota,
+        lecturers,
+      };
+    });
+  }, [filteredClasses]);
 
   const deptCounts = {
     SI: backendClasses.filter((c) => c.department.toUpperCase() === 'SI').length,
     IF: backendClasses.filter((c) => c.department.toUpperCase() === 'IF').length,
     TK: backendClasses.filter((c) => c.department.toUpperCase() === 'TK').length,
   };
+
+  const belowQuotaAllCount = useMemo(
+    () => backendClasses.filter((c) => c.requires_room && c.enrolled_count < MIN_CLASS_QUOTA).length,
+    [backendClasses]
+  );
 
   // Prefix breakdown per active department
   const prefixCounts = useMemo(() => {
@@ -140,9 +264,6 @@ export const KebutuhanDepartemenPage: React.FC = () => {
         return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">DSI</span>;
       case 'DIF':
         return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">DIF</span>;
-      case 'MWU':
-      case 'AND':
-        return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">{p}</span>;
       default:
         return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">{p}</span>;
     }
@@ -170,26 +291,68 @@ export const KebutuhanDepartemenPage: React.FC = () => {
     }
   };
 
-  const handleDeleteClass = async (classId: string) => {
-    if (window.confirm(`Yakin ingin membatalkan/menghapus kelas ${classId} dari jadwal?`)) {
-      await deleteBackendClass(classId);
-      if (editingClass?.id === classId) {
-        setEditingClass(null);
-      }
+  const openCancelModal = (item: BackendClassItem) => {
+    setCancelingClass(item);
+    const isLow = item.requires_room && item.enrolled_count < MIN_CLASS_QUOTA;
+    setCancelReason(
+      isLow
+        ? `Peserta (${item.enrolled_count} mhs) di bawah kuota minimum (${MIN_CLASS_QUOTA})`
+        : 'Pembatalan atau penggabungan kelas oleh Admin'
+    );
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelingClass) return;
+    const ok = await cancelBackendClass(
+      cancelingClass.id,
+      cancelReason.trim() || 'Pembatalan kelas oleh Admin'
+    );
+    if (ok) {
+      if (editingClass?.id === cancelingClass.id) setEditingClass(null);
+      setCancelingClass(null);
+      await loadCancelledAndLogs();
+    }
+  };
+
+  const handleDownloadBackendDoc = async (format: 'excel' | 'pdf') => {
+    setExportMenuOpen(false);
+    try {
+      await apiService.downloadExportFile(format, activeDeptTab, false);
+      showToast(
+        `Dokumen ${format === 'excel' ? 'Excel (.xlsx)' : 'Surat Pengajuan (.pdf)'} ${activeDeptTab} berhasil diunduh.`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast(`Gagal mengunduh dokumen: ${err.message}`, 'error');
     }
   };
 
   const handleSelectCoursePreset = (kodeMk: string) => {
     const found = backendCourses.find((c) => c.kode_mk === kodeMk);
     if (!found) return;
+    const existing = backendClasses.filter((c) => c.course_code.toUpperCase() === found.kode_mk.toUpperCase());
+    const usedLabels = new Set(existing.map((c) => c.class_label.toUpperCase()));
+    let nextLabel = 'A';
+    for (let code = 65; code <= 90; code += 1) {
+      const cand = String.fromCharCode(code);
+      if (!usedLabels.has(cand)) {
+        nextLabel = cand;
+        break;
+      }
+    }
+    const existingLecturers = existing[0]?.lecturer_names?.join(', ') || '';
+
     setNewClassForm((prev) => ({
       ...prev,
       course_code: found.kode_mk,
       name: found.nama_mk,
+      class_label: nextLabel,
       semester: found.semester_paket,
       sks: found.sks,
       room_type_needed: found.jenis_mk.toLowerCase().includes('praktikum') ? 'Lab' : 'Teori',
       requires_room: !found.jenis_mk.toLowerCase().includes('non-ruang'),
+      rombel_key: `${activeDeptTab}-S${found.semester_paket}-${nextLabel}`,
+      lecturer_names: prev.lecturer_names || existingLecturers,
     }));
   };
 
@@ -228,6 +391,7 @@ export const KebutuhanDepartemenPage: React.FC = () => {
   };
 
   const handleExportCSV = (scope: 'dept' | 'pure' | 'filtered' = 'dept') => {
+    setExportMenuOpen(false);
     let target = filteredClasses;
     let filename = `classes_${activeDeptTab.toLowerCase()}_terfilter.csv`;
 
@@ -244,46 +408,39 @@ export const KebutuhanDepartemenPage: React.FC = () => {
       'id', 'course_code', 'department', 'semester', 'name', 'class_label',
       'sks', 'enrolled_count', 'enrolled_is_estimated', 'room_type_needed',
       'is_mandatory', 'is_elective', 'rombel_key', 'requires_room',
-      'requires_accessibility', 'is_transition_course', 'lecturer_ids', 'lecturer_names'
+      'requires_accessibility', 'is_transition_course', 'lecturer_ids', 'lecturer_names',
     ];
     const rows = target.map((c) => [
       c.id, c.course_code, c.department, c.semester, `"${c.name}"`, c.class_label,
       c.sks, c.enrolled_count, c.enrolled_is_estimated, c.room_type_needed,
       c.is_mandatory, c.is_elective, c.rombel_key, c.requires_room,
       c.requires_accessibility, c.is_transition_course,
-      `"${c.lecturer_ids.join(';')}"`, `"${c.lecturer_names.join('/')}"`
+      `"${c.lecturer_ids.join(';')}"`, `"${c.lecturer_names.join('/')}"`,
     ]);
-    const csvStr = [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const csvStr = [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
     a.click();
-    showToast(`File CSV ${filename} berhasil diunduh (${target.length} baris kelas).`, 'success');
+    URL.revokeObjectURL(url);
+    showToast(`File ${filename} berhasil diunduh (${target.length} baris kelas).`, 'success');
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
+      {/* Simplified Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5 mb-1">
-            <span>Beranda</span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-            <span>Kebutuhan Departemen</span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-800 font-semibold">Pengelolaan & Penyesuaian Kelas (PRD F-14 & F-15)</span>
-          </div>
-
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              Penyesuaian Kelas & Kebutuhan Departemen
+              Tawaran Mata Kuliah &amp; Penyesuaian Kelas
             </h2>
             {backendStatus === 'connected' ? (
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
                 <Check className="w-3 h-3" />
-                Backend CP-SAT Aktif
+                Terhubung Database
               </span>
             ) : (
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
@@ -292,56 +449,141 @@ export const KebutuhanDepartemenPage: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">
-            Data terhubung langsung dengan database MySQL (<span className="font-mono font-bold text-slate-700">siprama_db</span>) &amp; engine CP-SAT. Admin dapat menambah kelas baru, menyesuaikan kuota, SKS, tipe ruang, maupun menghapus kelas sebelum penjadwalan otomatis.
+            Kelola gabungan kebutuhan kelas seluruh prodi FTI (SI, IF, TK) sebelum penyusunan jadwal otomatis.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Clean 2 Primary Actions + 1 Overflow Menu */}
+        <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => setIsAddClassModalOpen(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Tambah Kelas ({activeDeptTab})
           </button>
-          <button
-            onClick={resetBackendClassesToCSV}
-            title="Reset seluruh penyesuaian kembali ke file CSV awal"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 shadow-xs transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-            Reset ke CSV Asli
-          </button>
 
-          <button
-            onClick={() => handleExportCSV('dept')}
-            title={`Unduh seluruh file CSV untuk ${activeDeptTab}`}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 shadow-xs transition-colors"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Ekspor CSV {activeDeptTab}</span>
-          </button>
+          {/* Unified Export Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setExportMenuOpen((prev) => !prev);
+                setMoreMenuOpen(false);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 shadow-xs transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span>Ekspor</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
 
-          <button
-            onClick={() => handleExportCSV('pure')}
-            title="Unduh CSV mata kuliah prodi murni tanpa MK Umum/Fakultas"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 shadow-xs transition-colors"
-          >
-            <Download className="w-3.5 h-3.5 text-blue-600" />
-            <span>Kode Murni</span>
-          </button>
+            {exportMenuOpen && (
+              <div className="absolute right-0 mt-1.5 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-40 text-xs">
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadBackendDoc('excel')}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-emerald-50 font-medium text-slate-700 flex items-center gap-2"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span>Excel Rekap Kebutuhan (.xlsx)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadBackendDoc('pdf')}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-rose-50 font-medium text-slate-700 flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4 text-rose-600" />
+                  <span>Surat Pengajuan Resmi (.pdf)</span>
+                </button>
+                <div className="my-1 border-t border-slate-100" />
+                <button
+                  type="button"
+                  onClick={() => handleExportCSV('dept')}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 font-medium text-slate-700 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4 text-slate-500" />
+                  <span>CSV Semua Kelas ({activeDeptTab})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExportCSV('pure')}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 font-medium text-slate-700 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4 text-blue-600" />
+                  <span>CSV Kode Prodi Murni</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExportCSV('filtered')}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 font-medium text-slate-700 flex items-center gap-2"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-slate-500" />
+                  <span>CSV Hasil Filter Saat Ini</span>
+                </button>
+              </div>
+            )}
+          </div>
 
-          <button
-            onClick={() => setActivePage('generator_jadwal')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-700 hover:bg-blue-800 shadow-md shadow-blue-700/20 active:scale-98 transition-all"
-          >
-            <Sparkles className="w-4 h-4 text-blue-200" />
-            Jalankan Solver CP-SAT
-          </button>
+          {/* Overflow Menu for Secondary / Destructive Actions */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setMoreMenuOpen((prev) => !prev);
+                setExportMenuOpen(false);
+              }}
+              title="Aksi Lanjutan"
+              className="p-2 rounded-xl text-slate-600 bg-white hover:bg-slate-50 border border-slate-300 shadow-xs transition-colors"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {moreMenuOpen && (
+              <div className="absolute right-0 mt-1.5 w-60 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-40 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    void loadCancelledAndLogs();
+                    setLogsModalOpen(true);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 font-semibold text-slate-700 flex items-center gap-2"
+                >
+                  <History className="w-4 h-4 text-slate-500" />
+                  <span>Riwayat Perubahan ({deptLogs.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    setActivePage('generator_jadwal');
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 font-semibold text-blue-800 flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4 text-blue-600" />
+                  <span>Buka Buat Jadwal Otomatis</span>
+                </button>
+                <div className="my-1 border-t border-slate-100" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    setConfirmResetOpen(true);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-rose-50 font-semibold text-rose-700 flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4 text-rose-600" />
+                  <span>Reset Data ke CSV Awal</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* 4 Summary Stat Cards */}
+      {/* 4 Summary Stat Cards (4th card is actionable: Below Minimum Quota) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
@@ -349,7 +591,7 @@ export const KebutuhanDepartemenPage: React.FC = () => {
           </div>
           <div>
             <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              TOTAL KELAS DI DATABASE
+              TOTAL KELAS AKTIF
             </div>
             <div className="text-2xl font-black text-slate-900">{backendClasses.length} Kelas</div>
           </div>
@@ -386,93 +628,136 @@ export const KebutuhanDepartemenPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
+        <button
+          type="button"
+          onClick={() => setBelowQuotaOnly((prev) => !prev)}
+          className={`p-4 rounded-2xl border shadow-xs flex items-center gap-3.5 text-left transition-all ${
+            belowQuotaOnly
+              ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200'
+              : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              belowQuotaAllCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-50 text-emerald-600'
+            }`}
+          >
+            <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
             <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              ENGINE SOLVER
+              DI BAWAH KUOTA (&lt; {MIN_CLASS_QUOTA} MHS)
             </div>
-            <div className="text-2xl font-black text-emerald-600">CP-SAT 100%</div>
+            <div
+              className={`text-2xl font-black ${
+                belowQuotaAllCount > 0 ? 'text-amber-600' : 'text-emerald-600'
+              }`}
+            >
+              {belowQuotaAllCount} Kelas
+            </div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Department Tabs with Course Code Prefixes */}
       <div className="flex flex-col gap-2.5">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
-          <button
-            onClick={() => handleSelectDeptTab('SI')}
-            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-              activeDeptTab === 'SI'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <span>Sistem Informasi (SI)</span>
-            <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono ${
-              activeDeptTab === 'SI' ? 'bg-blue-700 text-blue-100' : 'bg-blue-50 text-blue-700 border border-blue-200'
-            }`}>
-              Kode: DSI
-            </span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-              activeDeptTab === 'SI' ? 'bg-blue-800 text-white' : 'bg-slate-100 text-slate-600'
-            }`}>
-              {deptCounts.SI} Kelas
-            </span>
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleSelectDeptTab('SI')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeDeptTab === 'SI'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <span>Sistem Informasi (SI)</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] ${
+                  activeDeptTab === 'SI' ? 'bg-blue-800 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {deptCounts.SI}
+              </span>
+            </button>
 
-          <button
-            onClick={() => handleSelectDeptTab('IF')}
-            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-              activeDeptTab === 'IF'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <span>Teknik Informatika (IF)</span>
-            <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono ${
-              activeDeptTab === 'IF' ? 'bg-blue-700 text-blue-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-            }`}>
-              Kode: DIF
-            </span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-              activeDeptTab === 'IF' ? 'bg-blue-800 text-white' : 'bg-slate-100 text-slate-600'
-            }`}>
-              {deptCounts.IF} Kelas
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => handleSelectDeptTab('IF')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeDeptTab === 'IF'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <span>Teknik Informatika (IF)</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] ${
+                  activeDeptTab === 'IF' ? 'bg-blue-800 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {deptCounts.IF}
+              </span>
+            </button>
 
-          <button
-            onClick={() => handleSelectDeptTab('TK')}
-            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-              activeDeptTab === 'TK'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <span>Teknik Komputer (TK)</span>
-            <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono ${
-              activeDeptTab === 'TK' ? 'bg-blue-700 text-blue-100' : 'bg-purple-50 text-purple-700 border border-purple-200'
-            }`}>
-              Kode: CCE / ECS / SCE
-            </span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-              activeDeptTab === 'TK' ? 'bg-blue-800 text-white' : 'bg-slate-100 text-slate-600'
-            }`}>
-              {deptCounts.TK} Kelas
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => handleSelectDeptTab('TK')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeDeptTab === 'TK'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <span>Teknik Komputer (TK)</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] ${
+                  activeDeptTab === 'TK' ? 'bg-blue-800 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {deptCounts.TK}
+              </span>
+            </button>
+          </div>
+
+          {/* View Mode Switcher: Grouped per MK vs Flat per Class */}
+          <div className="inline-flex rounded-xl bg-white p-0.5 border border-slate-200 text-xs shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('grouped')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-colors ${
+                viewMode === 'grouped'
+                  ? 'bg-slate-800 text-white'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Ringkas per MK ({groupedCourses.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('flat')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-colors ${
+                viewMode === 'flat'
+                  ? 'bg-slate-800 text-white'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>Semua Kelas ({filteredClasses.length})</span>
+            </button>
+          </div>
         </div>
 
         {/* Course Code Prefix Sub-Filter Chips */}
         <div className="flex flex-wrap items-center gap-1.5 py-1 text-xs">
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1">
             <Tag className="w-3 h-3 text-slate-400" />
-            Pisahkan Kode MK:
+            Kode MK:
           </span>
           <button
+            type="button"
             onClick={() => setSelectedPrefixFilter('all')}
             className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
               selectedPrefixFilter === 'all'
@@ -480,12 +765,13 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
             }`}
           >
-            Semua Kode ({prefixCounts.all || 0})
+            Semua ({prefixCounts.all || 0})
           </button>
 
           {activeDeptTab === 'TK' && (
             <>
               <button
+                type="button"
                 onClick={() => setSelectedPrefixFilter('CCE')}
                 className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
                   selectedPrefixFilter === 'CCE'
@@ -493,9 +779,10 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                     : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
                 }`}
               >
-                CCE - Inti Teknik Komputer ({prefixCounts['CCE'] || 0})
+                CCE - Inti TK ({prefixCounts['CCE'] || 0})
               </button>
               <button
+                type="button"
                 onClick={() => setSelectedPrefixFilter('SCE')}
                 className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
                   selectedPrefixFilter === 'SCE'
@@ -503,9 +790,10 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                     : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
                 }`}
               >
-                SCE - MIPA &amp; Sains Komputer ({prefixCounts['SCE'] || 0})
+                SCE - MIPA &amp; Sains ({prefixCounts['SCE'] || 0})
               </button>
               <button
+                type="button"
                 onClick={() => setSelectedPrefixFilter('ECS')}
                 className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
                   selectedPrefixFilter === 'ECS'
@@ -513,13 +801,14 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                     : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border border-cyan-200'
                 }`}
               >
-                ECS - Pilihan &amp; Lanjut ({prefixCounts['ECS'] || 0})
+                ECS - Pilihan ({prefixCounts['ECS'] || 0})
               </button>
             </>
           )}
 
           {activeDeptTab === 'SI' && (
             <button
+              type="button"
               onClick={() => setSelectedPrefixFilter('DSI')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
                 selectedPrefixFilter === 'DSI'
@@ -527,12 +816,13 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                   : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
               }`}
             >
-              DSI - Inti &amp; Pilihan Sistem Informasi ({prefixCounts['DSI'] || 0})
+              DSI - Prodi SI ({prefixCounts['DSI'] || 0})
             </button>
           )}
 
           {activeDeptTab === 'IF' && (
             <button
+              type="button"
               onClick={() => setSelectedPrefixFilter('DIF')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
                 selectedPrefixFilter === 'DIF'
@@ -540,11 +830,12 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                   : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
               }`}
             >
-              DIF - Inti &amp; Praktikum Informatika ({prefixCounts['DIF'] || 0})
+              DIF - Prodi IF ({prefixCounts['DIF'] || 0})
             </button>
           )}
 
           <button
+            type="button"
             onClick={() => setSelectedPrefixFilter('MKU')}
             className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
               selectedPrefixFilter === 'MKU'
@@ -552,15 +843,15 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
             }`}
           >
-            MWU &amp; AND - MK Umum / Fakultas ({prefixCounts['MKU'] || 0})
+            MWU &amp; AND - MK Umum ({prefixCounts['MKU'] || 0})
           </button>
         </div>
       </div>
 
       {/* Filter Bar */}
       <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-          <div className="relative flex-1">
+        <div className="flex items-center gap-2.5 flex-1 min-w-[280px] flex-wrap">
+          <div className="relative flex-1 min-w-[220px]">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -604,118 +895,324 @@ export const KebutuhanDepartemenPage: React.FC = () => {
           </select>
         </div>
 
-        <div className="text-xs text-slate-500 font-medium">
-          Ditemukan: <strong className="text-slate-800">{filteredClasses.length}</strong> kelas di {activeDeptTab}
+        <div className="text-xs text-slate-500 font-medium flex items-center gap-2.5 flex-wrap">
+          <span>
+            Menampilkan <strong className="text-slate-800">{filteredClasses.length}</strong> kelas ({groupedCourses.length} MK)
+          </span>
+          {cancelledClasses.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowCancelledPanel((prev) => !prev)}
+              className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-semibold hover:bg-rose-100"
+            >
+              {showCancelledPanel ? 'Tutup' : 'Lihat'} {cancelledClasses.length} Dibatalkan
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Main Table from CSV */}
+      {showCancelledPanel && cancelledClasses.length > 0 && (
+        <div className="bg-white rounded-2xl border border-rose-200 p-4 space-y-2.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-rose-900">
+              Kelas Dibatalkan — Departemen {activeDeptTab} ({cancelledClasses.length})
+            </h4>
+            <span className="text-[11px] text-slate-500">
+              Batas kuota minimum: {minQuota} Mhs. Klik Pulihkan untuk mengaktifkan kembali.
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {cancelledClasses.map((cc) => (
+              <div
+                key={cc.id}
+                className="p-2.5 rounded-xl bg-rose-50/50 border border-rose-200 flex items-center justify-between gap-2 text-xs"
+              >
+                <div className="min-w-0">
+                  <div className="font-bold text-slate-800 truncate">
+                    [{cc.id}] {cc.name} ({cc.enrolled_count} Mhs)
+                  </div>
+                  <div className="text-[10px] text-rose-700 truncate">
+                    Alasan: {cc.alasan_pembatalan || '-'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = await restoreBackendClass(cc.id);
+                    if (ok) await loadCancelledAndLogs();
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white text-emerald-700 border border-emerald-300 hover:bg-emerald-50 shrink-0"
+                >
+                  Pulihkan
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Main Table: Grouped by MK vs Flat */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
-              <tr>
-                <th className="py-3 px-3">No</th>
-                <th className="py-3 px-3">ID Kelas</th>
-                <th className="py-3 px-3">Kode MK</th>
-                <th className="py-3 px-4">Nama Mata Kuliah</th>
-                <th className="py-3 px-2 text-center">Kelas</th>
-                <th className="py-3 px-2 text-center">SKS</th>
-                <th className="py-3 px-2 text-center">Kuota</th>
-                <th className="py-3 px-3">Tipe Ruang</th>
-                <th className="py-3 px-3">Rombel</th>
-                <th className="py-3 px-4">Dosen Pengampu</th>
-                <th className="py-3 px-3 text-center">Aksi (F-14 / F-15)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredClasses.length === 0 ? (
+          {viewMode === 'grouped' ? (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-slate-400">
-                    Tidak ada kelas yang cocok dengan filter pencarian.
-                  </td>
+                  <th className="py-3 px-3">No</th>
+                  <th className="py-3 px-3">Kode MK</th>
+                  <th className="py-3 px-4">Mata Kuliah</th>
+                  <th className="py-3 px-2 text-center">SKS</th>
+                  <th className="py-3 px-3">Daftar Rombel (Klik untuk Ubah)</th>
+                  <th className="py-3 px-2 text-center">Total Mhs</th>
+                  <th className="py-3 px-4">Dosen Pengampu</th>
                 </tr>
-              ) : (
-                filteredClasses.map((c, idx) => (
-                  <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">
-                      {String(idx + 1).padStart(2, '0')}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[11px] font-bold text-slate-600">
-                      {c.id}
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-blue-700">
-                        {renderPrefixBadge(c.course_code)}
-                        <span>{c.course_code}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="font-bold text-slate-900">{c.name}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        {c.is_mandatory ? 'Wajib' : 'Pilihan'} • Semester {c.semester}
-                        {c.requires_accessibility && ' • Ramah Disabilitas'}
-                      </div>
-                    </td>
-                    <td className="py-3 px-2 text-center font-bold text-slate-800">
-                      <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                        {c.class_label}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2 text-center font-bold text-slate-800">
-                      {c.sks}
-                    </td>
-                    <td className="py-3 px-2 text-center font-bold text-slate-800">
-                      <span className={c.enrolled_count > 50 ? 'text-amber-700' : 'text-slate-800'}>
-                        {c.enrolled_count} Mhs
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        c.room_type_needed.toLowerCase() === 'lab'
-                          ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                          : 'bg-blue-100 text-blue-800 border border-blue-200'
-                      }`}>
-                        {c.room_type_needed}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-slate-700 font-semibold">
-                      {c.rombel_key || '-'}
-                    </td>
-                    <td className="py-3 px-4 text-slate-700 max-w-[200px] truncate" title={c.lecturer_names.join(', ')}>
-                      {c.lecturer_names.length > 0 ? c.lecturer_names.join(', ') : <span className="text-slate-400 italic">Belum Ditentukan</span>}
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => handleOpenEdit(c)}
-                          title="Sesuaikan Kelas (F-14): Kuota, SKS, Dosen, Tipe Ruang"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200 transition-colors"
-                        >
-                          <Sliders className="w-3.5 h-3.5" />
-                          Sesuaikan
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClass(c.id)}
-                          title="Batalkan / Hapus Kelas dari Penjadwalan (F-15)"
-                          className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {groupedCourses.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-400">
+                      Tidak ada mata kuliah yang cocok dengan filter pencarian.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  groupedCourses.map((g, idx) => {
+                    const isExpanded = !!expandedCourses[g.code];
+                    return (
+                      <React.Fragment key={g.code}>
+                        <tr className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">
+                            {String(idx + 1).padStart(2, '0')}
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-blue-700">
+                              {renderPrefixBadge(g.code)}
+                              <span>{g.code}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900">{g.name}</span>
+                              {g.hasBelowQuota && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-bold">
+                                  &lt; {MIN_CLASS_QUOTA} Mhs
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {g.is_mandatory ? 'Wajib' : 'Pilihan'} • Semester {g.semester} • {g.room_type_needed}
+                            </div>
+                          </td>
+                          <td className="py-3 px-2 text-center font-bold text-slate-800">{g.sks}</td>
+                          <td className="py-3 px-3">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {g.classes.map((cl) => {
+                                const isLow = cl.requires_room && cl.enrolled_count < MIN_CLASS_QUOTA;
+                                return (
+                                  <button
+                                    key={cl.id}
+                                    type="button"
+                                    onClick={() => handleOpenEdit(cl)}
+                                    title={`Klik untuk sesuaikan ${cl.id}`}
+                                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors ${
+                                      isLow
+                                        ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                        : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                    }`}
+                                  >
+                                    {cl.class_label} ({cl.enrolled_count})
+                                  </button>
+                                );
+                              })}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedCourses((prev) => ({
+                                    ...prev,
+                                    [g.code]: !prev[g.code],
+                                  }))
+                                }
+                                className="px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded"
+                              >
+                                {isExpanded ? 'Tutup' : 'Detail'}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="py-3 px-2 text-center font-bold text-slate-800">
+                            {g.totalMhs}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700 max-w-[220px] truncate" title={g.lecturers.join(', ')}>
+                            {g.lecturers.join(', ')}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-slate-50/80">
+                            <td colSpan={7} className="px-6 py-3">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {g.classes.map((cl) => (
+                                  <div
+                                    key={cl.id}
+                                    className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between gap-2 text-xs"
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="font-bold text-slate-800">
+                                        Kelas {cl.class_label} • {cl.enrolled_count} Mhs
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 truncate">
+                                        {cl.rombel_key || '-'} • {cl.lecturer_names.join(', ')}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEdit(cl)}
+                                        className="px-2 py-1 text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200"
+                                      >
+                                        Sesuaikan
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => openCancelModal(cl)}
+                                        className="p-1 text-rose-500 hover:bg-rose-50 rounded"
+                                        title="Batalkan Kelas"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+                <tr>
+                  <th className="py-3 px-3">No</th>
+                  <th className="py-3 px-3">ID Kelas</th>
+                  <th className="py-3 px-3">Kode MK</th>
+                  <th className="py-3 px-4">Nama Mata Kuliah</th>
+                  <th className="py-3 px-2 text-center">Kelas</th>
+                  <th className="py-3 px-2 text-center">SKS</th>
+                  <th className="py-3 px-2 text-center">Kuota</th>
+                  <th className="py-3 px-3">Tipe Ruang</th>
+                  <th className="py-3 px-3">Rombel</th>
+                  <th className="py-3 px-4">Dosen Pengampu</th>
+                  <th className="py-3 px-3 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredClasses.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="py-8 text-center text-slate-400">
+                      Tidak ada kelas yang cocok dengan filter pencarian.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredClasses.map((c, idx) => {
+                    const isLow = c.requires_room && c.enrolled_count < MIN_CLASS_QUOTA;
+                    return (
+                      <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">
+                          {String(idx + 1).padStart(2, '0')}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-[11px] font-bold text-slate-600">
+                          {c.id}
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-blue-700">
+                            {renderPrefixBadge(c.course_code)}
+                            <span>{c.course_code}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900">{c.name}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {c.is_mandatory ? 'Wajib' : 'Pilihan'} • Semester {c.semester}
+                            {c.requires_accessibility && ' • Ramah Disabilitas'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-2 text-center font-bold text-slate-800">
+                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                            {c.class_label}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2 text-center font-bold text-slate-800">{c.sks}</td>
+                        <td className="py-3 px-2 text-center font-bold">
+                          <span
+                            className={
+                              isLow
+                                ? 'px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300'
+                                : c.enrolled_count > 50
+                                ? 'text-amber-700'
+                                : 'text-slate-800'
+                            }
+                          >
+                            {c.enrolled_count} Mhs
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              c.room_type_needed.toLowerCase() === 'lab'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                : 'bg-blue-100 text-blue-800 border border-blue-200'
+                            }`}
+                          >
+                            {c.room_type_needed}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-[11px] text-slate-700 font-semibold">
+                          {c.rombel_key || '-'}
+                        </td>
+                        <td className="py-3 px-4 text-slate-700 max-w-[200px] truncate" title={c.lecturer_names.join(', ')}>
+                          {c.lecturer_names.length > 0 ? (
+                            c.lecturer_names.join(', ')
+                          ) : (
+                            <span className="text-slate-400 italic">Belum Ditentukan</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(c)}
+                              title="Sesuaikan Kelas"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200 transition-colors"
+                            >
+                              <Sliders className="w-3.5 h-3.5" />
+                              Sesuaikan
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openCancelModal(c)}
+                              title="Batalkan Kelas"
+                              className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
-      {/* Modal Penyesuaian Kelas (F-14 & F-15) */}
+      {/* Modal Penyesuaian Kelas */}
       {editingClass && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 p-6 space-y-4 animate-scale-up">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
@@ -725,10 +1222,11 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                   <h3 className="font-extrabold text-sm text-slate-900">
                     Sesuaikan Kelas: [{editingClass.course_code}] {editingClass.name}
                   </h3>
-                  <p className="text-xs text-slate-500">ID Kelas: {editingClass.id} • Modul F-14 & F-15</p>
+                  <p className="text-xs text-slate-500">ID Kelas: {editingClass.id}</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setEditingClass(null)}
                 className="text-slate-400 hover:text-slate-600"
               >
@@ -776,7 +1274,7 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tipe Ruangan yang Diperlukan</label>
+                  <label className="block font-bold text-slate-700 mb-1">Tipe Ruangan</label>
                   <select
                     value={editForm.room_type_needed || 'Teori'}
                     onChange={(e) => setEditForm({ ...editForm, room_type_needed: e.target.value })}
@@ -794,19 +1292,44 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                   type="text"
                   value={editForm.rombel_key || ''}
                   onChange={(e) => setEditForm({ ...editForm, rombel_key: e.target.value })}
-                  placeholder="e.g. SI-S3-A"
+                  placeholder="mis. SI-S3-A"
                   className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Dosen Pengampu (Pisahkan koma/titik koma)</label>
-                <input
-                  type="text"
-                  value={editForm.lecturer_names ? editForm.lecturer_names.join(', ') : ''}
-                  onChange={(e) => setEditForm({ ...editForm, lecturer_names: e.target.value.split(',').map((x) => x.trim()) })}
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300"
-                />
+                <label className="block font-bold text-slate-700 mb-1">Dosen Pengampu</label>
+                <div className="space-y-1.5">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const picked = e.target.value;
+                      if (!picked) return;
+                      const current = editForm.lecturer_names || [];
+                      if (!current.includes(picked)) {
+                        setEditForm({ ...editForm, lecturer_names: [...current, picked] });
+                      }
+                    }}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white"
+                  >
+                    <option value="">+ Pilih cepat dari daftar dosen...</option>
+                    {knownLecturers.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={editForm.lecturer_names ? editForm.lecturer_names.join(', ') : ''}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        lecturer_names: e.target.value.split(',').map((x) => x.trim()),
+                      })
+                    }
+                    placeholder="Pisahkan beberapa dosen dengan koma"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
@@ -818,7 +1341,7 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                   className="w-4 h-4 text-blue-600 rounded"
                 />
                 <label htmlFor="req_room" className="font-semibold text-slate-700 select-none">
-                  Kelas Membutuhkan Alokasi Ruang Fisik FTI
+                  Kelas membutuhkan alokasi ruang fisik FTI
                 </label>
               </div>
             </div>
@@ -826,10 +1349,10 @@ export const KebutuhanDepartemenPage: React.FC = () => {
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => handleDeleteClass(editingClass.id)}
+                onClick={() => openCancelModal(editingClass)}
                 className="px-3 py-2 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl font-bold text-xs"
               >
-                Batalkan Kelas Ini (F-15)
+                Batalkan Kelas Ini
               </button>
 
               <div className="flex items-center gap-2">
@@ -845,14 +1368,15 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                   onClick={handleSaveEdit}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs"
                 >
-                  Simpan Penyesuaian (F-14)
+                  Simpan Perubahan
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-      {/* Modal Tambah Kelas Baru (Simpan ke MySQL) */}
+
+      {/* Modal Tambah Kelas Baru */}
       {isAddClassModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 p-6 space-y-4">
@@ -861,9 +1385,9 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                 <h3 className="font-extrabold text-sm text-slate-900">
                   Tambah Kelas Baru — Departemen {activeDeptTab}
                 </h3>
-                <p className="text-xs text-slate-500">Pilih mata kuliah dari database atau input kode baru.</p>
+                <p className="text-xs text-slate-500">Pilih mata kuliah dari database atau ketik kode baru.</p>
               </div>
-              <button onClick={() => setIsAddClassModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button type="button" onClick={() => setIsAddClassModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -871,14 +1395,25 @@ export const KebutuhanDepartemenPage: React.FC = () => {
             <form onSubmit={handleCreateClass} className="space-y-3 text-xs">
               {backendCourses.length > 0 && (
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Pilih dari Master Mata Kuliah (MySQL)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-700">Pilih dari Master Mata Kuliah</label>
+                    <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showAllProdiCourses}
+                        onChange={(e) => setShowAllProdiCourses(e.target.checked)}
+                        className="rounded text-blue-600"
+                      />
+                      <span>Tampilkan MK prodi lain</span>
+                    </label>
+                  </div>
                   <select
                     value={newClassForm.course_code}
                     onChange={(e) => handleSelectCoursePreset(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
                   >
                     <option value="">-- Pilih Mata Kuliah atau ketik manual di bawah --</option>
-                    {backendCourses.map((mk) => (
+                    {masterCoursesForModal.map((mk) => (
                       <option key={mk.id_mk} value={mk.kode_mk}>
                         [{mk.kode_prodi}] {mk.kode_mk} — {mk.nama_mk} ({mk.sks} SKS)
                       </option>
@@ -906,9 +1441,22 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                     required
                     value={newClassForm.class_label}
                     onChange={(e) => setNewClassForm({ ...newClassForm, class_label: e.target.value })}
-                    placeholder="A, B, C, Shift 1"
-                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300"
+                    placeholder="A, B, C"
+                    className={`w-full px-3 py-1.5 rounded-lg border ${
+                      isDuplicateNewClassLabel ? 'border-rose-400 bg-rose-50' : 'border-slate-300'
+                    }`}
                   />
+                  {existingLabelsForNewCourse.length > 0 && (
+                    <div
+                      className={`text-[10px] mt-1 font-semibold ${
+                        isDuplicateNewClassLabel ? 'text-rose-600' : 'text-slate-500'
+                      }`}
+                    >
+                      {isDuplicateNewClassLabel
+                        ? `Kelas ${newClassForm.course_code.toUpperCase()}-${newClassForm.class_label} sudah ada! Pilih huruf lain.`
+                        : `Rombel yang sudah ada: ${existingLabelsForNewCourse.join(', ')}`}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -961,6 +1509,42 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Dosen Pengampu</label>
+                <div className="space-y-1.5">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const picked = e.target.value;
+                      if (!picked) return;
+                      const current = newClassForm.lecturer_names
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                      if (!current.includes(picked)) {
+                        setNewClassForm({
+                          ...newClassForm,
+                          lecturer_names: [...current, picked].join(', '),
+                        });
+                      }
+                    }}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white"
+                  >
+                    <option value="">+ Pilih dari daftar dosen...</option>
+                    {knownLecturers.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={newClassForm.lecturer_names}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, lecturer_names: e.target.value })}
+                    placeholder="Atau ketik nama dosen (pisahkan koma jika tandem)"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300"
+                  />
+                </div>
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
@@ -977,6 +1561,156 @@ export const KebutuhanDepartemenPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Pembatalan Kelas */}
+      {cancelingClass && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-rose-200 p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-rose-100 text-rose-700 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-slate-900">
+                  Konfirmasi Pembatalan Kelas {cancelingClass.id}
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {cancelingClass.name} ({cancelingClass.enrolled_count} Mahasiswa). Kelas yang dibatalkan akan dikeluarkan dari penjadwalan.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Alasan Pembatalan <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                rows={2}
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:border-rose-500 focus:outline-hidden"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCancelingClass(null)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={!cancelReason.trim()}
+                onClick={() => void handleConfirmCancel()}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg disabled:opacity-50"
+              >
+                Ya, Batalkan Kelas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Riwayat Perubahan Kebutuhan */}
+      {logsModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 p-5 space-y-4">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-blue-700" />
+                <h4 className="font-bold text-sm text-slate-900">
+                  Riwayat Perubahan Kebutuhan — {activeDeptTab}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLogsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+              {deptLogs.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Belum ada riwayat perubahan kebutuhan tercatat di database.
+                </div>
+              ) : (
+                deptLogs.map((log) => (
+                  <div key={log.id_perubahan} className="py-2.5 flex items-start justify-between gap-3 text-xs">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 font-bold text-[10px]">
+                          {log.jenis_aksi}
+                        </span>
+                        <span className="font-bold text-slate-800">
+                          {log.kode_mk}{log.kode_kelas ? `-${log.kode_kelas}` : ''}
+                        </span>
+                        <span className="text-[10px] text-slate-400">oleh {log.actor_name}</span>
+                      </div>
+                      {(log.nilai_lama || log.nilai_baru) && (
+                        <div className="text-slate-600 mt-0.5">
+                          {log.nilai_lama ? `${log.nilai_lama} → ` : ''}
+                          {log.nilai_baru || ''}
+                        </div>
+                      )}
+                      {log.alasan && (
+                        <div className="text-[11px] text-slate-500 italic">Alasan: {log.alasan}</div>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                      {log.waktu_perubahan.replace('T', ' ')}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Reset ke CSV Awal (Destructive Guard) */}
+      {confirmResetOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-rose-200 p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-rose-100 text-rose-700 shrink-0">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-slate-900">
+                  Reset Seluruh Kelas ke CSV Awal?
+                </h4>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Tindakan ini akan mengembalikan seluruh daftar mata kuliah, kelas, dan kuota ke data bawaan CSV seed. Penambahan atau penyesuaian kelas manual sebelumnya dapat tertimpa.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmResetOpen(false)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmResetOpen(false);
+                  void resetBackendClassesToCSV();
+                }}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg"
+              >
+                Ya, Reset Data
+              </button>
+            </div>
           </div>
         </div>
       )}

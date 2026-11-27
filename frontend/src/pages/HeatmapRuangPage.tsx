@@ -1,5 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import type { Room, ScheduleItem } from '../types';
+import { resolveDepartment } from '../utils/departmentHelper';
+import { apiService, type OkupansiItem, type JadwalSayaKelas } from '../services/api';
 import {
   Calendar,
   Clock,
@@ -16,7 +19,6 @@ import {
   Users,
   Check,
   ChevronRight,
-  Compass,
   Sparkles,
   GraduationCap,
   User as UserIcon,
@@ -61,6 +63,11 @@ interface CourseScheduleCell {
   roomName: string;
   sessionTime: string;
   type?: string;
+  // Data pertemuan dari database (pertemuan_kuliah)
+  idJadwal?: number;
+  pertemuanKe?: number;
+  tanggalAsli?: string;
+  isPengganti?: boolean;
 }
 
 interface RoomDefinition {
@@ -68,10 +75,11 @@ interface RoomDefinition {
   code: string;
   name: string;
   type: 'Teori' | 'Lab' | 'Seminar';
-  building: 'Gedung FTI' | 'GKB';
+  building: string;
   floor: number;
   capacity: number;
   dept: 'SI' | 'IF' | 'TK' | 'GKB'; // Department ownership / priority
+  isShared?: boolean; // Ruang bersama (tanpa departemen pengelola di database)
   accentColor: string;
   facilities: string[];
   schedules: {
@@ -85,7 +93,146 @@ interface RoomDefinition {
   };
 }
 
-// ─── Master Room Data: Prodi SI, IF, TK, and GKB Bersama ───────────────────────
+
+// ─── Mapping data ruang & jadwal dari database (via AppContext) ────────────────
+const HEATMAP_SESSIONS: Array<{ key: 'sesi1' | 'sesi2' | 'sesi3' | 'sesi4' | 'sesi5'; start: string; end: string }> = [
+  { key: 'sesi1', start: '07:30', end: '09:10' },
+  { key: 'sesi2', start: '09:20', end: '11:00' },
+  { key: 'sesi3', start: '11:10', end: '12:50' },
+  { key: 'sesi4', start: '13:30', end: '15:10' },
+  { key: 'sesi5', start: '15:30', end: '17:10' },
+];
+
+const toMinutes = (t: string) => {
+  const [h, m] = (t || '').trim().split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+const DEPT_ACCENT: Record<'SI' | 'IF' | 'TK' | 'GKB', string> = {
+  SI: 'bg-orange-500',
+  IF: 'bg-blue-900',
+  TK: 'bg-green-800',
+  GKB: 'bg-amber-500',
+};
+
+const roomDeptCode = (room: Room): 'SI' | 'IF' | 'TK' | 'GKB' => {
+  const p = (room.priorityDepartment || '').toLowerCase();
+  if (p.includes('sistem informasi')) return 'SI';
+  if (p.includes('komputer')) return 'TK';
+  if (p.includes('informatika')) return 'IF';
+  return 'GKB';
+};
+
+function buildRoomsFromDb(rooms: Room[], schedule: ScheduleItem[]): RoomDefinition[] {
+  return rooms.map((room) => {
+    const dept = roomDeptCode(room);
+    const isLab = /lab/i.test(room.type || '') || /lab/i.test(room.name || '');
+    const schedules: RoomDefinition['schedules'] = {};
+
+    schedule
+      .filter((s) => (s.roomId && s.roomId === room.id) || s.roomName === room.code || s.roomName === room.name)
+      .forEach((s) => {
+        const [startRaw, endRaw] = (s.timeLabel || s.time || '').split('-').map((x) => x.trim());
+        const sStart = toMinutes(startRaw);
+        const sEnd = toMinutes(endRaw);
+        // Tandai SEMUA sesi heatmap yang beririsan dengan jam kuliah sebenarnya
+        // (mis. kuliah 3 SKS 07:30-10:00 menempati Sesi 1 dan Sesi 2).
+        let sessions = HEATMAP_SESSIONS.filter(
+          (ses) => sStart < toMinutes(ses.end) && sEnd > toMinutes(ses.start)
+        );
+        if (!sessions.length && s.sessionIndex >= 1 && s.sessionIndex <= 5) {
+          sessions = [HEATMAP_SESSIONS[s.sessionIndex - 1]];
+        }
+        if (!sessions.length) return;
+
+        const day = String(s.day);
+        if (!schedules[day]) schedules[day] = {};
+        const cell: CourseScheduleCell = {
+          id: s.id,
+          code: s.courseCode,
+          name: s.courseName,
+          classLabel: s.classLabel || s.className || '-',
+          lecturer: s.lecturerName || s.primaryLecturer || '-',
+          dept: resolveDepartment(String(s.department || ''), s.courseCode),
+          enrolled: s.studentCount,
+          capacity: s.capacity || room.capacity,
+          roomName: room.code,
+          sessionTime: s.timeLabel || `${sessions[0].start} - ${sessions[sessions.length - 1].end}`,
+        };
+        sessions.forEach((ses) => {
+          if (!schedules[day][ses.key]) schedules[day][ses.key] = cell;
+        });
+      });
+
+    return {
+      id: room.id,
+      code: room.code,
+      name: room.name,
+      type: isLab ? 'Lab' : 'Teori',
+      building: room.building || 'Gedung FTI',
+      floor: room.floor,
+      capacity: room.capacity,
+      dept,
+      isShared: dept === 'GKB',
+      accentColor: DEPT_ACCENT[dept],
+      facilities: room.facilities || [],
+      schedules,
+    };
+  });
+}
+
+// Ganti jadwal hari terpilih dengan okupansi nyata pada tanggal tersebut
+function applyDateOccupancy(baseRooms: RoomDefinition[], items: OkupansiItem[], day: string): RoomDefinition[] {
+  return baseRooms.map((room) => {
+    const daySched: RoomDefinition['schedules'][string] = {};
+    items
+      .filter((it) => String(it.id_ruang) === room.id || it.kode_ruang === room.code)
+      .forEach((it) => {
+        const sStart = toMinutes(it.jam_mulai);
+        const sEnd = toMinutes(it.jam_selesai);
+        const cell: CourseScheduleCell = {
+          id: `jdw-${it.id_jadwal}-p${it.pertemuan_ke}`,
+          code: it.course_code,
+          name: it.course_name,
+          classLabel: it.class_label,
+          lecturer: it.lecturers.join(', ') || '-',
+          dept: resolveDepartment(it.department, it.course_code),
+          enrolled: it.enrolled,
+          capacity: room.capacity,
+          roomName: room.code,
+          sessionTime: `${it.jam_mulai} - ${it.jam_selesai}`,
+          idJadwal: it.id_jadwal,
+          pertemuanKe: it.pertemuan_ke,
+          tanggalAsli: it.tanggal_asli,
+          isPengganti: it.is_pengganti,
+        };
+        HEATMAP_SESSIONS.filter((ses) => sStart < toMinutes(ses.end) && sEnd > toMinutes(ses.start)).forEach((ses) => {
+          if (!daySched[ses.key]) daySched[ses.key] = cell;
+        });
+      });
+    return { ...room, schedules: { ...room.schedules, [day]: daySched } };
+  });
+}
+
+// Tanggal Senin–Jumat pada minggu berjalan (Sabtu/Minggu → minggu berikutnya)
+type HariKerja = 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat';
+function buildWeekDateMapping(): Record<HariKerja, { dateStr: string; displayDate: string }> {
+  const now = new Date();
+  const wd = now.getDay(); // 0 Minggu .. 6 Sabtu
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + (wd === 0 ? 1 : wd === 6 ? 2 : 1 - wd));
+  const names: HariKerja[] = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
+  const out = {} as Record<HariKerja, { dateStr: string; displayDate: string }>;
+  names.forEach((n, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    out[n] = { dateStr: iso, displayDate: d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) };
+  });
+  return out;
+}
+
+// ─── Master Room Data (fallback offline): Prodi SI, IF, TK, and GKB Bersama ───────────────────────
 const MASTER_ROOMS: RoomDefinition[] = [
   // ── Ruangan Departemen Sistem Informasi (SI) ──
   {
@@ -97,7 +244,7 @@ const MASTER_ROOMS: RoomDefinition[] = [
     floor: 1,
     capacity: 60,
     dept: 'SI',
-    accentColor: 'bg-sky-500',
+    accentColor: 'bg-orange-500',
     facilities: ['2 AC', 'Proyektor Smart HDMI', 'Sound System', 'Akses Disabilitas Lantai 1'],
     schedules: {
       Senin: {
@@ -130,7 +277,7 @@ const MASTER_ROOMS: RoomDefinition[] = [
     floor: 2,
     capacity: 50,
     dept: 'SI',
-    accentColor: 'bg-sky-500',
+    accentColor: 'bg-orange-500',
     facilities: ['2 AC', 'Smart TV 75"', 'Sound System', 'Whiteboard Magnetic'],
     schedules: {
       Senin: {
@@ -163,7 +310,7 @@ const MASTER_ROOMS: RoomDefinition[] = [
     floor: 2,
     capacity: 55,
     dept: 'SI',
-    accentColor: 'bg-sky-500',
+    accentColor: 'bg-orange-500',
     facilities: ['2 AC', 'Proyektor HD', 'Whiteboard Magnetic', 'Sound System'],
     schedules: {
       Senin: {
@@ -192,7 +339,7 @@ const MASTER_ROOMS: RoomDefinition[] = [
     floor: 2,
     capacity: 40,
     dept: 'SI',
-    accentColor: 'bg-sky-600',
+    accentColor: 'bg-orange-500',
     facilities: ['40 PC i7/16GB', 'AC Sentral', 'Server Database Oracle/PostgreSQL', 'LAN Gigabit'],
     schedules: {
       Senin: {
@@ -337,7 +484,7 @@ const MASTER_ROOMS: RoomDefinition[] = [
     floor: 2,
     capacity: 60,
     dept: 'IF',
-    accentColor: 'bg-indigo-500',
+    accentColor: 'bg-blue-900',
     facilities: ['2 AC', 'Proyektor Smart HDMI', 'Whiteboard Magnetic'],
     schedules: {
       Senin: {
@@ -360,7 +507,7 @@ const MASTER_ROOMS: RoomDefinition[] = [
     floor: 2,
     capacity: 45,
     dept: 'IF',
-    accentColor: 'bg-indigo-500',
+    accentColor: 'bg-blue-900',
     facilities: ['2 AC', 'Proyektor HDMI', 'Sound System'],
     schedules: {
       Senin: {
@@ -383,7 +530,7 @@ const MASTER_ROOMS: RoomDefinition[] = [
     floor: 2,
     capacity: 40,
     dept: 'IF',
-    accentColor: 'bg-indigo-600',
+    accentColor: 'bg-blue-900',
     facilities: ['40 Workstations i7/GPU', 'AC Sentral', 'Server Komputasi', 'LAN Gigabit'],
     schedules: {
       Senin: {
@@ -409,7 +556,7 @@ const MASTER_ROOMS: RoomDefinition[] = [
     floor: 1,
     capacity: 45,
     dept: 'TK',
-    accentColor: 'bg-purple-500',
+    accentColor: 'bg-green-800',
     facilities: ['2 AC', 'Smart TV 65"', 'Workbench Meja Lab'],
     schedules: {
       Senin: {
@@ -431,7 +578,7 @@ const MASTER_ROOMS: RoomDefinition[] = [
     floor: 3,
     capacity: 35,
     dept: 'TK',
-    accentColor: 'bg-purple-600',
+    accentColor: 'bg-green-800',
     facilities: ['35 Modul IoT Workbench', 'Oscilloscope', 'Kit ESP32', 'Smart TV'],
     schedules: {
       Senin: {
@@ -452,6 +599,9 @@ interface CariKelasPenggantiModalProps {
   userProdi: 'SI' | 'IF' | 'TK';
   allRooms: RoomDefinition[];
   dayDateMapping: Record<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat', { dateStr: string; displayDate: string }>;
+  /** Email dosen pengampu: bila ada, jadwal pengganti disimpan ke database */
+  userEmail?: string;
+  onSaved?: () => void;
   onClose: () => void;
   showToast: (msg: string, type?: 'success' | 'info' | 'error' | 'warning' | any) => void;
 }
@@ -462,10 +612,16 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
   userProdi,
   allRooms,
   dayDateMapping,
+  userEmail,
+  onSaved,
   onClose,
   showToast,
 }) => {
   const [step, setStep] = useState<'form' | 'results' | 'confirm'>('form');
+  // Mode database: kelas punya id_jadwal & nomor pertemuan, dan pengguna adalah dosen pengampu
+  const backendMode = Boolean(course.idJadwal && course.pertemuanKe && userEmail);
+  const [dbResults, setDbResults] = useState<RoomDefinition[]>([]);
+  const [isBusy, setIsBusy] = useState(false);
 
   // Find original day of this course from allRooms
   const originalDay = useMemo<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'>(() => {
@@ -481,14 +637,14 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
 
   // Form states
   const [formDay, setFormDay] = useState<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'>(originalDay);
-  const [formDate, setFormDate] = useState<string>(dayDateMapping[originalDay]?.dateStr || '2024-11-25');
+  const [formDate, setFormDate] = useState<string>(course.tanggalAsli || dayDateMapping[originalDay]?.dateStr || '2024-11-25');
 
   // Parse time
   const timeParts = (course.sessionTime || '07:30 - 09:10').split(' - ');
   const [formTimeStart, setFormTimeStart] = useState(timeParts[0]?.trim() || '07:30');
   const [formTimeEnd, setFormTimeEnd] = useState(timeParts[1]?.trim() || '09:10');
   const [formMinCapacity, setFormMinCapacity] = useState(course.enrolled || 30);
-  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung FTI' | 'GKB'>('Semua');
+  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung G' | 'Gedung H'>('Semua');
   const [formAccessibility, setFormAccessibility] = useState(false);
 
   // Validation error (E1 flow)
@@ -496,6 +652,11 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
 
   // Selected room
   const [selectedRoom, setSelectedRoom] = useState<RoomDefinition | null>(null);
+  // UC-18: Prodi Pemohon untuk mencari Ruang Alternatif Prodi Lain (khusus Admin)
+  const [altProdiMode, setAltProdiMode] = useState<'ALL' | 'SI' | 'IF' | 'TK'>('ALL');
+  // UC-17: Jenis penggantian & opsi ruang alternatif prodi lain (khusus Admin)
+  const [replacementScope, setReplacementScope] = useState<'Sementara' | 'Permanen'>('Sementara');
+  const [showAltProdi, setShowAltProdi] = useState<boolean>(userRole === 'admin');
 
   const timeToMin = (t: string) => {
     const [h, m] = t.split(':').map(Number);
@@ -520,18 +681,36 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
       .filter((s) => reqStart < timeToMin(s.end) && reqEnd > timeToMin(s.start))
       .map((s) => s.key);
 
+    if (backendMode) {
+      // Ketersediaan sudah dicek per tanggal oleh backend
+      return dbResults
+        .filter((room) => {
+          const roomGedung = room.code.startsWith('H') ? 'Gedung H' : 'Gedung G';
+          if (formBuilding !== 'Semua' && roomGedung !== formBuilding) return false;
+          if (formAccessibility && room.floor !== 1) return false;
+          return true;
+        })
+        .sort((a, b) => Math.abs(a.capacity - (course.enrolled || 40)) - Math.abs(b.capacity - (course.enrolled || 40)));
+    }
+
     return allRooms
       .filter((room) => {
-        // 1. Hak Akses: Prodi Sendiri & GKB Bersama
-        const isOwnProdi = room.dept === userProdi;
-        const isGKB = room.dept === 'GKB' || room.building === 'GKB';
-        if (!isOwnProdi && !isGKB) return false;
+        // Sistem hanya menggunakan Gedung G & Gedung H (tanpa GKB dan tanpa Lab)
+        if ((room.dept === 'GKB' && !room.isShared) || room.building === 'GKB' || room.type === 'Lab') return false;
 
-        // 2. Filter Gedung
-        if (formBuilding !== 'Semua' && room.building !== formBuilding) return false;
+        // 1. Hak Akses: Admin bisa mengakses seluruh ruang prodi (atau filter prodi asal bila showAltProdi dimatikan)
+        if (userRole === 'admin') {
+          if (!room.isShared && !showAltProdi && room.dept !== course.dept) return false;
+        } else {
+          if (!room.isShared && room.dept !== userProdi) return false;
+        }
+
+        // 2. Filter Gedung (Gedung G / Gedung H)
+        const roomGedung = room.code.startsWith('H') ? 'Gedung H' : 'Gedung G';
+        if (formBuilding !== 'Semua' && roomGedung !== formBuilding) return false;
 
         // 3. Aksesibilitas
-        if (formAccessibility && !(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204')) {
+        if (formAccessibility && room.floor !== 1) {
           return false;
         }
 
@@ -553,7 +732,7 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
         const bDiff = Math.abs(b.capacity - (course.enrolled || 40));
         return aDiff - bDiff;
       });
-  }, [step, formDay, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userProdi, allRooms, course, originalDay]);
+  }, [step, formDay, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userRole, userProdi, showAltProdi, allRooms, course, originalDay, backendMode, dbResults]);
 
   const handleSearch = () => {
     if (!formDate) {
@@ -575,6 +754,34 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
       return;
     }
     setValidationError(null);
+    if (backendMode) {
+      setIsBusy(true);
+      apiService
+        .getRuangTersedia({
+          tanggal: formDate,
+          jam_mulai: formTimeStart,
+          jam_selesai: formTimeEnd,
+          min_kapasitas: formMinCapacity,
+          id_jadwal: course.idJadwal,
+          pertemuan_ke: course.pertemuanKe,
+        })
+        .then((res) => {
+          setDbResults(
+            res.rooms.map((r) => {
+              const base = allRooms.find((x) => x.id === String(r.id_ruang) || x.code === r.kode_ruang);
+              return base || {
+                id: String(r.id_ruang), code: r.kode_ruang, name: r.kode_ruang, type: 'Teori' as const,
+                building: r.gedung, floor: r.lantai, capacity: r.kapasitas, dept: 'GKB' as const,
+                isShared: true, accentColor: 'bg-amber-500', facilities: [], schedules: {},
+              };
+            })
+          );
+          setStep('results');
+        })
+        .catch((err: any) => setValidationError(err.message || 'Gagal mencari ruang kosong.'))
+        .finally(() => setIsBusy(false));
+      return;
+    }
     setStep('results');
   };
 
@@ -585,6 +792,27 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
 
   const handleConfirm = () => {
     if (!selectedRoom) return;
+    if (backendMode && course.idJadwal && course.pertemuanKe && userEmail) {
+      setIsBusy(true);
+      apiService
+        .simpanJadwalPengganti({
+          email: userEmail,
+          id_jadwal: course.idJadwal,
+          pertemuan_ke: course.pertemuanKe,
+          tanggal: formDate,
+          jam_mulai: formTimeStart,
+          jam_selesai: formTimeEnd,
+          id_ruang: Number(selectedRoom.id),
+        })
+        .then((res) => {
+          showToast(res.message, 'success');
+          onSaved?.();
+          onClose();
+        })
+        .catch((err: any) => showToast(err.message || 'Gagal menyimpan jadwal pengganti.', 'error'))
+        .finally(() => setIsBusy(false));
+      return;
+    }
     const formattedDate = formDate
       ? new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
       : formDay;
@@ -604,7 +832,7 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
           <div>
             <div className="flex items-center gap-2 text-blue-200 text-xs font-semibold mb-1">
               <Search className="w-3.5 h-3.5" />
-              <span>Cari Ruang Kosong untuk Kelas Pengganti (Per Pertemuan)</span>
+              <span>Cari Ruang Kosong untuk Kelas Pengganti{course.pertemuanKe ? ` • Pertemuan ke-${course.pertemuanKe}` : ' (Per Pertemuan)'}</span>
             </div>
             <h2 className="text-base font-black leading-snug">{course.name}</h2>
             <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-blue-200">
@@ -615,6 +843,11 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
               <span>{course.enrolled} Mahasiswa</span>
               <span>•</span>
               <span className="bg-blue-800/60 px-2 py-0.5 rounded font-semibold">{userRole === 'dosen' ? 'Mode Dosen' : 'Mode Mahasiswa (KRS)'}</span>
+              {course.tanggalAsli && (
+                <span className="bg-blue-800/60 px-2 py-0.5 rounded font-semibold">
+                  Semula {new Date(`${course.tanggalAsli}T00:00:00`).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -648,8 +881,21 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
             </div>
             <div>
               <div className="text-slate-500 text-[10px] font-semibold uppercase tracking-wider">Sifat Perubahan</div>
-              <div className="font-bold text-emerald-700 mt-0.5">Per Pertemuan</div>
-              <div className="text-slate-600">Kuliah Pengganti</div>
+              {userRole === 'admin' ? (
+                <select
+                  value={replacementScope}
+                  onChange={(e) => setReplacementScope(e.target.value as 'Sementara' | 'Permanen')}
+                  className="mt-0.5 text-[11px] font-bold text-emerald-700 bg-white border border-blue-200 rounded-lg px-2 py-0.5 focus:outline-none"
+                >
+                  <option value="Sementara">Sementara (Per Pertemuan)</option>
+                  <option value="Permanen">Permanen (Satu Semester)</option>
+                </select>
+              ) : (
+                <>
+                  <div className="font-bold text-emerald-700 mt-0.5">Per Pertemuan</div>
+                  <div className="text-slate-600">Kuliah Pengganti</div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -693,6 +939,7 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
                 {/* Tanggal Pelaksanaan */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -726,8 +973,8 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
                     className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
                   >
                     <option value="Semua">Semua Gedung</option>
-                    <option value="Gedung FTI">Gedung FTI</option>
-                    <option value="GKB">GKB (Gedung Kuliah Bersama)</option>
+                    <option value="Gedung G">Gedung G</option>
+                    <option value="Gedung H">Gedung H</option>
                   </select>
                 </div>
 
@@ -795,13 +1042,6 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
                 </div>
               </div>
 
-              {/* Info scope */}
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-start gap-2 text-xs text-blue-700">
-                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>
-                  Sesuai hak akses Anda, pencarian difilter otomatis hanya untuk ruangan <strong>Prodi {userProdi}</strong> dan <strong>GKB Bersama</strong>.
-                </span>
-              </div>
             </div>
           )}
 
@@ -822,13 +1062,28 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
                 {formAccessibility && (
                   <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">Ramah Disabilitas</span>
                 )}
-                <button
-                  onClick={() => setStep('form')}
-                  className="ml-auto flex items-center gap-1 text-slate-500 hover:text-blue-700 font-semibold"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>Ubah Kriteria</span>
-                </button>
+                  <div className="ml-auto flex items-center gap-2">
+                    {userRole === 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAltProdi((v) => !v)}
+                        className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors ${
+                          showAltProdi
+                            ? 'bg-blue-700 text-white border-blue-800'
+                            : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'
+                        }`}
+                      >
+                        {showAltProdi ? '✓ Ruang Alternatif Prodi Lain Aktif' : 'Lihat Ruang Alternatif Prodi Lain'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setStep('form')}
+                      className="flex items-center gap-1 text-slate-500 hover:text-blue-700 font-semibold"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Ubah Kriteria</span>
+                    </button>
+                  </div>
               </div>
 
               {availableRooms.length === 0 ? (
@@ -881,14 +1136,11 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
                               }`}>
                                 {room.dept === 'GKB' ? 'GKB Bersama' : `Prodi ${room.dept}`}
                               </span>
-                              {(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204') && (
+                              {room.floor === 1 && (
                                 <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
                                   ♿ Aksesibel
                                 </span>
                               )}
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                                {room.type}
-                              </span>
                             </div>
                             <div className="text-xs text-slate-600 mt-0.5">{room.name}</div>
                             <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
@@ -1051,7 +1303,6 @@ interface CariRuangKosongModalProps {
   defaultDate?: string;
   onClose: () => void;
   showToast: (msg: string, type?: 'success' | 'info' | 'error' | 'warning' | any) => void;
-  onNavigateToRoom: (roomCode: string) => void;
 }
 
 const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
@@ -1062,7 +1313,6 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
   defaultDate,
   onClose,
   showToast,
-  onNavigateToRoom,
 }) => {
   const [step, setStep] = useState<'form' | 'results' | 'confirm'>('form');
 
@@ -1071,7 +1321,7 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
   const [formTimeStart, setFormTimeStart] = useState('07:30');
   const [formTimeEnd, setFormTimeEnd] = useState('09:10');
   const [formMinCapacity, setFormMinCapacity] = useState(30);
-  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung FTI' | 'GKB'>('Semua');
+  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung G' | 'Gedung H'>('Semua');
   const [formAccessibility, setFormAccessibility] = useState(false);
   const [usageActivity, setUsageActivity] = useState('Belajar Mandiri & Diskusi Akademik');
 
@@ -1080,6 +1330,11 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
 
   // Selected room
   const [selectedRoom, setSelectedRoom] = useState<RoomDefinition | null>(null);
+  // UC-18: Prodi Pemohon untuk mencari Ruang Alternatif Prodi Lain (khusus Admin)
+  const [altProdiMode, setAltProdiMode] = useState<'ALL' | 'SI' | 'IF' | 'TK'>('ALL');
+  // UC-17: Jenis penggantian & opsi ruang alternatif prodi lain (khusus Admin)
+  const [replacementScope, setReplacementScope] = useState<'Sementara' | 'Permanen'>('Sementara');
+  const [showAltProdi, setShowAltProdi] = useState<boolean>(userRole === 'admin');
 
   const timeToMin = (t: string) => {
     const [h, m] = t.split(':').map(Number);
@@ -1116,16 +1371,22 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
 
     return allRooms
       .filter((room) => {
-        // 1. Hak Akses: Prodi Sendiri & GKB Bersama
-        const isOwnProdi = room.dept === userProdi;
-        const isGKB = room.dept === 'GKB' || room.building === 'GKB';
-        if (!isOwnProdi && !isGKB) return false;
+        // Sistem hanya menggunakan Gedung G & Gedung H (tanpa GKB dan tanpa Lab)
+        if ((room.dept === 'GKB' && !room.isShared) || room.building === 'GKB' || room.type === 'Lab') return false;
 
-        // 2. Filter Gedung
-        if (formBuilding !== 'Semua' && room.building !== formBuilding) return false;
+        // 1. Hak Akses: Admin bisa melihat semua ruang atau ruang alternatif prodi lain (UC-18)
+        if (userRole === 'admin') {
+          if (!room.isShared && altProdiMode !== 'ALL' && room.dept === altProdiMode) return false;
+        } else {
+          if (!room.isShared && room.dept !== userProdi) return false;
+        }
+
+        // 2. Filter Gedung (Gedung G / Gedung H)
+        const roomGedung = room.code.startsWith('H') ? 'Gedung H' : 'Gedung G';
+        if (formBuilding !== 'Semua' && roomGedung !== formBuilding) return false;
 
         // 3. Aksesibilitas
-        if (formAccessibility && !(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204')) {
+        if (formAccessibility && room.floor !== 1) {
           return false;
         }
 
@@ -1140,7 +1401,7 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
         return true;
       })
       .sort((a, b) => a.capacity - b.capacity);
-  }, [step, formDate, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userProdi, allRooms]);
+  }, [step, formDate, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userRole, userProdi, altProdiMode, allRooms]);
 
   const handleSearch = () => {
     if (!formDate) {
@@ -1244,6 +1505,7 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
                 {/* Tanggal Pelaksanaan */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -1269,8 +1531,8 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
                     className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200"
                   >
                     <option value="Semua">Semua Gedung</option>
-                    <option value="Gedung FTI">Gedung FTI</option>
-                    <option value="GKB">GKB (Gedung Kuliah Bersama)</option>
+                    <option value="Gedung G">Gedung G</option>
+                    <option value="Gedung H">Gedung H</option>
                   </select>
                 </div>
 
@@ -1335,13 +1597,6 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
                 </div>
               </div>
 
-              {/* Info scope */}
-              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-start gap-2 text-xs text-emerald-800">
-                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
-                <span>
-                  Sesuai ketentuan, Anda hanya dapat melihat dan memilih ruang <strong>Prodi {userProdi}</strong> dan <strong>Gedung Kuliah Bersama (GKB)</strong>.
-                </span>
-              </div>
             </div>
           )}
 
@@ -1411,18 +1666,15 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-black text-sm text-slate-900 font-mono">{room.code}</span>
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                room.dept === 'GKB' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-sky-100 text-sky-800 border-sky-200'
+                                room.dept === 'GKB' ? 'bg-amber-100 text-amber-800 border-amber-200' : room.dept === 'SI' ? 'bg-orange-100 text-orange-800 border-orange-200' : room.dept === 'IF' ? 'bg-blue-100 text-blue-900 border-blue-200' : 'bg-green-100 text-green-800 border-green-200'
                               }`}>
                                 {room.dept === 'GKB' ? 'GKB Bersama' : `Prodi ${room.dept}`}
                               </span>
-                              {(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204') && (
+                              {room.floor === 1 && (
                                 <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
                                   ♿ Aksesibel
                                 </span>
                               )}
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                                {room.type}
-                              </span>
                             </div>
                             <div className="text-xs text-slate-600 mt-0.5">{room.name}</div>
                             <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
@@ -1447,6 +1699,7 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
                               ))}
                             </div>
                           </div>
+                          {false && (
                           <div className="flex flex-col gap-1.5 shrink-0">
                             <button
                               onClick={() => handleSelectRoom(room)}
@@ -1454,14 +1707,8 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
                             >
                               Pilih Ruang →
                             </button>
-                            <button
-                              onClick={() => onNavigateToRoom(room.code)}
-                              className="px-3 py-1 text-xs font-semibold text-slate-600 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1"
-                            >
-                              <Compass className="w-3 h-3" />
-                              <span>Rute</span>
-                            </button>
                           </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1590,9 +1837,18 @@ export const HeatmapRuangPage: React.FC = () => {
     setIsRoomReplacementModalOpen,
     showToast,
     setActivePage,
-    setSelectedRoomForNav,
-    setIsRoomNavModalOpen,
+    rooms: ctxRooms,
+    schedule: ctxSchedule,
+    backendStatus,
+    latestCPSATResult,
   } = useApp();
+
+  // Data ruang & jadwal diambil dari database (MySQL) saat backend terhubung.
+  const isDbConnected = backendStatus === 'connected';
+  const baseRooms = useMemo<RoomDefinition[]>(() => {
+    if (!isDbConnected) return MASTER_ROOMS;
+    return buildRoomsFromDb(ctxRooms, latestCPSATResult ? ctxSchedule : []);
+  }, [isDbConnected, ctxRooms, ctxSchedule, latestCPSATResult]);
 
   // Detect user's prodi from profile (SI, IF, or TK)
   const userProdiKey = useMemo<'SI' | 'IF' | 'TK'>(() => {
@@ -1605,22 +1861,16 @@ export const HeatmapRuangPage: React.FC = () => {
   // Active prodi filter: for Dosen & Mahasiswa, this is locked to their own prodi,
   // but we provide a demo switcher so evaluators can test how IF & TK look!
   const [activeProdiView, setActiveProdiView] = useState<'SI' | 'IF' | 'TK' | 'ALL'>(
-    currentRole === 'admin' ? 'ALL' : userProdiKey
+    'ALL'
   );
 
-  const [selectedDay, setSelectedDay] = useState<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'>('Senin');
-  const [selectedDate, setSelectedDate] = useState<string>('2024-11-25'); // Default: Senin, 25 Nov 2024
+  // Tanggal nyata minggu berjalan (bukan data contoh)
+  const dayDateMapping = useMemo(() => buildWeekDateMapping(), []);
+  const todayName = (['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'] as const)[new Date().getDay() - 1];
+  const [selectedDay, setSelectedDay] = useState<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'>(todayName || 'Senin');
+  const [selectedDate, setSelectedDate] = useState<string>(dayDateMapping[todayName || 'Senin'].dateStr);
   const [selectedBuilding, setSelectedBuilding] = useState<string>('Semua');
   const [searchQuery, setSearchQuery] = useState<string>('');
-
-  // Mapping referensi tanggal minggu aktif semester ganjil 2024/2025
-  const dayDateMapping: Record<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat', { dateStr: string; displayDate: string }> = {
-    Senin:  { dateStr: '2024-11-25', displayDate: '25 Nov 2024' },
-    Selasa: { dateStr: '2024-11-26', displayDate: '26 Nov 2024' },
-    Rabu:   { dateStr: '2024-11-27', displayDate: '27 Nov 2024' },
-    Kamis:  { dateStr: '2024-11-28', displayDate: '28 Nov 2024' },
-    Jumat:  { dateStr: '2024-11-29', displayDate: '29 Nov 2024' },
-  };
 
   const handleSelectDayWithDate = (day: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat') => {
     setSelectedDay(day);
@@ -1638,6 +1888,53 @@ export const HeatmapRuangPage: React.FC = () => {
     else if (dayIndex === 4) setSelectedDay('Kamis');
     else if (dayIndex === 5) setSelectedDay('Jumat');
   };
+
+  // Okupansi ruang pada tanggal terpilih (jadwal rutin + pertemuan pengganti dari database)
+  const [dateItems, setDateItems] = useState<OkupansiItem[] | null>(null);
+  const [okupansiVersion, setOkupansiVersion] = useState(0);
+  const refreshOkupansi = useCallback(() => setOkupansiVersion((v) => v + 1), []);
+  useEffect(() => {
+    if (!isDbConnected || !selectedDate) {
+      setDateItems(null);
+      return;
+    }
+    let cancelled = false;
+    apiService
+      .getOkupansiTanggal(selectedDate)
+      .then((res) => !cancelled && setDateItems(res.items))
+      .catch(() => !cancelled && setDateItems(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [isDbConnected, selectedDate, okupansiVersion]);
+
+  const allRooms = useMemo<RoomDefinition[]>(
+    () => (isDbConnected && dateItems ? applyDateOccupancy(baseRooms, dateItems, selectedDay) : baseRooms),
+    [isDbConnected, dateItems, baseRooms, selectedDay]
+  );
+
+  // Kelas yang diampu dosen (untuk pengajuan pengganti dari slot kosong)
+  const [myClasses, setMyClasses] = useState<JadwalSayaKelas[]>([]);
+  const loadMyClasses = useCallback(() => {
+    if (currentRole !== 'dosen' || !isDbConnected || !currentUser.email) return;
+    apiService
+      .getJadwalSaya(currentUser.email)
+      .then((res) => setMyClasses(res.classes))
+      .catch(() => setMyClasses([]));
+  }, [currentRole, isDbConnected, currentUser.email]);
+  useEffect(() => {
+    loadMyClasses();
+  }, [loadMyClasses]);
+  const afterReplacementSaved = useCallback(() => {
+    refreshOkupansi();
+    loadMyClasses();
+  }, [refreshOkupansi, loadMyClasses]);
+
+  // Form slot kosong (dosen): kelas & pertemuan dari database
+  const [slotClassId, setSlotClassId] = useState<number | null>(null);
+  const [slotMeeting, setSlotMeeting] = useState<number>(1);
+  const [slotDate, setSlotDate] = useState<string>('');
+  const [isSavingSlot, setIsSavingSlot] = useState(false);
 
   // Modal states
   const [selectedCourseDetail, setSelectedCourseDetail] = useState<CourseScheduleCell | null>(null);
@@ -1669,21 +1966,21 @@ export const HeatmapRuangPage: React.FC = () => {
     'Jumat',
   ];
 
-  // ── RULE FILTERING: DOSEN & MAHASISWA HANYA BISA MELIHAT GKB DAN PRODINYA SENDIRI ──
+  // ── FILTERING: GEDUNG G & H ONLY (TANPA GKB & LAB) ──
   const visibleRooms = useMemo(() => {
-    return MASTER_ROOMS.filter((room) => {
-      // 1. Prodi vs GKB Filter Rule
-      if (activeProdiView !== 'ALL') {
-        const isUserProdiRoom = room.dept === activeProdiView;
-        const isGKBRoom = room.dept === 'GKB' || room.building === 'GKB';
-        if (!isUserProdiRoom && !isGKBRoom) {
-          return false; // Hide other departments!
-        }
+    return allRooms.filter((room) => {
+      if (room.building === 'GKB' || room.type === 'Lab') {
+        return false;
       }
 
-      // 2. Building Dropdown Filter
-      if (selectedBuilding === 'Gedung FTI' && room.building !== 'Gedung FTI') return false;
-      if (selectedBuilding === 'GKB' && room.building !== 'GKB') return false;
+      // 1. Prodi Filter Rule (ruang bersama tetap ditampilkan)
+      if (activeProdiView !== 'ALL' && room.dept !== activeProdiView && room.dept !== 'GKB') {
+        return false;
+      }
+
+      // 2. Building Dropdown Filter (Gedung G & Gedung H)
+      const roomGedung = room.code.startsWith('H') ? 'Gedung H' : 'Gedung G';
+      if (selectedBuilding !== 'Semua' && roomGedung !== selectedBuilding) return false;
 
       // 3. Search query
       if (searchQuery.trim()) {
@@ -1698,11 +1995,10 @@ export const HeatmapRuangPage: React.FC = () => {
 
       return true;
     });
-  }, [activeProdiView, selectedBuilding, searchQuery, selectedDay]);
+  }, [allRooms, activeProdiView, selectedBuilding, searchQuery, selectedDay]);
 
   // Calculate dynamic metrics based on visible rooms
   const totalVisibleRooms = visibleRooms.length;
-  const labRoomsCount = visibleRooms.filter((r) => r.type === 'Lab').length;
 
   const totalPossibleSlots = totalVisibleRooms * 5;
   const occupiedSlotsCount = visibleRooms.reduce((acc, r) => {
@@ -1719,6 +2015,12 @@ export const HeatmapRuangPage: React.FC = () => {
     sessionLabel: string
   ) => {
     setSelectedSlotForBooking({ room, sessionKey, sessionLabel });
+    if (currentRole === 'dosen' && myClasses.length > 0) {
+      const first = myClasses[0];
+      setSlotClassId(first.id_jadwal);
+      setSlotMeeting(first.current_meeting);
+      setSlotDate(selectedDate);
+    }
   };
 
 
@@ -1726,6 +2028,38 @@ export const HeatmapRuangPage: React.FC = () => {
   const handleConfirmDosenReplacement = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSlotForBooking) return;
+
+    // Mode database: simpan ke pertemuan_kuliah
+    if (isDbConnected && currentRole === 'dosen') {
+      const cls = myClasses.find((c) => c.id_jadwal === slotClassId);
+      if (!cls) {
+        showToast('Pilih kelas yang Anda ampu terlebih dahulu.', 'warning');
+        return;
+      }
+      const ses = HEATMAP_SESSIONS.find((x) => x.key === selectedSlotForBooking.sessionKey) || HEATMAP_SESSIONS[0];
+      const durasi = toMinutes(cls.end_time) - toMinutes(cls.start_time);
+      const endMin = toMinutes(ses.start) + (durasi > 0 ? durasi : 100);
+      const jamSelesai = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+      setIsSavingSlot(true);
+      apiService
+        .simpanJadwalPengganti({
+          email: currentUser.email,
+          id_jadwal: cls.id_jadwal,
+          pertemuan_ke: slotMeeting,
+          tanggal: slotDate || selectedDate,
+          jam_mulai: ses.start,
+          jam_selesai: jamSelesai,
+          id_ruang: Number(selectedSlotForBooking.room.id),
+        })
+        .then((res) => {
+          showToast(res.message, 'success');
+          setSelectedSlotForBooking(null);
+          afterReplacementSaved();
+        })
+        .catch((err: any) => showToast(err.message || 'Gagal menyimpan jadwal pengganti.', 'error'))
+        .finally(() => setIsSavingSlot(false));
+      return;
+    }
 
     if (replacementStudents > selectedSlotForBooking.room.capacity) {
       showToast(
@@ -1772,39 +2106,32 @@ export const HeatmapRuangPage: React.FC = () => {
     setSelectedSlotForBooking(null);
   };
 
-  // Open Room Wayfinding Modal
-  const handleOpenNavForRoom = (roomCode: string) => {
-    const matched =
-      MASTER_ROOMS.find(
-        (r) => r.code.toLowerCase() === roomCode.toLowerCase() || r.name.toLowerCase().includes(roomCode.toLowerCase())
-      ) || MASTER_ROOMS[0];
-
-    setSelectedRoomForNav({
-      id: matched.id,
-      name: matched.name,
-      code: matched.code,
-      building: matched.building,
-      floor: matched.floor,
-      capacity: matched.capacity,
-      areaM2: 80,
-      type: matched.type,
-      isAccessible: true,
-      status: 'Siap Digunakan',
-      priorityDepartment: matched.dept === 'SI' ? 'Sistem Informasi' : matched.dept === 'IF' ? 'Informatika' : matched.dept === 'TK' ? 'Teknik Komputer' : 'Fakultas / Bersama',
-      facilities: matched.facilities,
-    });
-    setIsRoomNavModalOpen(true);
+  // Kelas milik pemilik akun (dosen: nama pengampu dari database; mahasiswa: KRS)
+  const normalizeName = (n: string) => n.toLowerCase().replace(/\s+/g, ' ').trim();
+  const isOwnClass = (item: CourseScheduleCell): boolean => {
+    if (currentRole === 'dosen') {
+      const me = normalizeName(currentUser.name || '');
+      if (!me) return false;
+      return (item.lecturer || '')
+        .split(/\n/)
+        .some((l) => normalizeName(l).includes(me));
+    }
+    if (currentRole === 'mahasiswa') {
+      const code = item.code.toUpperCase().replace(/\s+/g, '');
+      return Object.keys(MAHASISWA_KRS).some((k) => k.toUpperCase().replace(/\s+/g, '') === code);
+    }
+    return false;
   };
 
   // Helper for pastel card style based on Department (Exact HeatmapRuangPage Pastel Design)
   const getDeptCardStyle = (dept: 'SI' | 'IF' | 'TK' | 'GKB') => {
     switch (dept) {
       case 'SI':
-        return 'bg-sky-50/90 hover:bg-sky-100/90 border-sky-200 border-l-sky-500 text-sky-950';
+        return 'bg-orange-50/90 hover:bg-orange-100/90 border-orange-200 border-l-orange-500 text-orange-950';
       case 'IF':
-        return 'bg-indigo-50/90 hover:bg-indigo-100/90 border-indigo-200 border-l-indigo-500 text-indigo-950';
+        return 'bg-blue-50/90 hover:bg-blue-100/90 border-blue-200 border-l-blue-900 text-blue-950';
       case 'TK':
-        return 'bg-purple-50/90 hover:bg-purple-100/90 border-purple-200 border-l-purple-500 text-purple-950';
+        return 'bg-green-50/90 hover:bg-green-100/90 border-green-200 border-l-green-800 text-green-950';
       case 'GKB':
         return 'bg-amber-50/90 hover:bg-amber-100/90 border-amber-200 border-l-amber-500 text-amber-950';
       default:
@@ -1814,7 +2141,23 @@ export const HeatmapRuangPage: React.FC = () => {
 
   // Helper component for schedule cell (Pastel card, click for details)
   const RenderCourseCell: React.FC<{ item: CourseScheduleCell }> = ({ item }) => {
-    const cardColor = getDeptCardStyle(item.dept);
+    // Filter departemen: kelas departemen lain tetap ditandai terisi, tapi diredam
+    if (activeProdiView !== 'ALL' && item.dept !== activeProdiView) {
+      const deptName = item.dept === 'GKB' ? 'Bersama' : getProdiFullName(item.dept);
+      return (
+        <div
+          className="w-full min-h-[58px] p-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-400 flex flex-col justify-center"
+          title={`Terisi oleh kelas departemen ${deptName}`}
+        >
+          <div className="text-[11px] font-semibold">Terisi</div>
+          <div className="text-[10px]">{deptName}</div>
+        </div>
+      );
+    }
+    const own = isOwnClass(item);
+    const cardColor = own
+      ? 'bg-yellow-50 hover:bg-yellow-100 border-yellow-300 border-l-yellow-500 text-yellow-950 ring-1 ring-yellow-300'
+      : getDeptCardStyle(item.dept);
 
     return (
       <button
@@ -1823,12 +2166,23 @@ export const HeatmapRuangPage: React.FC = () => {
         className={`w-full text-left p-2 rounded-lg border border-l-4 transition-all shadow-2xs cursor-pointer group ${cardColor}`}
         title="Klik untuk melihat detail lengkap mata kuliah & kapasitas"
       >
+        {own && (
+          <div className="mb-0.5 mr-1 inline-block text-[9px] font-extrabold uppercase tracking-wide bg-yellow-400 text-yellow-950 px-1.5 rounded">
+            Kelas Saya
+          </div>
+        )}
+        {item.isPengganti && (
+          <div className="mb-0.5 inline-block text-[9px] font-extrabold uppercase tracking-wide bg-rose-500 text-white px-1.5 rounded">
+            Pengganti P{item.pertemuanKe}
+          </div>
+        )}
         <div className="font-bold text-xs truncate leading-tight group-hover:text-blue-700 transition-colors">
           {item.name}
         </div>
         <div className="text-[10px] text-slate-600 truncate mt-1 leading-tight">
           {item.classLabel} • {item.lecturer}
         </div>
+        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.sessionTime}</div>
       </button>
     );
   };
@@ -1839,6 +2193,14 @@ export const HeatmapRuangPage: React.FC = () => {
     sessionKey: 'sesi1' | 'sesi2' | 'sesi3' | 'sesi4' | 'sesi5';
     sessionLabel: string;
   }> = ({ room, sessionKey, sessionLabel }) => {
+    if (currentRole === 'admin' || currentRole === 'mahasiswa') {
+      return (
+        <div
+          className="w-full h-full min-h-[58px] rounded-lg border border-dashed border-slate-200"
+          title={`Slot Kosong: ${room.code} (${sessionLabel})`}
+        />
+      );
+    }
     return (
       <div
         onClick={() => handleSlotClick(room, sessionKey, sessionLabel)}
@@ -1864,22 +2226,8 @@ export const HeatmapRuangPage: React.FC = () => {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-8">
-      {/* ── Top Header (Exact HeatmapRuangPage Style) ───────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 mb-1">
-            <span className="bg-blue-100 px-2 py-0.5 rounded">Monitoring Ketersediaan Ruangan</span>
-            <span>•</span>
-            <span className="text-slate-500">Sinkronisasi Real-time</span>
-          </div>
-          <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
-            Ketersediaan Ruang Perkuliahan
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5 max-w-3xl">
-            Pemantauan okupansi ruang per slot waktu untuk identifikasi ruang luang dan penjadwalan kelas pengganti.
-          </p>
-        </div>
-
+      {/* ── Aksi Halaman ───────────────── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4">
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Cari Ruang Kosong – general */}
           <button
@@ -1909,43 +2257,8 @@ export const HeatmapRuangPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── RULE BANNER: HAK AKSES DOSEN & MAHASISWA (GKB + PRODI SENDIRI) ── */}
-      <div className="bg-sky-50/80 border border-sky-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-700 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
-            {activeProdiView === 'ALL' ? 'FTI' : activeProdiView}
-          </div>
-          <div>
-            <div className="font-extrabold text-slate-900 flex items-center gap-2">
-              <span>Akses {currentRole === 'dosen' ? 'Dosen' : currentRole === 'mahasiswa' ? 'Mahasiswa' : 'Pengguna'}: Ruang {getProdiFullName(activeProdiView)} &amp; GKB Bersama</span>
-              <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                Rule Aktif
-              </span>
-            </div>
-            <p className="text-slate-500 text-[11px] mt-0.5">
-              Sesuai ketentuan hak akses, Anda hanya melihat ruangan perkuliahan <strong>prodi sendiri ({getProdiFullName(activeProdiView)})</strong> serta <strong>Gedung Kuliah Bersama (GKB)</strong>. Ruangan prodi lain otomatis disaring.
-            </p>
-          </div>
-        </div>
-
-        {/* Demo Switcher to test SI vs IF vs TK view */}
-        <div className="flex items-center gap-2 shrink-0 bg-white px-2.5 py-1.5 rounded-xl border border-sky-200 shadow-2xs">
-          <span className="text-[11px] font-semibold text-slate-500">Filter Prodi:</span>
-          <select
-            value={activeProdiView}
-            onChange={(e) => setActiveProdiView(e.target.value as any)}
-            className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
-          >
-            <option value="SI">Prodi Sistem Informasi (SI)</option>
-            <option value="IF">Prodi Informatika (IF)</option>
-            <option value="TK">Prodi Teknik Komputer (TK)</option>
-            {currentRole === 'admin' && <option value="ALL">Semua Prodi (Admin)</option>}
-          </select>
-        </div>
-      </div>
-
-      {/* ── 4 Metric Cards (Matching HeatmapRuangPage) ───────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* ── Metric Cards + Filter Departemen ───────────────── */}
+      <div className={`grid grid-cols-1 gap-3.5 ${currentRole === 'admin' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -1958,29 +2271,6 @@ export const HeatmapRuangPage: React.FC = () => {
           <div className="mt-1.5 flex items-baseline gap-2">
             <span className="text-2xl font-black text-slate-900">{totalVisibleRooms}</span>
             <span className="text-xs text-slate-500">Ruangan</span>
-          </div>
-          <p className="text-[10px] text-slate-400 mt-0.5">
-            {activeProdiView === 'ALL' ? 'Seluruh FTI & GKB' : `Ruang ${activeProdiView} & GKB Bersama`}
-          </p>
-        </div>
-
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Okupansi Rata-rata
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Clock className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="mt-1.5 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-indigo-700">{avgOccupancy}%</span>
-            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-              Optimal
-            </span>
-          </div>
-          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-1.5">
-            <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${avgOccupancy}%` }} />
           </div>
         </div>
 
@@ -1997,64 +2287,56 @@ export const HeatmapRuangPage: React.FC = () => {
             <span className="text-2xl font-black text-emerald-700">{freeSlotsCount}</span>
             <span className="text-xs text-slate-500">Slot Sesi</span>
           </div>
-          <p className="text-[10px] text-slate-400 mt-0.5">Siap digunakan untuk kelas pengganti/diskusi</p>
         </div>
 
+        {/* Filter per departemen (sejajar dengan kartu metrik) – khusus admin */}
+        {currentRole === 'admin' && (
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Ruang Lab Aktif
+              Filter Departemen
             </span>
-            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Tv className="w-3.5 h-3.5" />
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Filter className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="mt-1.5 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-purple-700">{labRoomsCount}</span>
-            <span className="text-xs text-slate-500">Laboratorium</span>
-          </div>
-          <p className="text-[10px] text-slate-400 mt-0.5">Fasilitas praktikum prodi</p>
+          <select
+            value={activeProdiView}
+            onChange={(e) => setActiveProdiView(e.target.value as any)}
+            className="mt-2 w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+          >
+            {currentRole === 'admin' && <option value="ALL">Semua Departemen</option>}
+            <option value="SI">Sistem Informasi</option>
+            <option value="IF">Informatika</option>
+            <option value="TK">Teknik Komputer</option>
+          </select>
         </div>
+        )}
       </div>
 
-      {/* ── Filter and Pastel Legend Bar (Exact HeatmapRuangPage Style) ── */}
+      {/* ── Filter and Pastel Legend Bar ── */}
       <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        {/* Day Pills with Calendar Dates */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-slate-100 p-1 rounded-lg">
-            {days.map((day) => {
-              const dateInfo = dayDateMapping[day];
-              const isSelected = selectedDay === day;
-              return (
-                <button
-                  key={day}
-                  onClick={() => handleSelectDayWithDate(day)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex flex-col items-center ${
-                    isSelected
-                      ? 'bg-[#082c78] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <span className="font-bold">{day}</span>
-                  <span className={`text-[10px] ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
-                    {dateInfo?.displayDate.split(' ')[0]} {dateInfo?.displayDate.split(' ')[1]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Quick Date Picker Input */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
-            <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            <span className="text-[11px] font-semibold text-slate-500">Pilih Tanggal:</span>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => handleDateChange(e.target.value)}
-              className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-800 font-bold focus:outline-none focus:border-blue-500"
-            />
-          </div>
+        {/* Day Pills (tanpa tanggal) */}
+        <div className="flex items-center bg-slate-100 p-1 rounded-lg">
+          {days.map((day) => {
+            const isSelected = selectedDay === day;
+            return (
+              <button
+                key={day}
+                onClick={() => handleSelectDayWithDate(day)}
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                  isSelected
+                    ? 'bg-[#082c78] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {day}
+                <span className={`block text-[9px] font-medium ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                  {dayDateMapping[day].displayDate}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Dropdown Filters & Search */}
@@ -2065,8 +2347,8 @@ export const HeatmapRuangPage: React.FC = () => {
             className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 bg-white focus:outline-none focus:border-blue-500 font-medium"
           >
             <option value="Semua">Semua Gedung</option>
-            <option value="Gedung FTI">Gedung Utama FTI</option>
-            <option value="GKB">GKB Bersama</option>
+            <option value="Gedung G">Gedung G</option>
+            <option value="Gedung H">Gedung H</option>
           </select>
 
           <div className="relative">
@@ -2084,24 +2366,26 @@ export const HeatmapRuangPage: React.FC = () => {
         {/* Soft Pastel Legend per Department */}
         <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-xs bg-sky-100 border border-sky-300 border-l-2 border-l-sky-500" />
+            <span className="w-3 h-3 rounded-xs bg-orange-100 border border-orange-300 border-l-2 border-l-orange-500" />
             <span className="font-medium text-slate-700">Sistem Informasi</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-xs bg-indigo-100 border border-indigo-300 border-l-2 border-l-indigo-500" />
+            <span className="w-3 h-3 rounded-xs bg-blue-100 border border-blue-300 border-l-2 border-l-blue-900" />
             <span className="font-medium text-slate-700">Informatika</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-xs bg-purple-100 border border-purple-300 border-l-2 border-l-purple-500" />
+            <span className="w-3 h-3 rounded-xs bg-green-100 border border-green-300 border-l-2 border-l-green-800" />
             <span className="font-medium text-slate-700">Teknik Komputer</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-xs bg-amber-100 border border-amber-300 border-l-2 border-l-amber-500" />
-            <span className="font-medium text-slate-700">GKB Bersama</span>
-          </div>
+          {(currentRole === 'dosen' || currentRole === 'mahasiswa') && (
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-xs bg-yellow-100 border border-yellow-300 border-l-2 border-l-yellow-500" />
+              <span className="font-semibold text-slate-700">Kelas Saya</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-xs border border-dashed border-slate-300 bg-slate-50" />
-            <span className="text-slate-500">Slot Kosong (Hover)</span>
+            <span className="text-slate-500">Slot Kosong</span>
           </div>
         </div>
       </div>
@@ -2112,7 +2396,7 @@ export const HeatmapRuangPage: React.FC = () => {
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <th className="py-3 px-4 w-52">Ruang Perkuliahan</th>
+                <th className="py-3 px-4 min-w-[200px] whitespace-nowrap">Ruang Perkuliahan</th>
                 <th className="py-3 px-3 text-center">
                   <div>07:30 - 09:10</div>
                   <div className="text-[10px] text-slate-400 font-normal">Sesi 1 (100m)</div>
@@ -2146,26 +2430,26 @@ export const HeatmapRuangPage: React.FC = () => {
                 return (
                   <tr key={room.id} className="hover:bg-slate-50/50 transition-colors">
                     {/* Room Header Info Cell */}
-                    <td className="p-3 border-r border-slate-100">
+                    <td className="p-3 border-r border-slate-100 whitespace-nowrap min-w-[200px]">
                       <div className="flex items-center gap-2">
                         <span className={`w-1.5 h-8 rounded-full ${room.accentColor}`} />
                         <div>
                           <div className="font-bold text-slate-800 flex items-center gap-1.5">
                             <span>{room.code}</span>
-                            <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
-                              room.dept === 'GKB'
-                                ? 'bg-amber-100 text-amber-800'
-                                : room.dept === 'SI'
-                                ? 'bg-sky-100 text-sky-800'
-                                : room.dept === 'IF'
-                                ? 'bg-indigo-100 text-indigo-800'
-                                : 'bg-purple-100 text-purple-800'
-                            }`}>
-                              {room.dept}
-                            </span>
+                            {!room.isShared && (
+                              <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
+                                room.dept === 'SI'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : room.dept === 'IF'
+                                  ? 'bg-blue-100 text-blue-900'
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {room.dept}
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5">
-                            {room.type} • {room.capacity} Kursi ({room.building})
+                            {room.capacity} Kursi • {room.building}
                           </div>
                         </div>
                       </div>
@@ -2283,6 +2567,81 @@ export const HeatmapRuangPage: React.FC = () => {
               </div>
             </div>
 
+            {isDbConnected ? (
+            <form onSubmit={handleConfirmDosenReplacement} className="space-y-3 text-xs">
+              {myClasses.length === 0 ? (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+                  Belum ada kelas yang Anda ampu di database (tabel pengampu_kelas).
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Kelas yang Diampu</label>
+                    <select
+                      value={slotClassId ?? ''}
+                      onChange={(e) => {
+                        const id = Number(e.target.value);
+                        setSlotClassId(id);
+                        const c = myClasses.find((x) => x.id_jadwal === id);
+                        if (c) setSlotMeeting(c.current_meeting);
+                      }}
+                      className="w-full border border-slate-200 rounded-lg p-2 bg-white text-slate-800 focus:outline-none focus:border-blue-600"
+                    >
+                      {myClasses.map((c) => (
+                        <option key={c.id_jadwal} value={c.id_jadwal}>
+                          {c.course_code} - {c.course_name} ({c.class_label}) • {c.day} {c.start_time}–{c.end_time}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Pertemuan yang Diganti</label>
+                      <select
+                        value={slotMeeting}
+                        onChange={(e) => setSlotMeeting(Number(e.target.value))}
+                        className="w-full border border-slate-200 rounded-lg p-2 bg-white text-slate-800"
+                      >
+                        {(myClasses.find((x) => x.id_jadwal === slotClassId)?.meetings || []).map((m) => (
+                          <option key={m.pertemuan_ke} value={m.pertemuan_ke}>
+                            Ke-{m.pertemuan_ke} • {new Date(`${m.tanggal}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {m.status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Tanggal Pengganti</label>
+                      <input
+                        type="date"
+                        value={slotDate || selectedDate}
+                        onChange={(e) => setSlotDate(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg p-2 bg-white text-slate-800"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Jam mulai mengikuti sesi terpilih; durasi mengikuti durasi kelas. Ruang dicek ulang di server sebelum disimpan.
+                  </div>
+                </>
+              )}
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSlotForBooking(null)}
+                  className="px-3.5 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={myClasses.length === 0 || isSavingSlot}
+                  className="px-4 py-2 bg-[#082c78] hover:bg-blue-900 disabled:opacity-50 text-white font-bold rounded-lg shadow-xs transition-colors"
+                >
+                  {isSavingSlot ? 'Menyimpan...' : 'Simpan Jadwal Pengganti'}
+                </button>
+              </div>
+            </form>
+            ) : (
             <form onSubmit={handleConfirmDosenReplacement} className="space-y-3 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
@@ -2366,12 +2725,13 @@ export const HeatmapRuangPage: React.FC = () => {
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}
 
       {/* ── Modal 2: Cek Ruang & Reservasi Belajar (Khusus Mahasiswa) ──── */}
-      {selectedSlotForBooking && currentRole !== 'dosen' && (
+      {selectedSlotForBooking && currentRole === 'mahasiswa' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-start justify-between border-b border-slate-100 pb-3">
@@ -2457,17 +2817,7 @@ export const HeatmapRuangPage: React.FC = () => {
               </div>
 
               <div className="pt-2 flex items-center justify-between border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleOpenNavForRoom(selectedSlotForBooking.room.code);
-                    setSelectedSlotForBooking(null);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-blue-700 hover:bg-blue-50 font-bold rounded-lg transition-colors"
-                >
-                  <Compass className="w-4 h-4" />
-                  <span>Petunjuk Arah Ruang</span>
-                </button>
+                <span />
 
                 <div className="flex items-center gap-2">
                   <button
@@ -2507,9 +2857,9 @@ export const HeatmapRuangPage: React.FC = () => {
                     {selectedCourseDetail.code}
                   </span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                    selectedCourseDetail.dept === 'SI' ? 'bg-sky-100 text-sky-800' :
-                    selectedCourseDetail.dept === 'IF' ? 'bg-indigo-100 text-indigo-800' :
-                    selectedCourseDetail.dept === 'TK' ? 'bg-purple-100 text-purple-800' :
+                    selectedCourseDetail.dept === 'SI' ? 'bg-orange-100 text-orange-800' :
+                    selectedCourseDetail.dept === 'IF' ? 'bg-blue-100 text-blue-900' :
+                    selectedCourseDetail.dept === 'TK' ? 'bg-green-100 text-green-800' :
                     'bg-amber-100 text-amber-800'
                   }`}>
                     {selectedCourseDetail.dept === 'SI' ? 'Sistem Informasi' :
@@ -2578,25 +2928,23 @@ export const HeatmapRuangPage: React.FC = () => {
               // Check if user is authorized to request replacement:
               // For mahasiswa: must take this course (in MAHASISWA_KRS)
               // For dosen: must be lecturer for this course (in DOSEN_MENGAJAR or current user's name matches)
-              const cleanCode = selectedCourseDetail.code.toUpperCase().replace(/\s+/g, '');
-              const isMahasiswaEnrolled = Object.keys(MAHASISWA_KRS).some(
-                k => k.toUpperCase().replace(/\s+/g, '') === cleanCode ||
-                     selectedCourseDetail.code.toUpperCase().includes(k.toUpperCase())
-              );
-              const isDosenPengampu = currentRole === 'dosen' && (
-                Object.keys(DOSEN_MENGAJAR).some(
-                  k => k.toUpperCase().replace(/\s+/g, '') === cleanCode ||
-                       selectedCourseDetail.code.toUpperCase().includes(k.toUpperCase())
-                ) ||
-                selectedCourseDetail.lecturer.toLowerCase().includes('rahmad')
-              );
+              const isMahasiswaEnrolled = currentRole === 'mahasiswa' && isOwnClass(selectedCourseDetail);
+              const isDosenPengampu = currentRole === 'dosen' && isOwnClass(selectedCourseDetail);
 
-              const canRequestReplacement = currentRole === 'dosen' ? isDosenPengampu : isMahasiswaEnrolled;
+              void isMahasiswaEnrolled;
+              // Jadwal pengganti hanya dapat diubah dosen pengampu; mahasiswa hanya melihat
+              const canRequestReplacement = currentRole === 'dosen' && isDosenPengampu;
 
               return (
                 <div className="space-y-2 pt-2 border-t border-slate-100">
                   {/* Status Banner for Replacement Eligibility */}
                   {currentRole === 'mahasiswa' && (
+                    <div className="p-2.5 rounded-xl border text-[11px] bg-slate-50 border-slate-200 text-slate-500 flex items-center gap-1.5">
+                      <Info className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span>Jadwal pengganti hanya dapat diatur oleh dosen pengampu.</span>
+                    </div>
+                  )}
+                  {false && (
                     <div className={`p-2.5 rounded-xl border text-[11px] flex items-center justify-between gap-2 ${
                       isMahasiswaEnrolled
                         ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
@@ -2650,18 +2998,7 @@ export const HeatmapRuangPage: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => {
-                        handleOpenNavForRoom(selectedCourseDetail.roomName);
-                        setSelectedCourseDetail(null);
-                      }}
-                      className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"
-                    >
-                      <Compass className="w-3.5 h-3.5" />
-                      <span>Petunjuk Arah</span>
-                    </button>
-
+                  <div className="flex items-center justify-end gap-2">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setSelectedCourseDetail(null)}
@@ -2709,8 +3046,10 @@ export const HeatmapRuangPage: React.FC = () => {
           course={replacementModalCourse}
           userRole={currentRole}
           userProdi={activeProdiView === 'ALL' ? 'SI' : activeProdiView}
-          allRooms={MASTER_ROOMS}
+          allRooms={allRooms}
           dayDateMapping={dayDateMapping}
+          userEmail={isDbConnected && currentRole === 'dosen' ? currentUser.email : undefined}
+          onSaved={afterReplacementSaved}
           onClose={() => setReplacementModalCourse(null)}
           showToast={showToast}
         />
@@ -2721,12 +3060,11 @@ export const HeatmapRuangPage: React.FC = () => {
         <CariRuangKosongModal
           userRole={currentRole}
           userProdi={activeProdiView === 'ALL' ? 'SI' : activeProdiView}
-          allRooms={MASTER_ROOMS}
+          allRooms={allRooms}
           dayDateMapping={dayDateMapping}
           defaultDate={selectedDate || '2024-11-25'}
           onClose={() => setIsGeneralSearchModalOpen(false)}
           showToast={showToast}
-          onNavigateToRoom={(roomCode) => handleOpenNavForRoom(roomCode)}
         />
       )}
     </div>

@@ -2,7 +2,7 @@
 Schema Pydantic untuk representasi entitas Kelas Mata Kuliah.
 """
 
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -25,3 +25,11 @@ class ClassItem(BaseModel):
     is_transition_course: bool = False
     lecturer_ids: List[str] = Field(default_factory=list)
     lecturer_names: List[str] = Field(default_factory=list)
+    status_kelas: str = "TERBUKA"
+    sks_teori: int = 2
+    sks_praktik: int = 0
+    alasan_pembatalan: Optional[str] = None
+    preferensi_hari: List[str] = Field(default_factory=list)
+    preferensi_waktu: Optional[str] = None
+    catatan_khusus: Optional[str] = None
+    below_min_quota: bool = False

@@ -21,6 +21,58 @@ class AdjustClassRequest(BaseModel):
     requires_room: Optional[bool] = None
     lecturer_names: Optional[List[str]] = None
     lecturer_ids: Optional[List[str]] = None
+    reason: Optional[str] = None
+    actor_email: Optional[str] = None
+
+
+class OfferingRombelPayload(BaseModel):
+    class_label: str
+    enrolled_count: int
+
+
+class CreateOfferingRequest(BaseModel):
+    course_code: str
+    name: str
+    department: str = "SI"
+    semester: int = 1
+    sks: int = 3
+    sks_teori: Optional[int] = None
+    sks_praktik: Optional[int] = None
+    is_mandatory: bool = True
+    requires_room: bool = True
+    room_type_needed: Optional[str] = None
+    primary_lecturer_name: str
+    tandem_lecturer_names: List[str] = []
+    classes: List[OfferingRombelPayload]
+    preferred_days: List[str] = []
+    preferred_time_slot: Optional[str] = None
+    avoid_friday: bool = False
+    special_note: Optional[str] = None
+    as_draft: bool = False
+    update_existing: bool = False
+    actor_email: Optional[str] = None
+
+
+class CancelClassRequest(BaseModel):
+    reason: str
+    actor_email: Optional[str] = None
+
+
+class RestoreClassRequest(BaseModel):
+    actor_email: Optional[str] = None
+
+
+class AdjustRombelsRequest(BaseModel):
+    target_count: int
+    default_capacity: int = 40
+    reason: str = "Penyesuaian jumlah rombel departemen"
+    actor_email: Optional[str] = None
+
+
+class SubmitDepartemenRequest(BaseModel):
+    department: str
+    catatan: Optional[str] = None
+    actor_email: Optional[str] = None
 
 
 class RoomPayload(BaseModel):
@@ -88,3 +140,14 @@ class AutoFixValidationRequest(BaseModel):
     version_id: Optional[int] = None
     actor_role: Optional[str] = "admin"
     actor_email: Optional[str] = None
+
+
+class PenggantiPayload(BaseModel):
+    email: str
+    id_jadwal: int
+    pertemuan_ke: int
+    tanggal: str
+    jam_mulai: str
+    jam_selesai: str
+    id_ruang: int
+    keterangan: Optional[str] = None

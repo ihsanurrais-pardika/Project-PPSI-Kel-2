@@ -1,7 +1,7 @@
 """
 Entry Point Tunggal FastAPI Backend SIPRAMA FTI UNAND.
-Menggabungkan seluruh router modular (Auth, Courses/Classes, Rooms/Slots,
-CP-SAT Schedule + Approval Wadek I, dan Validasi Konflik).
+Menggabungkan seluruh router modular (Auth, Courses/Classes, Departemen,
+Rooms/Slots, CP-SAT Schedule + Approval Wadek I, Validasi Konflik, & Pertemuan).
 """
 
 import os
@@ -16,7 +16,16 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 from app.dependencies import get_store  # noqa: E402,F401
-from app.routes import auth, courses, health, rooms, schedule, validation  # noqa: E402
+from app.routes import (  # noqa: E402
+    auth,
+    courses,
+    departemen,
+    health,
+    pertemuan,
+    rooms,
+    schedule,
+    validation,
+)
 
 app = FastAPI(
     title="SIPRAMA FTI UNAND - Unified API & CP-SAT Engine",
@@ -35,9 +44,11 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(courses.router)
+app.include_router(departemen.router)
 app.include_router(rooms.router)
 app.include_router(schedule.router)
 app.include_router(validation.router)
+app.include_router(pertemuan.router)
 
 
 if __name__ == "__main__":
