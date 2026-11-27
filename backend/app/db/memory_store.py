@@ -1017,7 +1017,7 @@ class InMemoryDataStore:
                     "capacity": sc.room_capacity,
                 })
 
-        from app.db_store import mysql_store
+        from app.db.mysql_store import mysql_store
         res = self.latest_schedule_result
         return mysql_store._compute_utilization(
             rooms=filtered_rooms,
