@@ -10,7 +10,7 @@ from typing import List, Dict, Tuple, Optional, Set
 from collections import defaultdict
 from ortools.sat.python import cp_model
 
-from app.engine.domain_models import (
+from app.models.domain import (
     CourseClass,
     Room,
     TimeSlot,

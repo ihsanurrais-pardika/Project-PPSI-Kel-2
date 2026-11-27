@@ -14,7 +14,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.db_store import get_db_connection, mysql_store
+from app.db.connection import get_db_connection
+from app.db.mysql_store import mysql_store
 from app.engine.manual_schedule import normalize_day_name, parse_time_to_minutes
 
 MAX_PERTEMUAN = 16

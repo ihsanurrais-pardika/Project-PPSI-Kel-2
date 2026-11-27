@@ -6,7 +6,7 @@ Sesuai Dokumen task.md Bagian 4.
 import pytest
 from typing import List, Dict
 
-from app.engine.domain_models import (
+from app.models.domain import (
     Day,
     RoomType,
     TimeSlot,

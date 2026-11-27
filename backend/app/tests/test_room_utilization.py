@@ -17,7 +17,7 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 from app.main import app, get_store
-from app.engine.memory_store import data_store
+from app.db.memory_store import data_store
 
 # Override dependency agar pakai InMemoryDataStore (bukan MySQL)
 app.dependency_overrides[get_store] = lambda: data_store

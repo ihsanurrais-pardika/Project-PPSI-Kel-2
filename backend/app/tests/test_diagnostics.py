@@ -3,7 +3,7 @@ Unit & Integration Tests untuk Pre-Flight Diagnostics (task.md Bagian 7).
 """
 
 import pytest
-from app.engine.domain_models import (
+from app.models.domain import (
     TimeSlot,
     Room,
     Lecturer,

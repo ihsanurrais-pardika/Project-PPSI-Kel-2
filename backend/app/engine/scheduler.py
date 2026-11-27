@@ -8,7 +8,7 @@ import time
 from typing import List, Optional
 from ortools.sat.python import cp_model
 
-from app.engine.domain_models import (
+from app.models.domain import (
     CourseClass,
     Room,
     TimeSlot,
