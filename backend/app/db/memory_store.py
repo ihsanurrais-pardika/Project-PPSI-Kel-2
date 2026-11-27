@@ -7,9 +7,9 @@ manajemen ruangan FTI, dan penjadwalan terpadu dengan engine CP-SAT.
 import os
 import csv
 from typing import List, Dict, Optional, Any
-from pydantic import BaseModel, Field
 
-from app.engine.domain_models import (
+from app.core.config import ROOT_DIR
+from app.models.domain import (
     CourseClass,
     Room,
     TimeSlot,
@@ -20,6 +20,7 @@ from app.engine.domain_models import (
     RoomType,
 )
 from app.engine.scheduler import CPSATSchedulerService
+from app.schemas.class_dto import ClassItem
 from app.schemas.schedule_dto import SolverResultOutput
 from app.engine.manual_schedule import (
     ScheduleConflictException,
@@ -31,27 +32,6 @@ from app.engine.manual_schedule import (
     plan_autofix_moves,
     scan_schedule_issues,
 )
-
-
-class ClassItem(BaseModel):
-    id: str
-    course_code: str
-    department: str  # 'TK', 'SI', 'IF'
-    semester: int
-    name: str
-    class_label: str
-    sks: int
-    enrolled_count: int
-    enrolled_is_estimated: bool = False
-    room_type_needed: str = "Teori"
-    is_mandatory: bool = True
-    is_elective: bool = False
-    rombel_key: str = ""
-    requires_room: bool = True
-    requires_accessibility: bool = False
-    is_transition_course: bool = False
-    lecturer_ids: List[str] = Field(default_factory=list)
-    lecturer_names: List[str] = Field(default_factory=list)
 
 
 class InMemoryDataStore:
@@ -70,11 +50,9 @@ class InMemoryDataStore:
         self.load_from_csv()
 
     def _find_csv_path(self) -> Optional[str]:
-        # Coba beberapa lokasi potensial
         candidates = [
+            os.path.join(str(ROOT_DIR), self.csv_filename),
             os.path.join(os.getcwd(), self.csv_filename),
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), self.csv_filename),
-            os.path.join("D:\\Project-PPSI-Kel-2", self.csv_filename),
         ]
         for p in candidates:
             if os.path.exists(p):

@@ -3,9 +3,16 @@ Script Seeding Database SIPRAMA FTI UNAND
 Memasukkan Data Master Program Studi dan Pengguna Resmi ke MySQL Laragon (siprama_db)
 """
 
+import os
+import sys
 import pymysql
 import bcrypt
-from database import get_db_connection
+
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
+from app.db.connection import get_db_connection
 
 PROGRAM_STUDI_DATA = [
     {"kode": "FTI", "nama": "Fakultas Teknologi Informasi", "departemen": "Fakultas Teknologi Informasi"},

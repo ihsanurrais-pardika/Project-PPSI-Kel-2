@@ -4,7 +4,7 @@ Sesuai Dokumen task.md Bagian 5.
 """
 
 import pytest
-from app.engine.domain_models import (
+from app.models.domain import (
     TimeSlot,
     Room,
     Lecturer,

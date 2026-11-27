@@ -10,9 +10,10 @@ import subprocess
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any, Tuple
 
-from database import get_db_connection
-from app.engine.memory_store import ClassItem
-from app.engine.domain_models import (
+from app.core.config import ROOT_DIR
+from app.db.connection import get_db_connection
+from app.schemas.class_dto import ClassItem
+from app.models.domain import (
     CourseClass,
     Room,
     TimeSlot,
@@ -110,7 +111,7 @@ class MySQLDataStore:
         self._load_csv_enrichment()
 
     def _root_dir(self) -> str:
-        return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        return str(ROOT_DIR)
 
     def _find_csv_path(self) -> Optional[str]:
         candidates = [

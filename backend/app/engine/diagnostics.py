@@ -6,7 +6,7 @@ Sesuai Dokumen task.md Bagian 7 (Penanganan Diagnosis Model).
 from typing import List, Dict, Tuple, Set
 from collections import defaultdict
 
-from app.engine.domain_models import (
+from app.models.domain import (
     CourseClass,
     Room,
     TimeSlot,

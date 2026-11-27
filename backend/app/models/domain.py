@@ -4,7 +4,7 @@ Sesuai Dokumen task.md Bagian 2 (Sets & Indices) dan Bagian 3 (Decision Variable
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Set
+from typing import List, Dict
 from enum import Enum
 
 

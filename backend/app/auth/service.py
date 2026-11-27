@@ -1,75 +1,12 @@
 """
-Modul Koneksi dan Autentikasi Database SIPRAMA FTI UNAND
-Membaca langsung dari database MySQL Laragon (siprama_db).
-Hanya mengizinkan login jika data pengguna ada di database.
-Jika tabel pengguna di database kosong, login DITOLAK.
+Layanan Autentikasi Pengguna Berbasis Database MySQL (siprama_db).
+Memverifikasi kredensial email/username/NIDN/NIM beserta bcrypt hash password dan role.
 """
 
-import os
-import re
-import pymysql
-import pymysql.cursors
 import bcrypt
+import pymysql
 
-
-def _load_root_env():
-    """Memuat variabel dari file .env di root project jika belum ada di environment."""
-    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-    if not os.path.exists(env_path):
-        return
-    try:
-        with open(env_path, "r", encoding="utf-8") as f:
-            for raw_line in f:
-                line = raw_line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, val = line.split("=", 1)
-                key = key.strip()
-                val = val.strip().strip('"').strip("'")
-                if key and key not in os.environ:
-                    os.environ[key] = val
-    except Exception:
-        pass
-
-
-_load_root_env()
-
-# Konfigurasi Database (Mendukung .env atau default Laragon/XAMPP MySQL)
-DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
-DB_PORT = int(os.environ.get("DB_PORT", 3306))
-DB_USER = os.environ.get("DB_USER", "root")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
-DB_NAME = os.environ.get("DB_NAME", "siprama_db")
-
-# Parse dari DATABASE_URL jika tersedia di .env
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
-if DATABASE_URL and "mysql://" in DATABASE_URL:
-    try:
-        # Format: mysql://user:password@host:port/database
-        pattern = r"mysql://([^:]*)(?::([^@]*))?@([^:/]+)(?::(\d+))?/([^?]+)"
-        match = re.match(pattern, DATABASE_URL)
-        if match:
-            DB_USER = match.group(1) or "root"
-            DB_PASSWORD = match.group(2) or ""
-            DB_HOST = match.group(3) or "127.0.0.1"
-            DB_PORT = int(match.group(4) or 3306)
-            DB_NAME = match.group(5) or "siprama_db"
-    except Exception as e:
-        print(f"[DB-CONFIG] Gagal parsing DATABASE_URL, menggunakan default: {e}")
-
-
-def get_db_connection():
-    """Membuka koneksi ke database MySQL Laragon."""
-    return pymysql.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME,
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-        connect_timeout=5,
-    )
+from app.db.connection import get_db_connection
 
 
 def count_users_in_db() -> int:
@@ -81,9 +18,9 @@ def count_users_in_db() -> int:
             cursor.execute("SELECT COUNT(*) AS total FROM pengguna;")
             result = cursor.fetchone()
             return int(result["total"]) if result else 0
-    except Exception as e:
-        print(f"[DB-ERROR] Gagal menghitung tabel pengguna: {e}")
-        raise e
+    except Exception as exc:
+        print(f"[DB-ERROR] Gagal menghitung tabel pengguna: {exc}")
+        raise exc
     finally:
         if conn:
             conn.close()
@@ -98,17 +35,15 @@ def verify_password(plain_password: str, stored_hash: str) -> bool:
     if not plain_password or not stored_hash:
         return False
 
-    # 1. Coba verifikasi bcrypt
     if stored_hash.startswith(("$2b$", "$2a$", "$2y$")):
         try:
             return bcrypt.checkpw(
                 plain_password.encode("utf-8"),
-                stored_hash.encode("utf-8")
+                stored_hash.encode("utf-8"),
             )
         except Exception:
             pass
 
-    # 2. Coba perbandingan langsung
     return plain_password == stored_hash
 
 
@@ -154,7 +89,6 @@ def authenticate_from_database(identifier: str, password: str):
 
     conn = None
     try:
-        # 1. Cek apakah database memiliki data pengguna
         total_users = count_users_in_db()
         if total_users == 0:
             print("[AUTH-DB] Tabel pengguna di database KOSONG (0 data). Login ditolak.")
@@ -165,7 +99,6 @@ def authenticate_from_database(identifier: str, password: str):
                 "reason": "DATABASE_EMPTY",
             }
 
-        # 2. Query data pengguna berdasarkan email, username, NIP/NIDN dosen, atau NIM mahasiswa
         conn = get_db_connection()
         query = """
             SELECT 
@@ -197,7 +130,6 @@ def authenticate_from_database(identifier: str, password: str):
             cursor.execute(query, (clean_id, clean_id, clean_id_nospace, clean_id_nospace))
             user_row = cursor.fetchone()
 
-        # 3. Jika pengguna tidak ditemukan di database
         if not user_row:
             print(f"[AUTH-DB] Pengguna '{clean_id}' tidak ditemukan di tabel database.")
             return {
@@ -207,7 +139,6 @@ def authenticate_from_database(identifier: str, password: str):
                 "reason": "USER_NOT_FOUND",
             }
 
-        # 4. Cek status aktif
         if not user_row.get("status_aktif", True):
             print(f"[AUTH-DB] Akun '{clean_id}' berstatus non-aktif.")
             return {
@@ -217,9 +148,7 @@ def authenticate_from_database(identifier: str, password: str):
                 "reason": "INACTIVE_USER",
             }
 
-        # 5. Verifikasi Password terhadap password_hash di database
-        is_pw_valid = verify_password(clean_pw, user_row["password_hash"])
-        if not is_pw_valid:
+        if not verify_password(clean_pw, user_row["password_hash"]):
             print(f"[AUTH-DB] Password untuk '{clean_id}' tidak cocok dengan hash database.")
             return {
                 "success": False,
@@ -228,7 +157,6 @@ def authenticate_from_database(identifier: str, password: str):
                 "reason": "INVALID_PASSWORD",
             }
 
-        # 6. Susun data profil pengguna dari database untuk frontend
         role = normalize_role(user_row["peran"])
         nip_or_nim = user_row.get("dosen_nidn") or user_row.get("mahasiswa_nim") or user_row["username"]
         dept_name = user_row.get("nama_departemen") or user_row.get("nama_prodi") or "Fakultas Teknologi Informasi"

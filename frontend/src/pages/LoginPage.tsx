@@ -180,7 +180,7 @@ export const LoginPage: React.FC = () => {
         }
       } else {
         // Jika server backend belum dijalankan
-        const failMsg = 'Tidak dapat membaca database. Pastikan server backend aktif (python backend/server.py) dan database Laragon berjalan.';
+        const failMsg = 'Tidak dapat membaca database. Pastikan server backend aktif (uvicorn app.main:app --reload --port 8000 di folder backend) dan database Laragon berjalan.';
         setErrorMsg(failMsg);
         setShowErrorPopup(true);
         showToast(failMsg, 'error');

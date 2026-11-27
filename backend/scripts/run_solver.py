@@ -4,11 +4,16 @@ Mensimulasikan kasus riil Fakultas Teknologi Informasi (SI, IF, TK)
 tanpa ketergantungan database (Domain Model murni).
 """
 
+import os
 import sys
 from typing import List
 from tabulate import tabulate
 
-from app.engine.domain_models import (
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
+from app.models.domain import (
     Day,
     RoomType,
     TimeSlot,
