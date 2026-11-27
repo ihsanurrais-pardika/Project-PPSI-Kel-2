@@ -823,7 +823,7 @@ export const DepartemenWorkspacePage: React.FC = () => {
             }}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-semibold transition-all ${
               view === 'daftar_mk'
-                ? 'bg-[#082c78] text-white shadow-xs'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
           >
@@ -847,7 +847,7 @@ export const DepartemenWorkspacePage: React.FC = () => {
             }}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-semibold transition-all ${
               view === 'input_mk'
-                ? 'bg-[#082c78] text-white shadow-xs'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
           >
@@ -862,7 +862,7 @@ export const DepartemenWorkspacePage: React.FC = () => {
             }}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-semibold transition-all ${
               view === 'riwayat'
-                ? 'bg-[#082c78] text-white shadow-xs'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
           >
@@ -892,7 +892,7 @@ export const DepartemenWorkspacePage: React.FC = () => {
             }}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-semibold transition-all ${
               view === 'pedoman'
-                ? 'bg-[#082c78] text-white shadow-xs'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
           >

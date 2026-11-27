@@ -134,14 +134,13 @@ export const WadekWorkspacePage: React.FC = () => {
       <div className="flex h-[72px] items-center gap-3 border-b border-slate-100 px-5"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#082c78] text-sm font-black text-white">FTI</div><div><div className="text-xs font-extrabold text-[#082c78]">Universitas Andalas</div><div className="text-[11px] text-slate-500">Fakultas Teknologi Informasi</div></div><button onClick={() => setMobileNav(false)} className="ml-auto lg:hidden"><X size={18} /></button></div>
       <div className="mx-4 mt-3 flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2 text-[10px]"><span className="flex items-center gap-1.5 text-slate-700"><i className="h-2 w-2 rounded-full bg-blue-600" />Semester Aktif</span><b className="font-mono text-blue-800">{semesterLabel}</b></div>
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {navItems.map((item, index) => <React.Fragment key={item.id}>{item.section && <div className="px-3 pb-2 pt-4 text-[10px] font-bold tracking-wider text-slate-400">{item.section}</div>}<button onClick={() => { setView(item.id); setMobileNav(false) }} className={`mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${view === item.id ? 'bg-[#173e96] text-white shadow-sm' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-900'}`}><item.icon size={16} />{item.label}{item.id === 'dashboard' && <span className="ml-auto rounded bg-white/15 px-1.5 py-0.5 text-[9px]">WD1</span>}{item.id === 'konflik' && unresolvedConflicts.length > 0 && <span className="ml-auto rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] text-white font-bold">{unresolvedConflicts.length}</span>}</button></React.Fragment>)}
+        {navItems.map((item, index) => <React.Fragment key={item.id}>{item.section && <div className="px-3 pb-2 pt-4 text-[10px] font-bold tracking-wider text-slate-400">{item.section}</div>}<button onClick={() => { setView(item.id); setMobileNav(false) }} className={`mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold transition-all ${view === item.id ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}><item.icon size={16} />{item.label}{item.id === 'dashboard' && <span className="ml-auto rounded bg-white/15 px-1.5 py-0.5 text-[9px]">WD1</span>}{item.id === 'konflik' && unresolvedConflicts.length > 0 && <span className="ml-auto rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] text-white font-bold">{unresolvedConflicts.length}</span>}</button></React.Fragment>)}
       </nav>
       <div className="border-t border-slate-100 p-3"><div className="flex items-center gap-2 rounded-xl border border-slate-200 p-2"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-blue-900">{currentUser.name.charAt(0)}</div><div className="min-w-0 flex-1"><div className="truncate text-[11px] font-bold">{currentUser.name}</div><div className="text-[10px] text-slate-500">Wakil Dekan I · Akademik</div></div><button onClick={logout} title="Keluar" className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><LogOut size={15} /></button></div></div>
     </aside>
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <header className="z-20 flex min-h-[72px] items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 md:px-6"><div className="flex min-w-0 items-center gap-3"><button onClick={() => setMobileNav(true)} className="lg:hidden"><Menu size={20} /></button><div className="min-w-0"><div className="max-w-[390px] text-xs font-bold leading-4 text-[#082c78] md:text-[13px]">Sistem Informasi Penjadwalan Perkuliahan &amp; Manajemen Ruang Terintegrasi</div><div className="mt-0.5 text-[10px] text-slate-500">FTI UNAND / Portal Eksekutif Akademik</div></div></div><div className="flex items-center gap-2 md:gap-3"><div className="relative hidden md:block"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Cari ruang, mata kuliah, dosen..." className="w-52 rounded-lg border border-slate-100 bg-slate-50 py-2 pl-9 pr-3 text-[11px] outline-none focus:border-blue-300 lg:w-64" /></div><div className="hidden items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-[11px] font-bold text-slate-700 sm:flex"><ShieldCheck size={15} className="text-blue-700" /> Wakil Dekan I</div><button onClick={() => setView('riwayat')} aria-label="Notifikasi keputusan" className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100"><Bell size={17} />{scheduleApprovalStatus === 'Menunggu Persetujuan' && <i className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" />}</button><div className="grid h-8 w-8 place-items-center rounded-full bg-[#082c78] text-white"><span className="text-xs font-bold">{currentUser.name.charAt(0)}</span></div></div></header>
+      <header className="z-20 flex min-h-[72px] items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 md:px-6"><div className="flex min-w-0 items-center gap-3"><button onClick={() => setMobileNav(true)} className="lg:hidden"><Menu size={20} /></button><div className="min-w-0"><h1 className="text-base font-extrabold leading-tight text-slate-900">{title}</h1><div className="text-[11px] leading-tight text-slate-500">SIPRAMA FTI UNAND • Portal Eksekutif</div></div></div><div className="flex items-center gap-2 md:gap-3"><div className="hidden items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-[11px] font-bold text-slate-700 sm:flex"><ShieldCheck size={15} className="text-blue-700" /> Wakil Dekan I</div><button onClick={() => setView('riwayat')} aria-label="Notifikasi keputusan" className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100"><Bell size={17} />{scheduleApprovalStatus === 'Menunggu Persetujuan' && <i className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" />}</button><div className="grid h-8 w-8 place-items-center rounded-full bg-[#082c78] text-white"><span className="text-xs font-bold">{currentUser.name.charAt(0)}</span></div></div></header>
       <main className="flex-1 overflow-y-auto">
-        <div className="border-b border-blue-100 bg-gradient-to-r from-[#eef3ff] to-[#e5edff] px-5 py-5 md:px-8"><div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4"><div><div className="mb-2 flex items-center gap-1.5 text-[10px] text-slate-500"><span>Beranda</span><ChevronRight size={12} /><span>Portal Eksekutif</span><ChevronRight size={12} /><b className="text-blue-900">{title}</b></div><h1 className="text-xl font-extrabold tracking-tight text-[#082c78] md:text-[26px]">{view === 'dashboard' ? 'Review & Persetujuan Draf Jadwal Perkuliahan' : view === 'kalender' ? 'Kalender Jadwal Perkuliahan' : title}</h1><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-600 md:text-sm">{view === 'kalender' ? 'Lihat jadwal dalam format kalender mingguan. Klik mata kuliah untuk mereview, pilih untuk revisi atau ACC langsung.' : 'Verifikasi kepatuhan hard constraint akademik, optimasi beban pengajaran dosen lintas prodi, dan otoritas pengesahan Surat Keputusan (SK) jadwal perkuliahan semester ganjil Fakultas Teknologi Informasi.'}</p></div><div className="hidden min-w-[150px] rounded-xl border border-blue-100 bg-white px-4 py-3 shadow-sm md:block"><div className="text-[9px] uppercase tracking-wider text-slate-500">Otoritas pengesahan</div><div className="mt-1 text-xs font-bold">Wakil Dekan I<br />(Akademik)</div><div className="mt-1 font-mono text-[9px] font-bold text-blue-700">STATUS: {scheduleApprovalStatus.toUpperCase()}</div></div></div></div>
         <div className="mx-auto max-w-[1500px] space-y-5 p-4 md:p-6">
           {view === 'dashboard' && <>
             <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-bold text-[#082c78]"><Activity size={16} /> Ringkasan Audit Kelayakan Jadwal (KPI Eksekutif)</h2><span className="hidden rounded-full bg-blue-100 px-3 py-1 font-mono text-[10px] text-slate-600 sm:inline">CP-SAT Solver · {latestCPSATResult?.version_number ? `Versi #${latestCPSATResult.version_number}` : 'Database Aktif'}</span></div>
@@ -524,6 +523,7 @@ const HeatmapView: React.FC<{ rooms: any[]; schedule: any[] }> = ({ rooms, sched
     courseName?: string;
     classLabel?: string;
     lecturer?: string;
+    lecturers?: string[];
     enrolled?: number;
     capacity?: number;
     x: number;
@@ -552,7 +552,7 @@ const HeatmapView: React.FC<{ rooms: any[]; schedule: any[] }> = ({ rooms, sched
       return apiData.rooms
         .map((r) => ({
           id: r.room_id,
-          name: r.room_code === r.room_name || !r.room_name ? r.room_code : `${r.room_code} (${r.room_name})`,
+          name: r.room_code || r.room_name,
           type: r.room_type || 'Teori',
           capacity: r.capacity,
           building: r.building,
@@ -596,30 +596,13 @@ const HeatmapView: React.FC<{ rooms: any[]; schedule: any[] }> = ({ rooms, sched
 
   return <div className="space-y-4">
     {/* 4 Summary Metric Cards (matching Admin) */}
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5">
       <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
         <div className="flex items-center justify-between text-slate-400">
           <span className="text-[10px] font-bold uppercase tracking-wider">Total Ruang</span>
           <LayoutDashboard className="w-4 h-4 text-blue-600" />
         </div>
         <div className="text-2xl font-black text-slate-900 mt-1">{totalRooms}</div>
-        <div className="text-xs text-slate-500">Ruang dipantau FTI</div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
-        <div className="flex items-center justify-between text-slate-400">
-          <span className="text-[10px] font-bold uppercase tracking-wider">Rata-rata Utilisasi</span>
-          <Activity className="w-4 h-4 text-indigo-600" />
-        </div>
-        <div className="flex items-baseline gap-2 mt-1">
-          <span className="text-2xl font-black text-indigo-700">{avgUtil}%</span>
-          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-            {selectedDay}
-          </span>
-        </div>
-        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-1.5">
-          <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${avgUtil}%` }} />
-        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
@@ -628,7 +611,6 @@ const HeatmapView: React.FC<{ rooms: any[]; schedule: any[] }> = ({ rooms, sched
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
         </div>
         <div className="text-2xl font-black text-emerald-700 mt-1">{freeSlotsCount} Slot</div>
-        <div className="text-xs text-slate-500">Slot tersedia pada hari {selectedDay}</div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
@@ -643,14 +625,13 @@ const HeatmapView: React.FC<{ rooms: any[]; schedule: any[] }> = ({ rooms, sched
             {overloadCount > 0 ? 'Butuh Aksi' : 'Aman'}
           </span>
         </div>
-        <div className="text-xs text-slate-500">Kapasitas rombel melampaui kursi</div>
       </div>
     </div>
 
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-bold text-[#082c78]"><Grid3X3 size={16} /> Utilisasi Ruang FTI ({selectedDay})</h2>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-[#082c78]"><Grid3X3 size={16} /> Utilisasi Ruang FTI</h2>
           <p className="mt-1 text-xs text-slate-500">Tingkat pemanfaatan ruang berdasarkan jadwal yang telah dioptimasi.</p>
         </div>
         <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-0.5 self-start">
@@ -668,7 +649,7 @@ const HeatmapView: React.FC<{ rooms: any[]; schedule: any[] }> = ({ rooms, sched
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {roomUsage.map(room => <div key={room.id} className="rounded-xl border border-slate-100 p-3.5 hover:border-blue-200 transition-colors">
+        {roomUsage.map(room => <div key={room.id} className="rounded-xl border border-slate-200/80 p-4 hover:border-blue-300 transition-colors bg-white">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-bold text-slate-800 truncate">{room.name}</div>
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0 ${heatColor(room.pct)}`}>{room.pct}%</span>
@@ -701,7 +682,8 @@ const HeatmapView: React.FC<{ rooms: any[]; schedule: any[] }> = ({ rooms, sched
                       courseCode: apiSlot?.course_code || fallbackSlot?.courseCode,
                       courseName: apiSlot?.course_name || fallbackSlot?.courseName,
                       classLabel: apiSlot?.class_label || fallbackSlot?.classLabel,
-                      lecturer: apiSlot?.lecturer_name || fallbackSlot?.lecturerName,
+                      lecturer: apiSlot?.lecturer_name || fallbackSlot?.lecturerName || fallbackSlot?.primaryLecturer,
+                      lecturers: apiSlot?.lecturer_names?.length ? apiSlot.lecturer_names : fallbackSlot?.lecturerNames,
                       enrolled: apiSlot?.enrolled_count ?? fallbackSlot?.studentCount,
                       capacity: apiSlot?.capacity ?? room.capacity,
                       x: rect.left,
@@ -755,12 +737,14 @@ const HeatmapView: React.FC<{ rooms: any[]; schedule: any[] }> = ({ rooms, sched
             <div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">Ruang</div>
             <div className="font-bold text-slate-900 mt-0.5 truncate">{tooltip.roomName}</div>
             <div className="text-slate-600 text-[10px]">
-              {tooltip.enrolled != null ? `${tooltip.enrolled} / ${tooltip.capacity} Mhs` : 'Terisi'}
+              {tooltip.enrolled != null ? `${tooltip.enrolled} / ${tooltip.capacity} Mahasiswa` : 'Terisi'}
             </div>
           </div>
           <div className="col-span-2 pt-1 border-t border-blue-100">
             <div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">Dosen Pengampu</div>
-            <div className="font-bold text-slate-900 mt-0.5 truncate">{tooltip.lecturer || 'Tim Dosen FTI'}</div>
+            {(tooltip.lecturers?.length ? tooltip.lecturers : [tooltip.lecturer || '—']).map((name, i) => (
+              <div key={i} className="font-bold text-slate-900 mt-0.5 leading-snug">{name}</div>
+            ))}
           </div>
         </div>
       </div>

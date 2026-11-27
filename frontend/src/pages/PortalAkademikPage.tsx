@@ -21,6 +21,9 @@ import {
 export const PortalAkademikPage: React.FC = () => {
   const { setSelectedRoomForNav, setIsRoomNavModalOpen, showToast, rooms, currentRole, setActivePage } = useApp();
 
+  const isDosen = currentRole === 'dosen';
+  // Rute/navigasi, presensi, dan materi kuliah disembunyikan untuk dosen & mahasiswa
+  const hidePortalActions = currentRole === 'dosen' || currentRole === 'mahasiswa';
   const [portalMode, setPortalMode] = useState<'student' | 'lecturer'>(currentRole === 'dosen' ? 'lecturer' : 'student');
   const [activeTab, setActiveTab] = useState<'today' | 'all' | 'requests'>('today');
 
@@ -53,11 +56,12 @@ export const PortalAkademikPage: React.FC = () => {
             <span>•</span>
             <span className="text-slate-500">SSO Integrasi Mahasiswa &amp; Dosen</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-            Portal Informasi Akademik FTI Unand
-          </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Akses personal jadwal kuliah, lokasi ruang perkuliahan fisik, dan presensi mandiri terintegrasi.
+            {isDosen
+              ? 'Akses personal jadwal mengajar dan informasi ruang perkuliahan.'
+              : currentRole === 'mahasiswa'
+                ? 'Akses personal jadwal kuliah dan informasi ruang perkuliahan.'
+                : 'Akses personal jadwal kuliah, lokasi ruang perkuliahan fisik, dan presensi mandiri terintegrasi.'}
           </p>
         </div>
 
@@ -247,13 +251,15 @@ export const PortalAkademikPage: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleOpenNav('G-203')}
-                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg transition-colors shadow-2xs"
-              >
-                <Compass className="w-3.5 h-3.5" />
-                <span>Panduan Rute &amp; Navigasi Ruang</span>
-              </button>
+              {!hidePortalActions && (
+                <button
+                  onClick={() => handleOpenNav('G-203')}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg transition-colors shadow-2xs"
+                >
+                  <Compass className="w-3.5 h-3.5" />
+                  <span>Panduan Rute &amp; Navigasi Ruang</span>
+                </button>
+              )}
             </div>
 
             {/* Actions Bottom Bar */}
@@ -264,6 +270,7 @@ export const PortalAkademikPage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2">
+                {!hidePortalActions && (
                 <button
                   onClick={handlePresence}
                   className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5"
@@ -271,6 +278,8 @@ export const PortalAkademikPage: React.FC = () => {
                   <QrCode className="w-3.5 h-3.5" />
                   <span>Presensi Mandiri / QR</span>
                 </button>
+                )}
+                {!hidePortalActions && (
                 <button
                   onClick={() => showToast('Membuka materi kuliah di i-Learn UNAND...', 'info')}
                   className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
@@ -278,6 +287,7 @@ export const PortalAkademikPage: React.FC = () => {
                   <BookOpen className="w-3.5 h-3.5 text-slate-400" />
                   <span>Materi Kuliah</span>
                 </button>
+                )}
               </div>
             </div>
           </div>
@@ -328,13 +338,15 @@ export const PortalAkademikPage: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleOpenNav('Lab Software 1')}
-                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg transition-colors shadow-2xs"
-              >
-                <Compass className="w-3.5 h-3.5" />
-                <span>Panduan Rute &amp; Navigasi Ruang</span>
-              </button>
+              {!hidePortalActions && (
+                <button
+                  onClick={() => handleOpenNav('Lab Software 1')}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg transition-colors shadow-2xs"
+                >
+                  <Compass className="w-3.5 h-3.5" />
+                  <span>Panduan Rute &amp; Navigasi Ruang</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -351,7 +363,7 @@ export const PortalAkademikPage: React.FC = () => {
                   <th className="p-3">Jadwal Sesi</th>
                   <th className="p-3">Ruang Kuliah</th>
                   <th className="p-3">Dosen Pengampu</th>
-                  <th className="p-3">Aksi</th>
+                  {!hidePortalActions && <th className="p-3">Aksi</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -362,6 +374,7 @@ export const PortalAkademikPage: React.FC = () => {
                   <td className="p-3 text-slate-600">Senin, 07:30 - 09:10 (Sesi 1)</td>
                   <td className="p-3 text-blue-700 font-semibold">G-203</td>
                   <td className="p-3 text-slate-600">Dr. Eng. Rahmad, M.T.</td>
+                  {!hidePortalActions && (
                   <td className="p-3">
                     <button
                       onClick={() => handleOpenNav('G-203')}
@@ -370,6 +383,7 @@ export const PortalAkademikPage: React.FC = () => {
                       Rute
                     </button>
                   </td>
+                  )}
                 </tr>
                 <tr className="hover:bg-slate-50">
                   <td className="p-3 font-mono font-bold text-blue-700">SI315</td>
@@ -378,6 +392,7 @@ export const PortalAkademikPage: React.FC = () => {
                   <td className="p-3 text-slate-600">Rabu, 09:20 - 11:00 (Sesi 2)</td>
                   <td className="p-3 text-blue-700 font-semibold">G-205</td>
                   <td className="p-3 text-slate-600">Prof. Surya Afnarius</td>
+                  {!hidePortalActions && (
                   <td className="p-3">
                     <button
                       onClick={() => handleOpenNav('G-205')}
@@ -386,6 +401,7 @@ export const PortalAkademikPage: React.FC = () => {
                       Rute
                     </button>
                   </td>
+                  )}
                 </tr>
                 <tr className="hover:bg-slate-50">
                   <td className="p-3 font-mono font-bold text-blue-700">IF301</td>
@@ -394,6 +410,7 @@ export const PortalAkademikPage: React.FC = () => {
                   <td className="p-3 text-slate-600">Senin, 13:30 - 15:10 (Sesi 4)</td>
                   <td className="p-3 text-blue-700 font-semibold">Lab Software 1</td>
                   <td className="p-3 text-slate-600">Ricky Akbar, M.Kom.</td>
+                  {!hidePortalActions && (
                   <td className="p-3">
                     <button
                       onClick={() => handleOpenNav('Lab Software 1')}
@@ -402,6 +419,7 @@ export const PortalAkademikPage: React.FC = () => {
                       Rute
                     </button>
                   </td>
+                  )}
                 </tr>
               </tbody>
             </table>
@@ -409,7 +427,8 @@ export const PortalAkademikPage: React.FC = () => {
         </div>
       )}
 
-      {/* Quick Action Widgets at Bottom */}
+      {/* Quick Action Widgets at Bottom (tidak untuk dosen & mahasiswa) */}
+      {!hidePortalActions && (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Widget 1 */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 flex flex-col justify-between">
@@ -468,6 +487,7 @@ export const PortalAkademikPage: React.FC = () => {
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 };

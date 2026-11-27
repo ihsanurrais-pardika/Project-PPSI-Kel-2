@@ -68,7 +68,7 @@ export const RoomNavModal: React.FC = () => {
               ) : (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 text-xs font-semibold">
                   <Layers className="w-4 h-4 text-amber-600" />
-                  <span>Akses Tangga Barat / Timur</span>
+                  <span>Akses Tangga Gedung</span>
                 </div>
               )}
             </div>

@@ -79,7 +79,6 @@ export const Sidebar: React.FC = () => {
           icon: CheckCircle2,
           statusBadge: scheduleApprovalStatus === 'Disetujui' ? 'Disetujui' : 'Review',
         },
-        { id: 'portal_akademik', label: 'Portal Dosen & Mhs', icon: Globe },
         { id: 'audit_log', label: 'Riwayat & Audit Log', icon: History },
         { id: 'pengaturan', label: 'Pengaturan Sistem', icon: Settings },
       ],
@@ -89,17 +88,10 @@ export const Sidebar: React.FC = () => {
   // Dosen dedicated menu sections
   const dosenMenuSections: MenuSection[] = [
     {
-      title: 'PORTAL DOSEN',
-      items: [
-        { id: 'portal_akademik', label: 'Jadwal Mengajar & Presensi', icon: Globe },
-      ],
-    },
-    {
       title: 'LAYANAN PERKULIAHAN',
       items: [
-        { id: 'ketersediaan_ruang', label: 'Cari Ruang & Pengganti', icon: Grid3X3, badge: 'Heatmap' },
-        { id: 'jadwal_kuliah', label: 'Jadwal Mengajar Pribadi', icon: Calendar },
-        { id: 'inventaris_ruang', label: 'Inventaris & Spek Ruang', icon: Boxes },
+        { id: 'jadwal_kuliah', label: 'Jadwal Mengajar', icon: Calendar },
+        { id: 'ketersediaan_ruang', label: 'Ketersediaan Ruang', icon: Grid3X3 },
       ],
     },
   ];
@@ -107,17 +99,10 @@ export const Sidebar: React.FC = () => {
   // Mahasiswa dedicated menu sections
   const mahasiswaMenuSections: MenuSection[] = [
     {
-      title: 'PORTAL MAHASISWA',
-      items: [
-        { id: 'portal_akademik', label: 'Jadwal Kuliah & Navigasi', icon: Globe },
-      ],
-    },
-    {
       title: 'LAYANAN KAMPUS',
       items: [
-        { id: 'ketersediaan_ruang', label: 'Cari Ruang Kosong', icon: Grid3X3, badge: 'Live' },
-        { id: 'jadwal_kuliah', label: 'Jadwal Kuliah Pribadi (KRS)', icon: Calendar },
-        { id: 'inventaris_ruang', label: 'Denah & Fasilitas Ruang', icon: Boxes },
+        { id: 'jadwal_kuliah', label: 'Jadwal Kuliah', icon: Calendar },
+        { id: 'ketersediaan_ruang', label: 'Ketersediaan Ruang', icon: Grid3X3 },
       ],
     },
   ];

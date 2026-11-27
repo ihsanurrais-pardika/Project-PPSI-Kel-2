@@ -172,6 +172,7 @@ interface AppContextType {
   createDepartemenOffering: (payload: CreateOfferingPayload) => Promise<CreateOfferingResponse | null>;
   deleteBackendClass: (classId: string) => Promise<boolean>;
   resetBackendClassesToCSV: () => Promise<void>;
+  refreshRooms: () => Promise<boolean>;
   addBackendRoom: (payload: RoomPayload) => Promise<boolean>;
   updateBackendRoom: (roomId: string, payload: RoomPayload) => Promise<boolean>;
   deleteBackendRoom: (roomId: string) => Promise<boolean>;
@@ -341,7 +342,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (newRole === 'wadek1') {
       setActivePage('approval_wadek');
     } else if (newRole === 'dosen' || newRole === 'mahasiswa') {
-      setActivePage('portal_akademik');
+      setActivePage('jadwal_kuliah');
     } else if (newRole.startsWith('departemen')) {
       setActivePage('kebutuhan_departemen');
     } else {
@@ -1140,6 +1141,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // Muat ulang daftar ruang langsung dari database (tanpa data contoh)
+  const refreshRooms = async (): Promise<boolean> => {
+    try {
+      const data = await apiService.getRooms();
+      setRooms(data.map(mapBackendRoomToRoom));
+      return true;
+    } catch (err) {
+      console.warn('Gagal memuat ruang dari database:', err);
+      return false;
+    }
+  };
+
   const addBackendRoom = async (payload: RoomPayload): Promise<boolean> => {
     try {
       const created = await apiService.createRoom(payload);
@@ -1275,6 +1288,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createDepartemenOffering,
         deleteBackendClass,
         resetBackendClassesToCSV,
+        refreshRooms,
         addBackendRoom,
         updateBackendRoom,
         deleteBackendRoom,

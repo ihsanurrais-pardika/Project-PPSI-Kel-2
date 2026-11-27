@@ -42,10 +42,11 @@ interface SlotData {
   name?: string;
   classLabel?: string;
   lecturer?: string;
+  lecturers?: string[];
   dept?: 'SI' | 'IF' | 'TK';
   capacity?: number;
   enrolled?: number;
-  unit?: string; // 'Mhs' | 'PC' | 'Meja'
+  unit?: string; // 'Mahasiswa' | 'PC' | 'Meja'
 }
 
 interface RoomRow {
@@ -96,101 +97,101 @@ const buildInitialRooms = (): RoomRow[] => [
   {
     id: 'g101',
     name: 'G-101',
-    fullName: 'G-101 (Teori)',
+    fullName: 'G-101',
     type: 'Teori',
     building: 'Gedung Utama FTI',
     floor: 1,
     capacity: 60,
-    unit: 'Mhs',
+    unit: 'Mahasiswa',
     utilPct: 91,
     accentColor: 'bg-blue-600',
     slots: [
-      { type: 'occupied', code: 'IF-2101', name: 'Algoritma', classLabel: 'Kelas A', lecturer: 'Dr. Eng. Rahmad, M.T.', dept: 'IF', capacity: 60, enrolled: 56, unit: 'Mhs' },
-      { type: 'occupied', code: 'IF-2101', name: 'Algoritma', classLabel: 'Kelas B', lecturer: 'Dr. Eng. Rahmad, M.T.', dept: 'IF', capacity: 60, enrolled: 54, unit: 'Mhs' },
-      { type: 'occupied', code: 'SI-1204', name: 'Basis Data', classLabel: 'Kelas A', lecturer: 'Dr. Surya Afnarius', dept: 'SI', capacity: 60, enrolled: 58, unit: 'Mhs' },
-      { type: 'occupied', code: 'SI-1204', name: 'Basis Data', classLabel: 'Kelas B', lecturer: 'Dr. Surya Afnarius', dept: 'SI', capacity: 60, enrolled: 55, unit: 'Mhs' },
+      { type: 'occupied', code: 'IF-2101', name: 'Algoritma', classLabel: 'Kelas A', lecturer: 'Dr. Eng. Rahmad, M.T.', dept: 'IF', capacity: 60, enrolled: 56, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'IF-2101', name: 'Algoritma', classLabel: 'Kelas B', lecturer: 'Dr. Eng. Rahmad, M.T.', dept: 'IF', capacity: 60, enrolled: 54, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'SI-1204', name: 'Basis Data', classLabel: 'Kelas A', lecturer: 'Dr. Surya Afnarius', dept: 'SI', capacity: 60, enrolled: 58, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'SI-1204', name: 'Basis Data', classLabel: 'Kelas B', lecturer: 'Dr. Surya Afnarius', dept: 'SI', capacity: 60, enrolled: 55, unit: 'Mahasiswa' },
       { type: 'free' },
       { type: 'break' },
-      { type: 'occupied', code: 'TK-3201', name: 'Mikroprosesor', classLabel: 'Kelas A', lecturer: 'Ir. Hendra, M.T.', dept: 'TK', capacity: 60, enrolled: 48, unit: 'Mhs' },
-      { type: 'occupied', code: 'TK-3201', name: 'Mikroprosesor', classLabel: 'Kelas B', lecturer: 'Ir. Hendra, M.T.', dept: 'TK', capacity: 60, enrolled: 46, unit: 'Mhs' },
+      { type: 'occupied', code: 'TK-3201', name: 'Mikroprosesor', classLabel: 'Kelas A', lecturer: 'Ir. Hendra, M.T.', dept: 'TK', capacity: 60, enrolled: 48, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'TK-3201', name: 'Mikroprosesor', classLabel: 'Kelas B', lecturer: 'Ir. Hendra, M.T.', dept: 'TK', capacity: 60, enrolled: 46, unit: 'Mahasiswa' },
     ],
   },
   {
     id: 'g102',
     name: 'G-102',
-    fullName: 'G-102 (Teori)',
+    fullName: 'G-102',
     type: 'Teori',
     building: 'Gedung Utama FTI',
     floor: 1,
     capacity: 50,
-    unit: 'Mhs',
+    unit: 'Mahasiswa',
     utilPct: 82,
     accentColor: 'bg-blue-500',
     slots: [
       { type: 'free' },
-      { type: 'occupied', code: 'SI-2102', name: 'Rekayasa Web', classLabel: 'Kelas A', lecturer: 'Fikri, M.Kom', dept: 'SI', capacity: 50, enrolled: 45, unit: 'Mhs' },
-      { type: 'occupied', code: 'SI-2102', name: 'Rekayasa Web', classLabel: 'Kelas B', lecturer: 'Fikri, M.Kom', dept: 'SI', capacity: 50, enrolled: 43, unit: 'Mhs' },
-      { type: 'occupied', code: 'SI-2102', name: 'Rekayasa Web', classLabel: 'Kelas C', lecturer: 'Fikri, M.Kom', dept: 'SI', capacity: 50, enrolled: 44, unit: 'Mhs' },
+      { type: 'occupied', code: 'SI-2102', name: 'Rekayasa Web', classLabel: 'Kelas A', lecturer: 'Fikri, M.Kom', dept: 'SI', capacity: 50, enrolled: 45, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'SI-2102', name: 'Rekayasa Web', classLabel: 'Kelas B', lecturer: 'Fikri, M.Kom', dept: 'SI', capacity: 50, enrolled: 43, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'SI-2102', name: 'Rekayasa Web', classLabel: 'Kelas C', lecturer: 'Fikri, M.Kom', dept: 'SI', capacity: 50, enrolled: 44, unit: 'Mahasiswa' },
       { type: 'free' },
       { type: 'break' },
-      { type: 'occupied', code: 'IF-3301', name: 'Kriptografi', classLabel: 'Kelas A', lecturer: 'Prof. Asril, M.Sc', dept: 'IF', capacity: 50, enrolled: 48, unit: 'Mhs' },
-      { type: 'occupied', code: 'IF-3301', name: 'Kriptografi', classLabel: 'Kelas B', lecturer: 'Prof. Asril, M.Sc', dept: 'IF', capacity: 50, enrolled: 46, unit: 'Mhs' },
+      { type: 'occupied', code: 'IF-3301', name: 'Kriptografi', classLabel: 'Kelas A', lecturer: 'Prof. Asril, M.Sc', dept: 'IF', capacity: 50, enrolled: 48, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'IF-3301', name: 'Kriptografi', classLabel: 'Kelas B', lecturer: 'Prof. Asril, M.Sc', dept: 'IF', capacity: 50, enrolled: 46, unit: 'Mahasiswa' },
     ],
   },
   {
     id: 'g201',
     name: 'G-201',
-    fullName: 'G-201 (Teori)',
+    fullName: 'G-201',
     type: 'Teori',
     building: 'Gedung Utama FTI',
     floor: 2,
     capacity: 60,
-    unit: 'Mhs',
+    unit: 'Mahasiswa',
     utilPct: 75,
     accentColor: 'bg-indigo-500',
     slots: [
       { type: 'free' },
       { type: 'free' },
-      { type: 'occupied', code: 'IF-1102', name: 'Matematika Diskrit', classLabel: 'Kelas A', lecturer: 'Dr. Defri, M.Si', dept: 'IF', capacity: 60, enrolled: 55, unit: 'Mhs' },
-      { type: 'occupied', code: 'IF-1102', name: 'Matematika Diskrit', classLabel: 'Kelas B', lecturer: 'Dr. Defri, M.Si', dept: 'IF', capacity: 60, enrolled: 53, unit: 'Mhs' },
-      { type: 'occupied', code: 'IF-1102', name: 'Matematika Diskrit', classLabel: 'Kelas C', lecturer: 'Dr. Defri, M.Si', dept: 'IF', capacity: 60, enrolled: 50, unit: 'Mhs' },
+      { type: 'occupied', code: 'IF-1102', name: 'Matematika Diskrit', classLabel: 'Kelas A', lecturer: 'Dr. Defri, M.Si', dept: 'IF', capacity: 60, enrolled: 55, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'IF-1102', name: 'Matematika Diskrit', classLabel: 'Kelas B', lecturer: 'Dr. Defri, M.Si', dept: 'IF', capacity: 60, enrolled: 53, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'IF-1102', name: 'Matematika Diskrit', classLabel: 'Kelas C', lecturer: 'Dr. Defri, M.Si', dept: 'IF', capacity: 60, enrolled: 50, unit: 'Mahasiswa' },
       { type: 'break' },
       { type: 'free' },
-      { type: 'occupied', code: 'TK-1205', name: 'Elektronika', classLabel: 'Kelas A', lecturer: 'Dwi, M.T.', dept: 'TK', capacity: 60, enrolled: 42, unit: 'Mhs' },
+      { type: 'occupied', code: 'TK-1205', name: 'Elektronika', classLabel: 'Kelas A', lecturer: 'Dwi, M.T.', dept: 'TK', capacity: 60, enrolled: 42, unit: 'Mahasiswa' },
     ],
   },
   {
     id: 'g203',
     name: 'G-203',
-    fullName: 'G-203 (Teori)',
+    fullName: 'G-203',
     type: 'Teori',
     building: 'Gedung Utama FTI',
     floor: 2,
     capacity: 50,
-    unit: 'Mhs',
+    unit: 'Mahasiswa',
     utilPct: 100,
     accentColor: 'bg-rose-600',
     isOverload: true,
     slots: [
-      { type: 'overload', code: 'SI-3105', name: 'Analisis Proses', classLabel: 'Kelas A', lecturer: 'Husnil Kamil, M.T.', dept: 'SI', capacity: 50, enrolled: 51, unit: 'Mhs' },
-      { type: 'overload', code: 'SI-3105', name: 'Analisis Proses', classLabel: 'Kelas B', lecturer: 'Husnil Kamil, M.T.', dept: 'SI', capacity: 50, enrolled: 50, unit: 'Mhs' },
-      { type: 'overload', code: 'SI-3105', name: 'Analisis Proses', classLabel: 'Kelas C', lecturer: 'Husnil Kamil, M.T.', dept: 'SI', capacity: 50, enrolled: 50, unit: 'Mhs' },
-      { type: 'occupied', code: 'IF-2207', name: 'Struktur Data', classLabel: 'Kelas A', lecturer: 'Dwi, M.T.', dept: 'IF', capacity: 50, enrolled: 48, unit: 'Mhs' },
-      { type: 'occupied', code: 'IF-2207', name: 'Struktur Data', classLabel: 'Kelas B', lecturer: 'Dwi, M.T.', dept: 'IF', capacity: 50, enrolled: 47, unit: 'Mhs' },
+      { type: 'overload', code: 'SI-3105', name: 'Analisis Proses', classLabel: 'Kelas A', lecturer: 'Husnil Kamil, M.T.', dept: 'SI', capacity: 50, enrolled: 51, unit: 'Mahasiswa' },
+      { type: 'overload', code: 'SI-3105', name: 'Analisis Proses', classLabel: 'Kelas B', lecturer: 'Husnil Kamil, M.T.', dept: 'SI', capacity: 50, enrolled: 50, unit: 'Mahasiswa' },
+      { type: 'overload', code: 'SI-3105', name: 'Analisis Proses', classLabel: 'Kelas C', lecturer: 'Husnil Kamil, M.T.', dept: 'SI', capacity: 50, enrolled: 50, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'IF-2207', name: 'Struktur Data', classLabel: 'Kelas A', lecturer: 'Dwi, M.T.', dept: 'IF', capacity: 50, enrolled: 48, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'IF-2207', name: 'Struktur Data', classLabel: 'Kelas B', lecturer: 'Dwi, M.T.', dept: 'IF', capacity: 50, enrolled: 47, unit: 'Mahasiswa' },
       { type: 'break' },
-      { type: 'occupied', code: 'TK-2104', name: 'Jaringan Komp', classLabel: 'Kelas A', lecturer: 'Eko, Ph.D', dept: 'TK', capacity: 50, enrolled: 44, unit: 'Mhs' },
-      { type: 'occupied', code: 'TK-2104', name: 'Jaringan Komp', classLabel: 'Kelas B', lecturer: 'Eko, Ph.D', dept: 'TK', capacity: 50, enrolled: 42, unit: 'Mhs' },
+      { type: 'occupied', code: 'TK-2104', name: 'Jaringan Komp', classLabel: 'Kelas A', lecturer: 'Eko, Ph.D', dept: 'TK', capacity: 50, enrolled: 44, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'TK-2104', name: 'Jaringan Komp', classLabel: 'Kelas B', lecturer: 'Eko, Ph.D', dept: 'TK', capacity: 50, enrolled: 42, unit: 'Mahasiswa' },
     ],
   },
   {
     id: 'g204',
     name: 'G-204',
-    fullName: 'G-204 (Teori)',
+    fullName: 'G-204',
     type: 'Teori',
     building: 'Gedung Utama FTI',
     floor: 2,
     capacity: 55,
-    unit: 'Mhs',
+    unit: 'Mahasiswa',
     utilPct: 54,
     accentColor: 'bg-teal-500',
     slots: [
@@ -198,32 +199,32 @@ const buildInitialRooms = (): RoomRow[] => [
       { type: 'free' },
       { type: 'free' },
       { type: 'free' },
-      { type: 'occupied', code: 'SI-3208', name: 'Audit SI', classLabel: 'Kelas A', lecturer: 'Dr. Rahmi, M.Kom', dept: 'SI', capacity: 55, enrolled: 48, unit: 'Mhs' },
+      { type: 'occupied', code: 'SI-3208', name: 'Audit SI', classLabel: 'Kelas A', lecturer: 'Dr. Rahmi, M.Kom', dept: 'SI', capacity: 55, enrolled: 48, unit: 'Mahasiswa' },
       { type: 'break' },
-      { type: 'occupied', code: 'SI-3208', name: 'Audit SI', classLabel: 'Kelas B', lecturer: 'Dr. Rahmi, M.Kom', dept: 'SI', capacity: 55, enrolled: 46, unit: 'Mhs' },
-      { type: 'occupied', code: 'SI-3208', name: 'Audit SI', classLabel: 'Kelas C', lecturer: 'Dr. Rahmi, M.Kom', dept: 'SI', capacity: 55, enrolled: 44, unit: 'Mhs' },
+      { type: 'occupied', code: 'SI-3208', name: 'Audit SI', classLabel: 'Kelas B', lecturer: 'Dr. Rahmi, M.Kom', dept: 'SI', capacity: 55, enrolled: 46, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'SI-3208', name: 'Audit SI', classLabel: 'Kelas C', lecturer: 'Dr. Rahmi, M.Kom', dept: 'SI', capacity: 55, enrolled: 44, unit: 'Mahasiswa' },
     ],
   },
   {
     id: 'g205',
     name: 'G-205',
-    fullName: 'G-205 (Teori)',
+    fullName: 'G-205',
     type: 'Teori',
     building: 'Gedung Utama FTI',
     floor: 2,
     capacity: 45,
-    unit: 'Mhs',
+    unit: 'Mahasiswa',
     utilPct: 64,
     accentColor: 'bg-cyan-500',
     slots: [
-      { type: 'occupied', code: 'TI-1002', name: 'Pengantar TI', classLabel: 'Kelas A', lecturer: 'Tim Pengampu TI', dept: 'SI', capacity: 45, enrolled: 42, unit: 'Mhs' },
-      { type: 'occupied', code: 'TI-1002', name: 'Pengantar TI', classLabel: 'Kelas B', lecturer: 'Tim Pengampu TI', dept: 'SI', capacity: 45, enrolled: 40, unit: 'Mhs' },
+      { type: 'occupied', code: 'TI-1002', name: 'Pengantar TI', classLabel: 'Kelas A', lecturer: 'Tim Pengampu TI', dept: 'SI', capacity: 45, enrolled: 42, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'TI-1002', name: 'Pengantar TI', classLabel: 'Kelas B', lecturer: 'Tim Pengampu TI', dept: 'SI', capacity: 45, enrolled: 40, unit: 'Mahasiswa' },
       { type: 'free' },
       { type: 'free' },
       { type: 'free' },
       { type: 'break' },
-      { type: 'occupied', code: 'IF-3204', name: 'Teori Bahasa', classLabel: 'Kelas A', lecturer: 'Hasdi, M.Kom', dept: 'IF', capacity: 45, enrolled: 38, unit: 'Mhs' },
-      { type: 'occupied', code: 'IF-3204', name: 'Teori Bahasa', classLabel: 'Kelas B', lecturer: 'Hasdi, M.Kom', dept: 'IF', capacity: 45, enrolled: 36, unit: 'Mhs' },
+      { type: 'occupied', code: 'IF-3204', name: 'Teori Bahasa', classLabel: 'Kelas A', lecturer: 'Hasdi, M.Kom', dept: 'IF', capacity: 45, enrolled: 38, unit: 'Mahasiswa' },
+      { type: 'occupied', code: 'IF-3204', name: 'Teori Bahasa', classLabel: 'Kelas B', lecturer: 'Hasdi, M.Kom', dept: 'IF', capacity: 45, enrolled: 36, unit: 'Mahasiswa' },
     ],
   },
   {
@@ -416,10 +417,11 @@ export const UtilisasiHeatmapPage: React.FC = () => {
           name: apiSlot.course_name || '',
           classLabel: apiSlot.class_label || '',
           lecturer: apiSlot.lecturer_name || '',
+          lecturers: apiSlot.lecturer_names || [],
           dept: (apiSlot.department || 'FTI') as 'SI' | 'IF' | 'TK',
           capacity: apiSlot.capacity || r.capacity,
           enrolled: apiSlot.enrolled_count || 0,
-          unit: r.room_type?.includes('Lab') ? 'PC' : 'Mhs',
+          unit: r.room_type?.includes('Lab') ? 'PC' : 'Mahasiswa',
         };
       });
 
@@ -430,12 +432,12 @@ export const UtilisasiHeatmapPage: React.FC = () => {
       return {
         id: r.room_id || r.room_code,
         name: r.room_code,
-        fullName: `${r.room_code} (${roomType})`,
+        fullName: r.room_code,
         type: roomType,
         building: r.building,
         floor: r.floor,
         capacity: r.capacity,
-        unit: roomType.includes('Lab') ? 'PC' : 'Mhs',
+        unit: roomType.includes('Lab') ? 'PC' : 'Mahasiswa',
         utilPct: Math.round(r.utilization_percentage),
         accentColor: r.is_overload ? 'bg-rose-600' : accentColors[idx % accentColors.length],
         isOverload: r.is_overload,
@@ -653,72 +655,14 @@ export const UtilisasiHeatmapPage: React.FC = () => {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-8">
-      {/* ── Breadcrumb & Account Context Bar ─────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-blue-700 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-            FTI
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-              <span>Manajemen Ruangan</span>
-              <ChevronRight className="w-3 h-3 text-slate-400" />
-              <span className="text-blue-700 font-bold">Utilisasi Ruang</span>
-            </div>
-            <div className="text-[11px] text-slate-400">
-              {apiData?.semester_label || 'Semester 2026/2027 Ganjil'} • Sinkronisasi Real-time Database &amp; Solver CP-SAT
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-          <Building2 className="w-3.5 h-3.5 text-blue-700" />
-          <span>{currentUser.name || 'Admin Penjadwalan FTI'}</span>
-        </div>
-      </div>
-
-      {/* ── Page Header ─────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-1">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-              <Grid3X3 className="w-4 h-4" />
-            </div>
-            <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
-              Utilisasi Ruang
-            </h1>
-          </div>
-          <p className="text-xs md:text-sm text-slate-500">
-            Tingkat pemanfaatan slot perkuliahan ruang fisik FTI Universitas Andalas ({selectedDay}).
-          </p>
-        </div>
-      </div>
-
       {/* ── 4 Metric Summary Cards ──────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5">
         <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-[10px] font-bold uppercase tracking-wider">Total Ruang</span>
             <Layers className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-2xl font-black text-slate-900 mt-1">{totalRooms}</div>
-          <div className="text-xs text-slate-500">Ruang dipantau FTI &amp; GKB</div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Rata-rata Utilisasi</span>
-            <BarChart3 className="w-4 h-4 text-indigo-600" />
-          </div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-2xl font-black text-indigo-700">{avgUtil}%</span>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-              Optimal
-            </span>
-          </div>
-          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-1.5">
-            <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${avgUtil}%` }} />
-          </div>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs">
@@ -727,7 +671,6 @@ export const UtilisasiHeatmapPage: React.FC = () => {
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-black text-emerald-700 mt-1">{freeSlotsCount} Slot</div>
-          <div className="text-xs text-slate-500">Bebas untuk kuliah pengganti/diskusi</div>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs">
@@ -745,12 +688,11 @@ export const UtilisasiHeatmapPage: React.FC = () => {
               {overloadCount > 0 ? 'Butuh Aksi' : 'Aman'}
             </span>
           </div>
-          <div className="text-xs text-slate-500">Kapasitas rombel melampaui kursi</div>
         </div>
       </div>
 
       {/* ── Filter Bar & Actions ────────────────────────────────────── */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap xl:flex-nowrap items-center justify-between gap-3 overflow-x-auto">
         {/* Day Pills */}
         <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-0.5">
           {days.map((day) => (
@@ -769,21 +711,7 @@ export const UtilisasiHeatmapPage: React.FC = () => {
         </div>
 
         {/* Filter Type & Search Input */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-0.5 text-xs font-semibold">
-            {['Semua', 'Teori', 'Lab'].map((t) => (
-              <button
-                key={t}
-                onClick={() => setFilterType(t)}
-                className={`px-3 py-1 rounded-lg transition-all ${
-                  filterType === t ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-
+        <div className="flex items-center gap-2 flex-wrap xl:flex-nowrap">
           {/* Filter Gedung (UC-16 AF-1) */}
           <select
             value={filterBuilding}
@@ -820,7 +748,7 @@ export const UtilisasiHeatmapPage: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari ruang, gedung, MK, dosen..."
-              className="pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-blue-500 w-48 md:w-60"
+              className="pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-blue-500 w-48 md:w-56"
             />
             {searchQuery && (
               <button
@@ -1065,7 +993,9 @@ export const UtilisasiHeatmapPage: React.FC = () => {
             </div>
             <div className="col-span-2 pt-1 border-t border-blue-100">
               <div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">Dosen Pengampu</div>
-              <div className="font-bold text-slate-900 mt-0.5 truncate">{tooltip.slot.lecturer || 'Tim Dosen FTI'}</div>
+              {(tooltip.slot.lecturers?.length ? tooltip.slot.lecturers : [tooltip.slot.lecturer || '—']).map((name, i) => (
+                <div key={i} className="font-bold text-slate-900 mt-0.5 leading-snug">{name}</div>
+              ))}
             </div>
           </div>
         </div>
@@ -1514,17 +1444,7 @@ export const UtilisasiHeatmapPage: React.FC = () => {
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleOpenNavForRoom(selectedSlotForBooking.room.name);
-                    setIsBookingModalOpen(false);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 text-blue-700 hover:bg-blue-50 font-bold rounded-xl transition-colors"
-                >
-                  <Compass className="w-4 h-4" />
-                  <span>Petunjuk Arah Ruangan</span>
-                </button>
+                <span />
 
                 <div className="flex items-center gap-2">
                   <button
@@ -1631,17 +1551,7 @@ export const UtilisasiHeatmapPage: React.FC = () => {
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleOpenNavForRoom(selectedOccupiedSlot.room.name);
-                    setIsDetailModalOpen(false);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 text-blue-700 hover:bg-blue-50 font-bold rounded-xl transition-colors"
-                >
-                  <Compass className="w-4 h-4" />
-                  <span>Petunjuk Arah ke Ruangan</span>
-                </button>
+                <span />
 
                 <button
                   type="button"
@@ -1699,7 +1609,7 @@ export const UtilisasiHeatmapPage: React.FC = () => {
               <div className="space-y-2 text-xs">
                 <div className="p-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all flex items-center justify-between">
                   <div>
-                    <div className="font-bold text-slate-800">Ruang G-101 (Teori)</div>
+                    <div className="font-bold text-slate-800">Ruang G-101</div>
                     <div className="text-[11px] text-slate-500">Lantai 1 • Kapasitas 60 Kursi (+10 Kursi Luang)</div>
                   </div>
                   <button
@@ -1715,7 +1625,7 @@ export const UtilisasiHeatmapPage: React.FC = () => {
 
                 <div className="p-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all flex items-center justify-between">
                   <div>
-                    <div className="font-bold text-slate-800">Ruang G-201 (Teori)</div>
+                    <div className="font-bold text-slate-800">Ruang G-201</div>
                     <div className="text-[11px] text-slate-500">Lantai 2 • Kapasitas 60 Kursi (+10 Kursi Luang)</div>
                   </div>
                   <button

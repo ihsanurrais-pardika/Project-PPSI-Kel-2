@@ -295,9 +295,6 @@ export const ValidasiKonflikPage: React.FC = () => {
       {/* Header Ringkas */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Validasi &amp; Konflik Jadwal
-          </h1>
           <p className="text-xs text-slate-500 mt-1">
             {versionTitle} · Pemeriksaan bentrok per jurusan sebelum diajukan ke Wakil Dekan I.
           </p>
