@@ -488,7 +488,7 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
   const [formTimeStart, setFormTimeStart] = useState(timeParts[0]?.trim() || '07:30');
   const [formTimeEnd, setFormTimeEnd] = useState(timeParts[1]?.trim() || '09:10');
   const [formMinCapacity, setFormMinCapacity] = useState(course.enrolled || 30);
-  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung FTI' | 'GKB'>('Semua');
+  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung G' | 'Gedung H'>('Semua');
   const [formAccessibility, setFormAccessibility] = useState(false);
 
   // Validation error (E1 flow)
@@ -496,6 +496,11 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
 
   // Selected room
   const [selectedRoom, setSelectedRoom] = useState<RoomDefinition | null>(null);
+  // UC-18: Prodi Pemohon untuk mencari Ruang Alternatif Prodi Lain (khusus Admin)
+  const [altProdiMode, setAltProdiMode] = useState<'ALL' | 'SI' | 'IF' | 'TK'>('ALL');
+  // UC-17: Jenis penggantian & opsi ruang alternatif prodi lain (khusus Admin)
+  const [replacementScope, setReplacementScope] = useState<'Sementara' | 'Permanen'>('Sementara');
+  const [showAltProdi, setShowAltProdi] = useState<boolean>(userRole === 'admin');
 
   const timeToMin = (t: string) => {
     const [h, m] = t.split(':').map(Number);
@@ -522,13 +527,19 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
 
     return allRooms
       .filter((room) => {
-        // 1. Hak Akses: Prodi Sendiri & GKB Bersama
-        const isOwnProdi = room.dept === userProdi;
-        const isGKB = room.dept === 'GKB' || room.building === 'GKB';
-        if (!isOwnProdi && !isGKB) return false;
+        // Sistem hanya menggunakan Gedung G & Gedung H (tanpa GKB dan tanpa Lab)
+        if (room.dept === 'GKB' || room.building === 'GKB' || room.type === 'Lab') return false;
 
-        // 2. Filter Gedung
-        if (formBuilding !== 'Semua' && room.building !== formBuilding) return false;
+        // 1. Hak Akses: Admin bisa mengakses seluruh ruang prodi (atau filter prodi asal bila showAltProdi dimatikan)
+        if (userRole === 'admin') {
+          if (!showAltProdi && room.dept !== course.dept) return false;
+        } else {
+          if (room.dept !== userProdi) return false;
+        }
+
+        // 2. Filter Gedung (Gedung G / Gedung H)
+        const roomGedung = room.code.startsWith('H') ? 'Gedung H' : 'Gedung G';
+        if (formBuilding !== 'Semua' && roomGedung !== formBuilding) return false;
 
         // 3. Aksesibilitas
         if (formAccessibility && !(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204')) {
@@ -553,7 +564,7 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
         const bDiff = Math.abs(b.capacity - (course.enrolled || 40));
         return aDiff - bDiff;
       });
-  }, [step, formDay, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userProdi, allRooms, course, originalDay]);
+  }, [step, formDay, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userRole, userProdi, showAltProdi, allRooms, course, originalDay]);
 
   const handleSearch = () => {
     if (!formDate) {
@@ -648,8 +659,21 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
             </div>
             <div>
               <div className="text-slate-500 text-[10px] font-semibold uppercase tracking-wider">Sifat Perubahan</div>
-              <div className="font-bold text-emerald-700 mt-0.5">Per Pertemuan</div>
-              <div className="text-slate-600">Kuliah Pengganti</div>
+              {userRole === 'admin' ? (
+                <select
+                  value={replacementScope}
+                  onChange={(e) => setReplacementScope(e.target.value as 'Sementara' | 'Permanen')}
+                  className="mt-0.5 text-[11px] font-bold text-emerald-700 bg-white border border-blue-200 rounded-lg px-2 py-0.5 focus:outline-none"
+                >
+                  <option value="Sementara">Sementara (Per Pertemuan)</option>
+                  <option value="Permanen">Permanen (Satu Semester)</option>
+                </select>
+              ) : (
+                <>
+                  <div className="font-bold text-emerald-700 mt-0.5">Per Pertemuan</div>
+                  <div className="text-slate-600">Kuliah Pengganti</div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -693,6 +717,24 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {userRole === 'admin' && (
+                  <div className="sm:col-span-2 bg-blue-50/70 border border-blue-200 rounded-xl p-3">
+                    <label className="block text-xs font-bold text-blue-900 mb-1.5">
+                      Prodi Pemohon — Ruang Alternatif Prodi Lain (UC-18)
+                    </label>
+                    <select
+                      value={altProdiMode}
+                      onChange={(e) => setAltProdiMode(e.target.value as any)}
+                      className="w-full text-xs border border-blue-200 rounded-lg px-3 py-2 text-slate-800 bg-white font-semibold focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="ALL">Semua Ruangan Jurusan (SI, IF, TK) &amp; GKB</option>
+                      <option value="SI">Pemohon SI → Tampilkan Ruang Alternatif Prodi Lain (IF, TK, GKB)</option>
+                      <option value="IF">Pemohon IF → Tampilkan Ruang Alternatif Prodi Lain (SI, TK, GKB)</option>
+                      <option value="TK">Pemohon TK → Tampilkan Ruang Alternatif Prodi Lain (SI, IF, GKB)</option>
+                    </select>
+                  </div>
+                )}
+
                 {/* Tanggal Pelaksanaan */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -726,8 +768,8 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
                     className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
                   >
                     <option value="Semua">Semua Gedung</option>
-                    <option value="Gedung FTI">Gedung FTI</option>
-                    <option value="GKB">GKB (Gedung Kuliah Bersama)</option>
+                    <option value="Gedung G">Gedung G</option>
+                    <option value="Gedung H">Gedung H</option>
                   </select>
                 </div>
 
@@ -822,13 +864,28 @@ const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
                 {formAccessibility && (
                   <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">Ramah Disabilitas</span>
                 )}
-                <button
-                  onClick={() => setStep('form')}
-                  className="ml-auto flex items-center gap-1 text-slate-500 hover:text-blue-700 font-semibold"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>Ubah Kriteria</span>
-                </button>
+                  <div className="ml-auto flex items-center gap-2">
+                    {userRole === 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAltProdi((v) => !v)}
+                        className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors ${
+                          showAltProdi
+                            ? 'bg-blue-700 text-white border-blue-800'
+                            : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'
+                        }`}
+                      >
+                        {showAltProdi ? '✓ Ruang Alternatif Prodi Lain Aktif' : 'Lihat Ruang Alternatif Prodi Lain'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setStep('form')}
+                      className="flex items-center gap-1 text-slate-500 hover:text-blue-700 font-semibold"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Ubah Kriteria</span>
+                    </button>
+                  </div>
               </div>
 
               {availableRooms.length === 0 ? (
@@ -1071,7 +1128,7 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
   const [formTimeStart, setFormTimeStart] = useState('07:30');
   const [formTimeEnd, setFormTimeEnd] = useState('09:10');
   const [formMinCapacity, setFormMinCapacity] = useState(30);
-  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung FTI' | 'GKB'>('Semua');
+  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung G' | 'Gedung H'>('Semua');
   const [formAccessibility, setFormAccessibility] = useState(false);
   const [usageActivity, setUsageActivity] = useState('Belajar Mandiri & Diskusi Akademik');
 
@@ -1080,6 +1137,11 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
 
   // Selected room
   const [selectedRoom, setSelectedRoom] = useState<RoomDefinition | null>(null);
+  // UC-18: Prodi Pemohon untuk mencari Ruang Alternatif Prodi Lain (khusus Admin)
+  const [altProdiMode, setAltProdiMode] = useState<'ALL' | 'SI' | 'IF' | 'TK'>('ALL');
+  // UC-17: Jenis penggantian & opsi ruang alternatif prodi lain (khusus Admin)
+  const [replacementScope, setReplacementScope] = useState<'Sementara' | 'Permanen'>('Sementara');
+  const [showAltProdi, setShowAltProdi] = useState<boolean>(userRole === 'admin');
 
   const timeToMin = (t: string) => {
     const [h, m] = t.split(':').map(Number);
@@ -1116,13 +1178,19 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
 
     return allRooms
       .filter((room) => {
-        // 1. Hak Akses: Prodi Sendiri & GKB Bersama
-        const isOwnProdi = room.dept === userProdi;
-        const isGKB = room.dept === 'GKB' || room.building === 'GKB';
-        if (!isOwnProdi && !isGKB) return false;
+        // Sistem hanya menggunakan Gedung G & Gedung H (tanpa GKB dan tanpa Lab)
+        if (room.dept === 'GKB' || room.building === 'GKB' || room.type === 'Lab') return false;
 
-        // 2. Filter Gedung
-        if (formBuilding !== 'Semua' && room.building !== formBuilding) return false;
+        // 1. Hak Akses: Admin bisa melihat semua ruang atau ruang alternatif prodi lain (UC-18)
+        if (userRole === 'admin') {
+          if (altProdiMode !== 'ALL' && room.dept === altProdiMode) return false;
+        } else {
+          if (room.dept !== userProdi) return false;
+        }
+
+        // 2. Filter Gedung (Gedung G / Gedung H)
+        const roomGedung = room.code.startsWith('H') ? 'Gedung H' : 'Gedung G';
+        if (formBuilding !== 'Semua' && roomGedung !== formBuilding) return false;
 
         // 3. Aksesibilitas
         if (formAccessibility && !(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204')) {
@@ -1140,7 +1208,7 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
         return true;
       })
       .sort((a, b) => a.capacity - b.capacity);
-  }, [step, formDate, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userProdi, allRooms]);
+  }, [step, formDate, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userRole, userProdi, altProdiMode, allRooms]);
 
   const handleSearch = () => {
     if (!formDate) {
@@ -1244,6 +1312,24 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {userRole === 'admin' && (
+                  <div className="sm:col-span-2 bg-blue-50/70 border border-blue-200 rounded-xl p-3">
+                    <label className="block text-xs font-bold text-blue-900 mb-1.5">
+                      Prodi Pemohon — Ruang Alternatif Prodi Lain (UC-18)
+                    </label>
+                    <select
+                      value={altProdiMode}
+                      onChange={(e) => setAltProdiMode(e.target.value as any)}
+                      className="w-full text-xs border border-blue-200 rounded-lg px-3 py-2 text-slate-800 bg-white font-semibold focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="ALL">Semua Ruangan Jurusan (SI, IF, TK) &amp; GKB</option>
+                      <option value="SI">Pemohon SI → Tampilkan Ruang Alternatif Prodi Lain (IF, TK, GKB)</option>
+                      <option value="IF">Pemohon IF → Tampilkan Ruang Alternatif Prodi Lain (SI, TK, GKB)</option>
+                      <option value="TK">Pemohon TK → Tampilkan Ruang Alternatif Prodi Lain (SI, IF, GKB)</option>
+                    </select>
+                  </div>
+                )}
+
                 {/* Tanggal Pelaksanaan */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -1269,8 +1355,8 @@ const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
                     className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200"
                   >
                     <option value="Semua">Semua Gedung</option>
-                    <option value="Gedung FTI">Gedung FTI</option>
-                    <option value="GKB">GKB (Gedung Kuliah Bersama)</option>
+                    <option value="Gedung G">Gedung G</option>
+                    <option value="Gedung H">Gedung H</option>
                   </select>
                 </div>
 
@@ -1669,21 +1755,21 @@ export const HeatmapRuangPage: React.FC = () => {
     'Jumat',
   ];
 
-  // ── RULE FILTERING: DOSEN & MAHASISWA HANYA BISA MELIHAT GKB DAN PRODINYA SENDIRI ──
+  // ── FILTERING: GEDUNG G & H ONLY (TANPA GKB & LAB) ──
   const visibleRooms = useMemo(() => {
     return MASTER_ROOMS.filter((room) => {
-      // 1. Prodi vs GKB Filter Rule
-      if (activeProdiView !== 'ALL') {
-        const isUserProdiRoom = room.dept === activeProdiView;
-        const isGKBRoom = room.dept === 'GKB' || room.building === 'GKB';
-        if (!isUserProdiRoom && !isGKBRoom) {
-          return false; // Hide other departments!
-        }
+      if (room.dept === 'GKB' || room.building === 'GKB' || room.type === 'Lab') {
+        return false;
       }
 
-      // 2. Building Dropdown Filter
-      if (selectedBuilding === 'Gedung FTI' && room.building !== 'Gedung FTI') return false;
-      if (selectedBuilding === 'GKB' && room.building !== 'GKB') return false;
+      // 1. Prodi Filter Rule
+      if (activeProdiView !== 'ALL' && room.dept !== activeProdiView) {
+        return false;
+      }
+
+      // 2. Building Dropdown Filter (Gedung G & Gedung H)
+      const roomGedung = room.code.startsWith('H') ? 'Gedung H' : 'Gedung G';
+      if (selectedBuilding !== 'Semua' && roomGedung !== selectedBuilding) return false;
 
       // 3. Search query
       if (searchQuery.trim()) {
@@ -1702,7 +1788,6 @@ export const HeatmapRuangPage: React.FC = () => {
 
   // Calculate dynamic metrics based on visible rooms
   const totalVisibleRooms = visibleRooms.length;
-  const labRoomsCount = visibleRooms.filter((r) => r.type === 'Lab').length;
 
   const totalPossibleSlots = totalVisibleRooms * 5;
   const occupiedSlotsCount = visibleRooms.reduce((acc, r) => {
@@ -1909,26 +1994,8 @@ export const HeatmapRuangPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── RULE BANNER: HAK AKSES DOSEN & MAHASISWA (GKB + PRODI SENDIRI) ── */}
-      <div className="bg-sky-50/80 border border-sky-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-700 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
-            {activeProdiView === 'ALL' ? 'FTI' : activeProdiView}
-          </div>
-          <div>
-            <div className="font-extrabold text-slate-900 flex items-center gap-2">
-              <span>Akses {currentRole === 'dosen' ? 'Dosen' : currentRole === 'mahasiswa' ? 'Mahasiswa' : 'Pengguna'}: Ruang {getProdiFullName(activeProdiView)} &amp; GKB Bersama</span>
-              <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                Rule Aktif
-              </span>
-            </div>
-            <p className="text-slate-500 text-[11px] mt-0.5">
-              Sesuai ketentuan hak akses, Anda hanya melihat ruangan perkuliahan <strong>prodi sendiri ({getProdiFullName(activeProdiView)})</strong> serta <strong>Gedung Kuliah Bersama (GKB)</strong>. Ruangan prodi lain otomatis disaring.
-            </p>
-          </div>
-        </div>
-
-        {/* Demo Switcher to test SI vs IF vs TK view */}
+      {/* ── FILTER PRODI (Pertahankan filter per departemen) ─────────── */}
+      <div className="bg-sky-50/80 border border-sky-200 rounded-2xl p-3 flex items-center justify-end gap-3 text-xs shadow-2xs">
         <div className="flex items-center gap-2 shrink-0 bg-white px-2.5 py-1.5 rounded-xl border border-sky-200 shadow-2xs">
           <span className="text-[11px] font-semibold text-slate-500">Filter Prodi:</span>
           <select
@@ -1939,7 +2006,7 @@ export const HeatmapRuangPage: React.FC = () => {
             <option value="SI">Prodi Sistem Informasi (SI)</option>
             <option value="IF">Prodi Informatika (IF)</option>
             <option value="TK">Prodi Teknik Komputer (TK)</option>
-            {currentRole === 'admin' && <option value="ALL">Semua Prodi (Admin)</option>}
+            {currentRole === 'admin' && <option value="ALL">Semua Prodi</option>}
           </select>
         </div>
       </div>
@@ -1960,7 +2027,7 @@ export const HeatmapRuangPage: React.FC = () => {
             <span className="text-xs text-slate-500">Ruangan</span>
           </div>
           <p className="text-[10px] text-slate-400 mt-0.5">
-            {activeProdiView === 'ALL' ? 'Seluruh FTI & GKB' : `Ruang ${activeProdiView} & GKB Bersama`}
+            {activeProdiView === 'ALL' ? 'Gedung G & Gedung H' : `Ruang Prodi ${activeProdiView}`}
           </p>
         </div>
 
@@ -2003,58 +2070,40 @@ export const HeatmapRuangPage: React.FC = () => {
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Ruang Lab Aktif
+              Ruang Teori Aktif
             </span>
             <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Tv className="w-3.5 h-3.5" />
+              <Building className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="mt-1.5 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-purple-700">{labRoomsCount}</span>
-            <span className="text-xs text-slate-500">Laboratorium</span>
+            <span className="text-2xl font-black text-purple-700">{totalVisibleRooms}</span>
+            <span className="text-xs text-slate-500">Ruang G &amp; H</span>
           </div>
-          <p className="text-[10px] text-slate-400 mt-0.5">Fasilitas praktikum prodi</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Gedung G &amp; Gedung H</p>
         </div>
       </div>
 
-      {/* ── Filter and Pastel Legend Bar (Exact HeatmapRuangPage Style) ── */}
+      {/* ── Filter and Pastel Legend Bar ── */}
       <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        {/* Day Pills with Calendar Dates */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-slate-100 p-1 rounded-lg">
-            {days.map((day) => {
-              const dateInfo = dayDateMapping[day];
-              const isSelected = selectedDay === day;
-              return (
-                <button
-                  key={day}
-                  onClick={() => handleSelectDayWithDate(day)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex flex-col items-center ${
-                    isSelected
-                      ? 'bg-[#082c78] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <span className="font-bold">{day}</span>
-                  <span className={`text-[10px] ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
-                    {dateInfo?.displayDate.split(' ')[0]} {dateInfo?.displayDate.split(' ')[1]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Quick Date Picker Input */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
-            <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            <span className="text-[11px] font-semibold text-slate-500">Pilih Tanggal:</span>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => handleDateChange(e.target.value)}
-              className="text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-800 font-bold focus:outline-none focus:border-blue-500"
-            />
-          </div>
+        {/* Day Pills (tanpa tanggal) */}
+        <div className="flex items-center bg-slate-100 p-1 rounded-lg">
+          {days.map((day) => {
+            const isSelected = selectedDay === day;
+            return (
+              <button
+                key={day}
+                onClick={() => handleSelectDayWithDate(day)}
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                  isSelected
+                    ? 'bg-[#082c78] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {day}
+              </button>
+            );
+          })}
         </div>
 
         {/* Dropdown Filters & Search */}
@@ -2065,8 +2114,8 @@ export const HeatmapRuangPage: React.FC = () => {
             className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 bg-white focus:outline-none focus:border-blue-500 font-medium"
           >
             <option value="Semua">Semua Gedung</option>
-            <option value="Gedung FTI">Gedung Utama FTI</option>
-            <option value="GKB">GKB Bersama</option>
+            <option value="Gedung G">Gedung G</option>
+            <option value="Gedung H">Gedung H</option>
           </select>
 
           <div className="relative">
@@ -2096,12 +2145,8 @@ export const HeatmapRuangPage: React.FC = () => {
             <span className="font-medium text-slate-700">Teknik Komputer</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-xs bg-amber-100 border border-amber-300 border-l-2 border-l-amber-500" />
-            <span className="font-medium text-slate-700">GKB Bersama</span>
-          </div>
-          <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-xs border border-dashed border-slate-300 bg-slate-50" />
-            <span className="text-slate-500">Slot Kosong (Hover)</span>
+            <span className="text-slate-500">Slot Kosong</span>
           </div>
         </div>
       </div>
@@ -2591,7 +2636,7 @@ export const HeatmapRuangPage: React.FC = () => {
                 selectedCourseDetail.lecturer.toLowerCase().includes('rahmad')
               );
 
-              const canRequestReplacement = currentRole === 'dosen' ? isDosenPengampu : isMahasiswaEnrolled;
+              const canRequestReplacement = currentRole === 'admin' ? true : currentRole === 'dosen' ? isDosenPengampu : isMahasiswaEnrolled;
 
               return (
                 <div className="space-y-2 pt-2 border-t border-slate-100">
@@ -2650,18 +2695,7 @@ export const HeatmapRuangPage: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => {
-                        handleOpenNavForRoom(selectedCourseDetail.roomName);
-                        setSelectedCourseDetail(null);
-                      }}
-                      className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"
-                    >
-                      <Compass className="w-3.5 h-3.5" />
-                      <span>Petunjuk Arah</span>
-                    </button>
-
+                  <div className="flex items-center justify-end gap-2">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setSelectedCourseDetail(null)}

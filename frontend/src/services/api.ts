@@ -699,4 +699,126 @@ export const apiService = {
     if (!res.ok) throw new Error(await parseError(res, 'Gagal menjalankan perbaikan otomatis'));
     return res.json();
   },
+
+  // ── Modul 3: Room Utilization & Statistics (Issue #64) ──────────────────────
+  async getRoomUtilization(params?: {
+    version_id?: number;
+    day?: string;
+    building?: string;
+    department?: string;
+  }): Promise<RoomUtilizationResponse> {
+    const query = new URLSearchParams();
+    if (params?.version_id) query.set('version_id', String(params.version_id));
+    if (params?.day) query.set('day', params.day);
+    if (params?.building) query.set('building', params.building);
+    if (params?.department) query.set('department', params.department);
+    const qs = query.toString();
+    const res = await fetch(`${API_BASE_URL}/api/rooms/utilization${qs ? `?${qs}` : ''}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat data utilisasi ruang'));
+    return res.json();
+  },
+
+  async getRoomStatistics(params?: {
+    version_id?: number;
+    day?: string;
+    building?: string;
+    department?: string;
+  }): Promise<RoomStatisticsResponse> {
+    const query = new URLSearchParams();
+    if (params?.version_id) query.set('version_id', String(params.version_id));
+    if (params?.day) query.set('day', params.day);
+    if (params?.building) query.set('building', params.building);
+    if (params?.department) query.set('department', params.department);
+    const qs = query.toString();
+    const res = await fetch(`${API_BASE_URL}/api/rooms/statistics${qs ? `?${qs}` : ''}`);
+    if (!res.ok) throw new Error(await parseError(res, 'Gagal memuat statistik ruang'));
+    return res.json();
+  },
 };
+
+// ── Room Utilization Types (Issue #64) ────────────────────────────────────────
+export interface RoomSlotDetail {
+  slot_id: string;
+  day: string;
+  daily_index: number;
+  time_label: string;
+  start_time: string;
+  end_time: string;
+  status: 'free' | 'occupied' | 'overload';
+  class_id?: string;
+  course_code?: string;
+  course_name?: string;
+  class_label?: string;
+  department?: string;
+  lecturer_name?: string;
+  enrolled_count?: number;
+  capacity?: number;
+}
+
+export interface RoomUtilizationItem {
+  room_id: string;
+  room_code: string;
+  room_name: string;
+  room_type: string;
+  building: string;
+  floor: number;
+  capacity: number;
+  department?: string;
+  total_slots_available: number;
+  occupied_slots_count: number;
+  free_slots_count: number;
+  utilization_percentage: number;
+  total_hours_used: number;
+  is_overload: boolean;
+  schedule_count: number;
+  seat_fill_rate_percentage: number;
+  slots: RoomSlotDetail[];
+}
+
+export interface BuildingUtilizationStat {
+  building: string;
+  total_rooms: number;
+  total_capacity: number;
+  total_slots: number;
+  occupied_slots: number;
+  average_utilization_percentage: number;
+}
+
+export interface PeakHourStat {
+  day: string;
+  time_label: string;
+  occupied_rooms_count: number;
+  occupancy_percentage: number;
+}
+
+export interface RoomUtilizationResponse {
+  version_id?: number;
+  version_number?: number;
+  semester_label?: string;
+  approval_status?: string;
+  summary: {
+    total_rooms: number;
+    total_capacity: number;
+    total_slots_available: number;
+    total_occupied_slots: number;
+    total_free_slots: number;
+    average_utilization_percentage: number;
+    overload_classes_count: number;
+    seat_fill_rate_percentage: number;
+    busiest_day: string;
+    busiest_time: string;
+    quietest_day: string;
+    quietest_time: string;
+  };
+  buildings: BuildingUtilizationStat[];
+  peak_hours: PeakHourStat[];
+  rooms: RoomUtilizationItem[];
+}
+
+export interface RoomStatisticsResponse {
+  summary: RoomUtilizationResponse['summary'];
+  buildings: BuildingUtilizationStat[];
+  peak_hours: PeakHourStat[];
+  semester_label?: string;
+  approval_status?: string;
+}

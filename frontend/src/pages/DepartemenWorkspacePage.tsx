@@ -755,7 +755,7 @@ export const DepartemenWorkspacePage: React.FC = () => {
 
       {/* Sidebar Khusus Departemen */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 transition-transform lg:translate-x-0 ${
+        className={`fixed lg:sticky lg:top-0 inset-y-0 left-0 z-50 w-64 h-screen bg-white border-r border-slate-200 flex flex-col shrink-0 transition-transform lg:translate-x-0 ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -811,7 +811,7 @@ export const DepartemenWorkspacePage: React.FC = () => {
         </div>
 
         {/* Navigation items */}
-        <nav className="flex-1 px-3 py-2 space-y-1 text-xs">
+        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1 text-xs">
           <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
             Kebutuhan Perkuliahan
           </div>

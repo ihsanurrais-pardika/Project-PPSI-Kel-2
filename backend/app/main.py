@@ -26,7 +26,7 @@ from database import authenticate_from_database
 from app.engine.memory_store import ClassItem, data_store
 from app.db_store import mysql_store
 from app.engine.domain_models import ObjectiveWeights, SolverConfig
-from app.schemas.schedule_dto import SolverResultOutput, DiagnosticsOutput
+from app.schemas.schedule_dto import SolverResultOutput, DiagnosticsOutput, RoomUtilizationResponse
 from app.engine.diagnostics import ScheduleDiagnostics
 from app.engine.manual_schedule import ScheduleConflictException
 from app.modul4_exports import build_offerings_excel, build_offerings_pdf
@@ -593,6 +593,63 @@ def list_slots(store=Depends(get_store)):
         }
         for s in store.get_slots()
     ]
+
+
+@app.get("/api/rooms/utilization", response_model=RoomUtilizationResponse)
+def get_room_utilization(
+    version_id: Optional[int] = Query(None, description="ID Versi Jadwal (default: jadwal aktif terbaru)"),
+    day: Optional[str] = Query(None, description="Filter Hari (Senin - Jumat)"),
+    building: Optional[str] = Query(None, description="Filter Gedung (misal: Gedung H, Gedung G)"),
+    department: Optional[str] = Query(None, description="Filter Departemen/Prodi"),
+    store=Depends(get_store),
+):
+    """
+    Menghitung persentase utilisasi dan statistik pemakaian ruang fisik dari data jadwal terkini.
+    Digunakan untuk evaluasi efisiensi ruangan Wakil Dekan I, audit kapasitas, dan visualisasi heatmap.
+    """
+    if not hasattr(store, "get_room_utilization_stats"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Metode get_room_utilization_stats tidak tersedia pada store saat ini."
+        )
+    return store.get_room_utilization_stats(
+        version_id=version_id,
+        day=day,
+        building=building,
+        department=department,
+    )
+
+
+@app.get("/api/rooms/statistics")
+def get_room_statistics(
+    version_id: Optional[int] = Query(None, description="ID Versi Jadwal"),
+    day: Optional[str] = Query(None, description="Filter Hari"),
+    building: Optional[str] = Query(None, description="Filter Gedung"),
+    department: Optional[str] = Query(None, description="Filter Departemen"),
+    store=Depends(get_store),
+):
+    """
+    Endpoint ringkas untuk mendapatkan ringkasan statistik utilisasi dan analisis jam sibuk.
+    """
+    if not hasattr(store, "get_room_utilization_stats"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Metode get_room_utilization_stats tidak tersedia pada store saat ini."
+        )
+    data = store.get_room_utilization_stats(
+        version_id=version_id,
+        day=day,
+        building=building,
+        department=department,
+    )
+    return {
+        "summary": data.get("summary", {}),
+        "buildings": data.get("buildings", []),
+        "peak_hours": data.get("peak_hours", []),
+        "semester_label": data.get("semester_label"),
+        "approval_status": data.get("approval_status"),
+    }
+
 
 
 # -------------------------------------------------------------

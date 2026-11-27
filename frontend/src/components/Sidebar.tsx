@@ -61,7 +61,7 @@ export const Sidebar: React.FC = () => {
       items: [
         { id: 'inventaris_ruang', label: 'Inventaris & Spek Ruang', icon: Boxes },
         { id: 'ketersediaan_ruang', label: 'Ketersediaan Ruang', icon: CalendarCheck },
-        { id: 'utilisasi_heatmap', label: 'Utilisasi Heatmap', icon: Grid3X3 },
+        { id: 'utilisasi_heatmap', label: 'Utilisasi Ruang', icon: Grid3X3 },
       ],
     },
     {
@@ -164,7 +164,10 @@ export const Sidebar: React.FC = () => {
     if (activePage === 'kebutuhan_departemen' && (id === 'kebutuhan_si' || id === 'kebutuhan_if' || id === 'kebutuhan_tk')) {
       return true;
     }
-    if ((activePage === 'ketersediaan_ruang' || activePage === 'utilisasi_heatmap' || activePage === 'cari_ruang') && (id === 'ketersediaan_ruang' || id === 'utilisasi_heatmap')) {
+    if (id === 'ketersediaan_ruang' && (activePage === 'ketersediaan_ruang' || activePage === 'cari_ruang')) {
+      return true;
+    }
+    if (id === 'utilisasi_heatmap' && activePage === 'utilisasi_heatmap') {
       return true;
     }
     return activePage === id;

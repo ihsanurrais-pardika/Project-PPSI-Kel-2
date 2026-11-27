@@ -993,6 +993,74 @@ class InMemoryDataStore:
         )
         return self.get_departemen_status(d)
 
+    def get_room_utilization_stats(
+        self,
+        version_id: Optional[int] = None,
+        day: Optional[str] = None,
+        building: Optional[str] = None,
+        department: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Menghitung utilisasi dan statistik ruang dari jadwal aktif di memory_store (CP-SAT solver result).
+        """
+        raw_rooms = [
+            {
+                "id_ruang": r.id,
+                "kode_ruang": r.name,
+                "nama_ruang": r.name,
+                "gedung": r.building or "H",
+                "lantai": r.floor,
+                "kapasitas": r.capacity,
+                "kode_prodi": "FTI",
+                "jenis_ruang": r.room_type or "Teori",
+            }
+            for r in self.rooms
+        ]
+
+        filtered_rooms = []
+        for r in raw_rooms:
+            r_gedung = (r["gedung"] or "").strip()
+            r_bld = f"Gedung {r_gedung}" if len(r_gedung) <= 2 else r_gedung
+            if building and building != "Semua":
+                b_clean = building.replace("Gedung", "").strip().lower()
+                if r_gedung.lower() != b_clean and r_bld.lower() != building.lower():
+                    continue
+            filtered_rooms.append(r)
+
+        scheduled_classes = []
+        if self.latest_schedule_result and self.latest_schedule_result.schedule:
+            for sc in self.latest_schedule_result.schedule:
+                scheduled_classes.append({
+                    "id_jadwal": sc.jadwal_id or 1,
+                    "class_id": sc.class_id,
+                    "room_id": sc.room_id,
+                    "room_code": sc.room_name,
+                    "day": sc.day,
+                    "start_time": sc.start_time,
+                    "end_time": sc.end_time,
+                    "course_code": sc.course_code,
+                    "course_name": sc.course_name,
+                    "class_label": sc.class_label,
+                    "department": sc.department,
+                    "lecturer_name": ", ".join(sc.lecturer_names) if sc.lecturer_names else "Dosen",
+                    "enrolled": sc.size,
+                    "capacity": sc.room_capacity,
+                })
+
+        from app.db_store import mysql_store
+        res = self.latest_schedule_result
+        return mysql_store._compute_utilization(
+            rooms=filtered_rooms,
+            scheduled_classes=scheduled_classes,
+            version_id=res.version_id if res else None,
+            version_number=res.version_number if res else 1,
+            semester_label=res.semester_label if res else "2026/2027 Ganjil",
+            approval_status=res.approval_status if res else "DRAFT",
+            filter_day=day,
+            filter_building=building,
+        )
+
+
 
 # Singleton instance
 data_store = InMemoryDataStore()
