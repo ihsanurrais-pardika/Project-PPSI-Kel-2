@@ -2949,5 +2949,389 @@ class MySQLDataStore:
 
         return self.get_departemen_status(dept)
 
+    def _compute_utilization(
+        self,
+        rooms: List[Dict[str, Any]],
+        scheduled_classes: List[Dict[str, Any]],
+        version_id: Optional[int] = None,
+        version_number: Optional[int] = None,
+        semester_label: Optional[str] = None,
+        approval_status: Optional[str] = None,
+        filter_day: Optional[str] = None,
+        filter_building: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        def check_slot_overlap(start1: str, end1: str, start2: str, end2: str) -> bool:
+            s1, e1 = parse_time_to_minutes(start1), parse_time_to_minutes(end1)
+            s2, e2 = parse_time_to_minutes(start2), parse_time_to_minutes(end2)
+            return s1 < e2 and e1 > s2
+
+        days_to_eval = [normalize_day_name(filter_day)] if filter_day and filter_day != "Semua" else DAYS
+        total_slots_per_room = len(days_to_eval) * len(SLOT_TIMES)
+
+        room_items: List[Dict[str, Any]] = []
+        total_students_overall = 0
+        total_capacity_occupied_overall = 0
+        total_occupied_overall = 0
+        overload_classes_count = 0
+
+        # Matrix pemakaian per hari dan sesi untuk analisis jam sibuk
+        time_slot_occupancy: Dict[Tuple[str, str], int] = {}
+        day_occupancy: Dict[str, int] = {d: 0 for d in days_to_eval}
+
+        for r in rooms:
+            rid = str(r.get("id_ruang") or r.get("id") or r.get("db_ruang_id") or "")
+            rcode = (r.get("kode_ruang") or r.get("code") or "").strip()
+            rname = (r.get("nama_ruang") or r.get("name") or rcode).strip()
+            rgedung = (r.get("gedung") or r.get("building") or "H").strip()
+            if rgedung.lower().startswith("gedung "):
+                rgedung = rgedung[7:].strip()
+            building_label = f"Gedung {rgedung}" if len(rgedung) <= 2 else rgedung
+            floor = int(r.get("lantai") or r.get("floor") or 1)
+            cap = int(r.get("kapasitas") or r.get("capacity") or 45)
+            dept = r.get("kode_prodi") or r.get("department") or "FTI"
+            raw_rtype = (r.get("jenis_ruang") or r.get("room_type") or "").strip()
+            if not raw_rtype:
+                name_lower = f"{rcode} {rname}".lower()
+                if "hardware" in name_lower or "iot" in name_lower:
+                    raw_rtype = "Lab Hardware"
+                elif "lab" in name_lower:
+                    raw_rtype = "Lab Software"
+                else:
+                    raw_rtype = "Teori"
+            rtype = raw_rtype
+
+            # Ambil semua kelas yang menggunakan ruang ini
+            assigned = [
+                sc for sc in scheduled_classes
+                if (str(sc.get("room_id")) == rid or sc.get("room_code") == rcode)
+                and sc.get("day") in days_to_eval
+            ]
+
+            room_slots: List[Dict[str, Any]] = []
+            occupied_count = 0
+            room_students = 0
+            room_cap_occupied = 0
+
+            for d in days_to_eval:
+                for d_idx, (st, en) in enumerate(SLOT_TIMES):
+                    time_lbl = f"{st} - {en}"
+                    # Cek bentrok / alokasi pada slot ini
+                    slot_cls = next(
+                        (
+                            sc for sc in assigned
+                            if sc.get("day") == d
+                            and check_slot_overlap(sc.get("start_time", "07:30"), sc.get("end_time", "09:10"), st, en)
+                        ),
+                        None,
+                    )
+
+                    if slot_cls:
+                        enrolled = int(slot_cls.get("enrolled") or slot_cls.get("size") or 40)
+                        is_overload = enrolled > cap
+                        status = "overload" if is_overload else "occupied"
+                        occupied_count += 1
+                        room_students += enrolled
+                        room_cap_occupied += cap
+                        if is_overload:
+                            overload_classes_count += 1
+
+                        time_slot_occupancy[(d, time_lbl)] = time_slot_occupancy.get((d, time_lbl), 0) + 1
+                        day_occupancy[d] = day_occupancy.get(d, 0) + 1
+
+                        room_slots.append({
+                            "slot_id": f"slot_{d[:3].lower()}_{d_idx+1}",
+                            "day": d,
+                            "daily_index": d_idx,
+                            "time_label": time_lbl,
+                            "start_time": st,
+                            "end_time": en,
+                            "status": status,
+                            "class_id": slot_cls.get("class_id"),
+                            "course_code": slot_cls.get("course_code"),
+                            "course_name": slot_cls.get("course_name"),
+                            "class_label": slot_cls.get("class_label"),
+                            "department": slot_cls.get("department"),
+                            "lecturer_name": slot_cls.get("lecturer_name"),
+                            "enrolled_count": enrolled,
+                            "capacity": cap,
+                        })
+                    else:
+                        room_slots.append({
+                            "slot_id": f"slot_{d[:3].lower()}_{d_idx+1}",
+                            "day": d,
+                            "daily_index": d_idx,
+                            "time_label": time_lbl,
+                            "start_time": st,
+                            "end_time": en,
+                            "status": "free",
+                            "class_id": None,
+                            "course_code": None,
+                            "course_name": None,
+                            "class_label": None,
+                            "department": None,
+                            "lecturer_name": None,
+                            "enrolled_count": None,
+                            "capacity": cap,
+                        })
+
+            free_count = max(0, total_slots_per_room - occupied_count)
+            util_pct = round((occupied_count / total_slots_per_room * 100.0), 1) if total_slots_per_room > 0 else 0.0
+            fill_rate = round((room_students / room_cap_occupied * 100.0), 1) if room_cap_occupied > 0 else 0.0
+
+            total_occupied_overall += occupied_count
+            total_students_overall += room_students
+            total_capacity_occupied_overall += room_cap_occupied
+
+            room_items.append({
+                "room_id": rid,
+                "room_code": rcode,
+                "room_name": rname,
+                "room_type": rtype,
+                "building": building_label,
+                "floor": floor,
+                "capacity": cap,
+                "department": dept,
+                "total_slots_available": total_slots_per_room,
+                "occupied_slots_count": occupied_count,
+                "free_slots_count": free_count,
+                "utilization_percentage": util_pct,
+                "total_hours_used": round(occupied_count * 1.67, 1),
+                "is_overload": any(s["status"] == "overload" for s in room_slots),
+                "schedule_count": len(assigned),
+                "seat_fill_rate_percentage": fill_rate,
+                "slots": room_slots,
+            })
+
+        # Hitung statistik per gedung
+        buildings_dict: Dict[str, Dict[str, Any]] = {}
+        for itm in room_items:
+            bld = itm["building"]
+            if bld not in buildings_dict:
+                buildings_dict[bld] = {
+                    "building": bld,
+                    "total_rooms": 0,
+                    "total_capacity": 0,
+                    "total_slots": 0,
+                    "occupied_slots": 0,
+                    "util_sum": 0.0,
+                }
+            buildings_dict[bld]["total_rooms"] += 1
+            buildings_dict[bld]["total_capacity"] += itm["capacity"]
+            buildings_dict[bld]["total_slots"] += itm["total_slots_available"]
+            buildings_dict[bld]["occupied_slots"] += itm["occupied_slots_count"]
+            buildings_dict[bld]["util_sum"] += itm["utilization_percentage"]
+
+        buildings_stats: List[Dict[str, Any]] = []
+        for bld, data in sorted(buildings_dict.items()):
+            cnt = data["total_rooms"]
+            buildings_stats.append({
+                "building": bld,
+                "total_rooms": cnt,
+                "total_capacity": data["total_capacity"],
+                "total_slots": data["total_slots"],
+                "occupied_slots": data["occupied_slots"],
+                "average_utilization_percentage": round(data["util_sum"] / cnt, 1) if cnt > 0 else 0.0,
+            })
+
+        # Analisis Jam Sibuk (Peak Hours)
+        peak_hours_list: List[Dict[str, Any]] = []
+        num_rooms = max(1, len(room_items))
+        for (d, t_lbl), occ in sorted(time_slot_occupancy.items()):
+            occ_pct = round((occ / num_rooms * 100.0), 1)
+            peak_hours_list.append({
+                "day": d,
+                "time_label": t_lbl,
+                "occupied_rooms_count": occ,
+                "occupancy_percentage": occ_pct,
+            })
+        peak_hours_list.sort(key=lambda x: x["occupied_rooms_count"], reverse=True)
+
+        # Temukan hari & waktu paling sibuk / lengang
+        busiest_day = max(day_occupancy.items(), key=lambda x: x[1])[0] if day_occupancy and max(day_occupancy.values()) > 0 else "-"
+        quietest_day = min(day_occupancy.items(), key=lambda x: x[1])[0] if day_occupancy else "-"
+        busiest_time = peak_hours_list[0]["time_label"] if peak_hours_list else "-"
+        quietest_time = peak_hours_list[-1]["time_label"] if len(peak_hours_list) > 1 else "-"
+
+        total_rooms_count = len(room_items)
+        total_slots_overall = total_rooms_count * total_slots_per_room
+        avg_util = round(sum(r["utilization_percentage"] for r in room_items) / total_rooms_count, 1) if total_rooms_count > 0 else 0.0
+        overall_fill_rate = round(total_students_overall / total_capacity_occupied_overall * 100.0, 1) if total_capacity_occupied_overall > 0 else 0.0
+
+        return {
+            "version_id": version_id,
+            "version_number": version_number,
+            "semester_label": semester_label or "2026/2027 Ganjil",
+            "approval_status": approval_status or "DRAFT",
+            "summary": {
+                "total_rooms": total_rooms_count,
+                "total_capacity": sum(r["capacity"] for r in room_items),
+                "total_slots_available": total_slots_overall,
+                "total_occupied_slots": total_occupied_overall,
+                "total_free_slots": max(0, total_slots_overall - total_occupied_overall),
+                "average_utilization_percentage": avg_util,
+                "overload_classes_count": overload_classes_count,
+                "seat_fill_rate_percentage": overall_fill_rate,
+                "busiest_day": busiest_day,
+                "busiest_time": busiest_time,
+                "quietest_day": quietest_day,
+                "quietest_time": quietest_time,
+            },
+            "buildings": buildings_stats,
+            "peak_hours": peak_hours_list[:10],
+            "rooms": room_items,
+        }
+
+    def get_room_utilization_stats(
+        self,
+        version_id: Optional[int] = None,
+        day: Optional[str] = None,
+        building: Optional[str] = None,
+        department: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Menghitung statistik dan utilisasi ruangan fisik dari jadwal terkini di MySQL (jadwal_kuliah & ruang).
+        Mendukung filter berdasarkan versi jadwal, hari, gedung, dan departemen pengelola.
+        """
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                # 1. Ambil data ruang fisik
+                cursor.execute(
+                    """
+                    SELECT r.id_ruang, r.id_prodi_pengelola, r.kode_ruang, r.nama_ruang,
+                           r.gedung, r.lantai, r.kapasitas, ps.kode_prodi
+                    FROM ruang r
+                    LEFT JOIN program_studi ps ON r.id_prodi_pengelola = ps.id_prodi
+                    ORDER BY r.gedung ASC, r.lantai ASC, r.kode_ruang ASC;
+                    """
+                )
+                raw_rooms = cursor.fetchall()
+
+                # Filter ruangan
+                filtered_raw_rooms = []
+                for r in raw_rooms:
+                    r_gedung = (r["gedung"] or "").strip()
+                    r_bld = f"Gedung {r_gedung}" if len(r_gedung) <= 2 else r_gedung
+                    if building and building != "Semua":
+                        b_clean = building.replace("Gedung", "").strip().lower()
+                        if r_gedung.lower() != b_clean and r_bld.lower() != building.lower():
+                            continue
+                    if department and department != "Semua":
+                        dept_clean = department.strip().upper()
+                        r_dept = (r["kode_prodi"] or "").strip().upper()
+                        if r_dept and r_dept != dept_clean:
+                            continue
+                    filtered_raw_rooms.append(r)
+
+                # 2. Ambil versi jadwal
+                if version_id:
+                    cursor.execute(
+                        """
+                        SELECT jv.*, sa.tahun_ajaran, sa.jenis_semester
+                        FROM jadwal_versi jv
+                        JOIN semester_akademik sa ON jv.id_semester = sa.id_semester
+                        WHERE jv.id_versi = %s LIMIT 1;
+                        """,
+                        (int(version_id),),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT jv.*, sa.tahun_ajaran, sa.jenis_semester
+                        FROM jadwal_versi jv
+                        JOIN semester_akademik sa ON jv.id_semester = sa.id_semester
+                        ORDER BY jv.id_versi DESC LIMIT 1;
+                        """
+                    )
+                ver = cursor.fetchone()
+
+                scheduled_classes: List[Dict[str, Any]] = []
+                target_ver_id = int(ver["id_versi"]) if ver else None
+                semester_label = f"{ver['tahun_ajaran']} {ver['jenis_semester']}" if ver else "2026/2027 Ganjil"
+                approval_status = ver.get("status_persetujuan") if ver else "DRAFT"
+
+                if target_ver_id:
+                    cursor.execute(
+                        """
+                        SELECT
+                            jk.id_jadwal, jk.id_kelas, jk.id_ruang, jk.hari,
+                            TIME_FORMAT(jk.jam_mulai, '%%H:%%i') AS jam_mulai,
+                            TIME_FORMAT(jk.jam_selesai, '%%H:%%i') AS jam_selesai,
+                            k.kode_kelas, COALESCE(k.jumlah_peserta, k.estimasi_mahasiswa, 40) AS enrolled,
+                            mk.kode_mk, mk.nama_mk, mk.sks, mk.semester_paket,
+                            ps.kode_prodi AS dept_code,
+                            r.id_ruang, r.kode_ruang, r.nama_ruang, r.gedung, r.kapasitas
+                        FROM jadwal_kuliah jk
+                        JOIN kelas k ON jk.id_kelas = k.id_kelas
+                        JOIN mata_kuliah mk ON k.id_mk = mk.id_mk
+                        JOIN ruang r ON jk.id_ruang = r.id_ruang
+                        LEFT JOIN program_studi ps ON mk.id_prodi = ps.id_prodi
+                        WHERE jk.id_versi = %s;
+                        """,
+                        (target_ver_id,),
+                    )
+                    jk_rows = cursor.fetchall()
+
+                    # Ambil nama dosen pengampu
+                    k_ids = list({int(r["id_kelas"]) for r in jk_rows if r["id_kelas"]})
+                    lect_map: Dict[int, List[str]] = {}
+                    if k_ids:
+                        ph = ",".join(["%s"] * len(k_ids))
+                        cursor.execute(
+                            f"""
+                            SELECT pk.id_kelas, u.nama_lengkap AS nama_dosen
+                            FROM pengampu_kelas pk
+                            JOIN dosen d ON pk.id_dosen = d.id_dosen
+                            JOIN pengguna u ON d.id_pengguna = u.id_pengguna
+                            WHERE pk.id_kelas IN ({ph});
+                            """,
+                            tuple(k_ids),
+                        )
+                        for row in cursor.fetchall():
+                            lect_map.setdefault(int(row["id_kelas"]), []).append(row["nama_dosen"])
+
+                    for r in jk_rows:
+                        kid = int(r["id_kelas"])
+                        lects = lect_map.get(kid, [])
+                        if not lects:
+                            csv_meta = self._csv_meta_by_key.get((
+                                (r["kode_mk"] or "").strip(),
+                                (r["dept_code"] or "").strip().upper(),
+                                int(r["semester_paket"] or 1),
+                                (r["kode_kelas"] or "").strip(),
+                            ))
+                            if csv_meta and csv_meta.get("lecturer_names"):
+                                lects = csv_meta["lecturer_names"]
+                        scheduled_classes.append({
+                            "id_jadwal": int(r["id_jadwal"]),
+                            "class_id": f"c-{r['id_kelas']}",
+                            "room_id": str(r["id_ruang"]),
+                            "room_code": r["kode_ruang"],
+                            "day": normalize_day_name(r["hari"]),
+                            "start_time": r["jam_mulai"],
+                            "end_time": r["jam_selesai"],
+                            "course_code": r["kode_mk"],
+                            "course_name": r["nama_mk"],
+                            "class_label": r["kode_kelas"],
+                            "department": r["dept_code"] or "FTI",
+                            "lecturer_name": ", ".join(lects) if lects else "Dosen Pengampu",
+                            "enrolled": int(r["enrolled"] or 40),
+                            "capacity": int(r["kapasitas"] or 45),
+                        })
+        finally:
+            conn.close()
+
+        return self._compute_utilization(
+            rooms=filtered_raw_rooms,
+            scheduled_classes=scheduled_classes,
+            version_id=target_ver_id,
+            version_number=ver.get("nomor_versi", 1) if ver else None,
+            semester_label=semester_label,
+            approval_status=approval_status,
+            filter_day=day,
+            filter_building=building,
+        )
+
+
 
 mysql_store = MySQLDataStore()

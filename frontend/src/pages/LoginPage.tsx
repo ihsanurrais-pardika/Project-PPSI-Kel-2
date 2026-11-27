@@ -289,10 +289,8 @@ export const LoginPage: React.FC = () => {
           <div className="relative z-10">
             <div className="flex items-center justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white text-[#082c78] flex items-center justify-center font-bold text-lg shadow-sm">
-                  <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 3L1 9L12 15L21 10.09V17H23V9M5 13.18V17.18L12 21L19 17.18V13.18L12 17L5 13.18Z" />
-                  </svg>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shadow-sm">
+                <img src="LOGO_FTI_SOSMED-03.png" alt="logo" />
                 </div>
                 <div>
                   <div className="font-bold text-xs tracking-wider uppercase leading-tight text-white">
