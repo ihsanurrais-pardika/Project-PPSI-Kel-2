@@ -71,34 +71,45 @@ export interface Room {
 
 export interface ScheduleItem {
   id: string;
+  jadwalId?: number;
+  dbRuangId?: number;
   courseCode: string;
   courseName: string;
   classLabel?: string;
   className?: string;
+  semester?: number;
+  rombelKey?: string;
   sks: number;
   studentCount: number;
   roomId?: string;
   roomName: string;
   building?: string;
   floor?: number;
+  capacity?: number;
   day: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | string;
   sessionIndex: number; // 1 to 5
   timeLabel?: string; // e.g. "07:30 - 09:10"
   time?: string;
   primaryLecturer?: string;
   lecturerName?: string;
+  lecturerNames?: string[];
   tandemLecturers?: string[];
   isTandem: boolean;
   department: 'Sistem Informasi' | 'Informatika' | 'Teknik Komputer' | 'SI' | 'IF' | 'TK' | string;
   status: 'OK' | 'Tandem' | 'Warning' | 'Bentrok' | string;
   note?: string;
+  isManualEdited?: boolean;
   wd1Status?: 'Menunggu Review' | 'Disetujui' | 'Revisi';
   wd1RevisionNote?: string;
 }
 
 export interface ConflictItem {
   id: string;
-  type: 'Kapasitas Ruang' | 'Preferensi Jadwal' | 'Jarak / Interval' | 'Bentrok Dosen' | 'Bentrok Rombel' | 'Hard Constraint' | 'Soft Constraint' | string;
+  conflictId?: number | string;
+  jenisBentrok?: string;
+  statusBentrok?: string;
+  canIgnore?: boolean;
+  type: 'Bentrok Ruang' | 'Bentrok Dosen' | 'Bentrok Mahasiswa' | 'Kapasitas Ruang' | 'Preferensi Jadwal' | 'Jarak / Interval' | 'Bentrok Rombel' | 'Hard Constraint' | 'Soft Constraint' | string;
   severity: 'hard' | 'soft' | 'warning' | 'Tinggi' | 'Sedang' | 'Rendah' | string;
   title: string;
   courseCode?: string;
@@ -147,5 +158,15 @@ export interface GAParameters {
   maxGenerations: number;
   timeoutSeconds: number;
   randomSeed: number;
+}
+
+export interface CPSATParameters {
+  wGap: number;
+  wPref: number;
+  wSpread: number;
+  wWaste: number;
+  timeoutSeconds: number;
+  numWorkers: number;
+  linearizationLevel: number;
 }
 

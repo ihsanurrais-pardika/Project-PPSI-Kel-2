@@ -23,7 +23,7 @@ import { CourseOffering, ClassRombel, Lecturer } from '../types';
 import { mockLecturers } from '../data/mockData';
 
 export const FormUsulanMKPage: React.FC = () => {
-  const { addCourse, setActivePage, showToast } = useApp();
+  const { addCourse, createDepartemenOffering, backendStatus, setActivePage, showToast } = useApp();
 
   const [code, setCode] = useState('SI211');
   const [name, setName] = useState('Basis Data Terdistribusi');
@@ -79,14 +79,44 @@ export const FormUsulanMKPage: React.FC = () => {
 
   const totalCapacity = classes.reduce((acc, c) => acc + c.capacity, 0);
 
-  const handleSubmit = (isDraft: boolean) => {
+  const handleSubmit = async (isDraft: boolean) => {
     if (!code.trim() || !name.trim()) {
-      showToast('Kode dan Nama Mata Kuliah wajib diisi (PRD UC-03 E1).', 'error');
+      showToast('Kode dan Nama Mata Kuliah wajib diisi.', 'error');
       return;
     }
 
     const primary = mockLecturers.find((l: Lecturer) => l.id === primaryLecturerId) || mockLecturers[0];
     const tandems = mockLecturers.filter((l: Lecturer) => tandemIds.includes(l.id));
+
+    if (backendStatus === 'connected') {
+      const deptCode =
+        department === 'Informatika' ? 'IF' : department === 'Teknik Komputer' ? 'TK' : 'SI';
+      const res = await createDepartemenOffering({
+        course_code: code.trim().toUpperCase(),
+        name: name.trim(),
+        department: deptCode,
+        semester,
+        sks,
+        sks_teori: Math.max(0, sks - (sks >= 3 ? 1 : 0)),
+        sks_praktik: sks >= 3 ? 1 : 0,
+        is_mandatory: isMandatory,
+        requires_room: true,
+        primary_lecturer_name: primary.name,
+        tandem_lecturer_names: tandems.map((t) => t.name),
+        classes: classes.map((cl) => ({
+          class_label: cl.name.replace(/^Kelas\s+/i, '').trim() || 'A',
+          enrolled_count: cl.capacity,
+        })),
+        preferred_days: preferredDays,
+        preferred_time_slot: timeSlotPref,
+        avoid_friday: avoidFridayNoon,
+        as_draft: isDraft,
+      });
+      if (res && !isDraft) {
+        setActivePage('kebutuhan_departemen');
+      }
+      return;
+    }
 
     const specialConstraints: string[] = [];
     if (avoidFridayNoon) specialConstraints.push('Hindari Jumat Siang');
@@ -169,7 +199,7 @@ export const FormUsulanMKPage: React.FC = () => {
 
       {/* Main Form Grid: 8 cols Form + 4 cols Validation Gauge */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
+
         {/* Left Form: 8 cols */}
         <div className="lg:col-span-8 space-y-6">
 
@@ -279,22 +309,20 @@ export const FormUsulanMKPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsMandatory(true)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    isMandatory
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${isMandatory
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                 >
                   Wajib Prodi (FTI)
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsMandatory(false)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    !isMandatory
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${!isMandatory
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                 >
                   Mata Kuliah Pilihan
                 </button>
@@ -546,11 +574,10 @@ export const FormUsulanMKPage: React.FC = () => {
                       key={day}
                       type="button"
                       onClick={() => toggleDay(day)}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                        isChecked
-                          ? 'bg-blue-900 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${isChecked
+                        ? 'bg-blue-900 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
                     >
                       {isChecked && <Check className="w-3.5 h-3.5 text-blue-300" />}
                       {day}
@@ -568,11 +595,10 @@ export const FormUsulanMKPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div
                   onClick={() => setTimeSlotPref('Sesi Pagi')}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                    timeSlotPref === 'Sesi Pagi'
-                      ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
-                      : 'border-slate-200 hover:border-slate-300 text-slate-700'
-                  }`}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all ${timeSlotPref === 'Sesi Pagi'
+                    ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
+                    : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                    }`}
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span>Sesi Pagi</span>
@@ -586,11 +612,10 @@ export const FormUsulanMKPage: React.FC = () => {
 
                 <div
                   onClick={() => setTimeSlotPref('Sesi Siang')}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                    timeSlotPref === 'Sesi Siang'
-                      ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
-                      : 'border-slate-200 hover:border-slate-300 text-slate-700'
-                  }`}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all ${timeSlotPref === 'Sesi Siang'
+                    ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
+                    : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                    }`}
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span>Sesi Siang</span>
@@ -604,11 +629,10 @@ export const FormUsulanMKPage: React.FC = () => {
 
                 <div
                   onClick={() => setTimeSlotPref('Sesi Sore')}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                    timeSlotPref === 'Sesi Sore'
-                      ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
-                      : 'border-slate-200 hover:border-slate-300 text-slate-700'
-                  }`}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all ${timeSlotPref === 'Sesi Sore'
+                    ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
+                    : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                    }`}
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span>Sesi Sore</span>
@@ -628,9 +652,8 @@ export const FormUsulanMKPage: React.FC = () => {
                 Batasan Khusus (Constraint Directives)
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                  avoidFridayNoon ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-slate-50'
-                }`}>
+                <label className={`p-3 rounded-xl border cursor-pointer transition-all ${avoidFridayNoon ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-slate-50'
+                  }`}>
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -645,9 +668,8 @@ export const FormUsulanMKPage: React.FC = () => {
                   </p>
                 </label>
 
-                <label className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                  maxOneSessionPerDay ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-slate-50'
-                }`}>
+                <label className={`p-3 rounded-xl border cursor-pointer transition-all ${maxOneSessionPerDay ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-slate-50'
+                  }`}>
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"

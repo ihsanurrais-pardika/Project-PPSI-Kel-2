@@ -17,105 +17,226 @@ import {
   HelpCircle,
   Building2,
   Sparkles,
+  X,
+  ShieldAlert,
 } from 'lucide-react';
 import { UserRole } from '../types';
+
+interface RegisteredAccount {
+  id: string;
+  email: string;
+  nipOrNim: string;
+  password: string;
+  name: string;
+  role: UserRole;
+  roleLabel: string;
+  department: string;
+  icon: string;
+}
+
+// Master Akun Resmi SIPRAMA FTI UNAND (Sesuai Ketentuan User & PRD)
+const OFFICIAL_ACCOUNTS: RegisteredAccount[] = [
+  {
+    id: 'usr-wadek1',
+    email: 'Wadek1@it.unand.ac.id',
+    nipOrNim: '19750312 200212 1 002',
+    password: 'wadek1ftiunand',
+    name: 'Dr. Eng. Rahmadi, M.T.',
+    role: 'wadek1',
+    roleLabel: 'Wakil Dekan I (Bidang Akademik)',
+    department: 'Fakultas Teknologi Informasi',
+    icon: '🎓',
+  },
+  {
+    id: 'usr-kadep-si',
+    email: 'kadepsi@it.unand.ac.id',
+    nipOrNim: '19840915 200812 1 002',
+    password: 'kadepsiftiunand',
+    name: 'Ricky Akbar, M.Kom.',
+    role: 'departemen_si',
+    roleLabel: 'Ketua Departemen Sistem Informasi',
+    department: 'Departemen Sistem Informasi',
+    icon: '💻',
+  },
+  {
+    id: 'usr-kadep-if',
+    email: 'kadepif@it.unand.ac.id',
+    nipOrNim: '19760724 200212 1 001',
+    password: 'kadepifftiunand',
+    name: 'Dr. Ir. Wahyudi, S.T., M.T.',
+    role: 'departemen_if',
+    roleLabel: 'Ketua Departemen Informatika',
+    department: 'Departemen Informatika',
+    icon: '🖥️',
+  },
+  {
+    id: 'usr-kadep-tekkom',
+    email: 'kadeptekkom@it.unand.ac.id',
+    nipOrNim: '19790412 200604 2 001',
+    password: 'kadeptekkomftiunand',
+    name: 'Dr. Eng. Tati Erlina, M.IT.',
+    role: 'departemen_tk',
+    roleLabel: 'Ketua Departemen Teknik Komputer',
+    department: 'Departemen Teknik Komputer',
+    icon: '🔌',
+  },
+  {
+    id: 'usr-dosen',
+    email: 'dosen@it.unand.ac.id',
+    nipOrNim: '19820412 200812 1 003',
+    password: 'dosenftiunand',
+    name: 'Dr. Eng. Rahmad, M.T.',
+    role: 'dosen',
+    roleLabel: 'Dosen Pengampu',
+    department: 'Departemen Sistem Informasi',
+    icon: '📚',
+  },
+  {
+    id: 'usr-mahasiswa',
+    email: 'ihsan@gmail.com',
+    nipOrNim: '2211522001',
+    password: 'ihsan123',
+    name: 'Ihsan',
+    role: 'mahasiswa',
+    roleLabel: 'Mahasiswa Aktif',
+    department: 'Sistem Informasi (BP 22)',
+    icon: '🎒',
+  },
+  {
+    id: 'usr-admin',
+    email: 'admin@gmail.com',
+    nipOrNim: '12345678',
+    password: 'password_admin_anda',
+    name: 'Admin',
+    role: 'admin',
+    roleLabel: 'Administrator Sistem FTI',
+    department: 'Konsol Operasional Akademik FTI',
+    icon: '👨‍💼',
+  },
+];
 
 export const LoginPage: React.FC = () => {
   const { login, showToast } = useApp();
 
-  const [username, setUsername] = useState('alghifari@it.unand.ac.id');
-  const [password, setPassword] = useState('SecretKey2024!');
+  const [username, setUsername] = useState('admin@gmail.com');
+  const [password, setPassword] = useState('password_admin_anda');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showErrorPopup, setShowErrorPopup] = useState(false);
   const [activeQA, setActiveQA] = useState<'normal' | 'wrong' | 'empty' | 'loading' | 'success'>('normal');
 
-  const detectRole = (userStr: string): UserRole => {
-    const u = userStr.toLowerCase();
-    if (u.includes('wadek') || u.includes('wd1') || u.includes('rahmadi')) return 'wadek1';
-    if (u.includes('kaprodi.si') || u.includes('dept-si') || u.includes('ricky') || u === 'si') return 'departemen_si';
-    if (u.includes('kaprodi.if') || u.includes('dept-if') || u.includes('wahyudi') || u === 'if') return 'departemen_if';
-    if (u.includes('kaprodi.tk') || u.includes('dept-tk') || u.includes('tati') || u === 'tk') return 'departemen_tk';
-    if (u.includes('dosen') || u.includes('rahmad')) return 'dosen';
-    if (u.includes('mhs') || u.includes('mahasiswa') || u.includes('faris') || u.includes('student')) return 'mahasiswa';
-    return 'admin';
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!username.trim() || !password.trim()) {
-      setErrorMsg('Email/NIP dan Kata Sandi wajib diisi lengkap (PRD UC-01 AF-1).');
-      showToast('Harap lengkapi semua kolom formulir login.', 'error');
-      return;
-    }
+    const trimmedUser = username.trim();
+    const trimmedPw = password.trim();
 
-    if (password === 'salah') {
-      setErrorMsg('Email atau kata sandi SSO tidak sesuai. Periksa kembali NIP/Akun Anda.');
-      showToast('Kredensial login salah.', 'error');
+    if (!trimmedUser || !trimmedPw) {
+      const msg = 'Sandi atau NIP/NIM/Email Anda salah.';
+      setErrorMsg(msg);
+      setShowErrorPopup(true);
+      showToast(msg, 'warning');
       return;
     }
 
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      // Request ke Backend API Server (Membaca data riil dari tabel database MySQL Laragon)
+      let response: Response | null = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: trimmedUser, password: trimmedPw }),
+      }).catch(() => null);
+
+      // Fallback koneksi langsung ke port 8000 jika proxy vite belum aktif
+      if (!response) {
+        response = await fetch('http://127.0.0.1:8000/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: trimmedUser, password: trimmedPw }),
+        }).catch(() => null);
+      }
+
       setIsLoading(false);
-      const role = detectRole(username);
-      login(role);
 
-      const roleLabels: Record<string, string> = {
-        admin: 'Admin Fakultas',
-        wadek1: 'Wakil Dekan I (Akademik)',
-        departemen_si: 'Kaprodi Sistem Informasi',
-        departemen_if: 'Kaprodi Informatika',
-        departemen_tk: 'Kaprodi Teknik Komputer',
-        dosen: 'Dosen Pengampu',
-        mahasiswa: 'Mahasiswa Aktif',
-      };
-
-      showToast(`Login SSO berhasil sebagai ${roleLabels[role] || role.toUpperCase()}`, 'success');
-    }, 600);
+      if (response) {
+        if (response.ok) {
+          const data = await response.json();
+          login(data.role, data.user);
+          showToast(data.message || `Login berhasil sebagai ${data.role}`, 'success');
+          return;
+        } else {
+          // Status 401 Unauthorized dari database (Data tidak ditemukan, kosong, atau password salah)
+          const errData = await response.json().catch(() => ({}));
+          const detailMsg = errData.detail || 'Sandi atau NIP/NIM/Email Anda salah.';
+          setErrorMsg(detailMsg);
+          setShowErrorPopup(true);
+          showToast('Sandi atau NIP/NIM/Email Anda salah.', 'error');
+          return;
+        }
+      } else {
+        // Jika server backend belum dijalankan
+        const failMsg = 'Tidak dapat membaca database. Pastikan server backend aktif (python backend/server.py) dan database Laragon berjalan.';
+        setErrorMsg(failMsg);
+        setShowErrorPopup(true);
+        showToast(failMsg, 'error');
+        return;
+      }
+    } catch (err) {
+      setIsLoading(false);
+      const failMsg = 'Terjadi kesalahan saat memeriksa data pengguna di database.';
+      setErrorMsg(failMsg);
+      setShowErrorPopup(true);
+      showToast(failMsg, 'error');
+    }
   };
 
-  const setPresetAccount = (email: string, roleName: string) => {
-    setUsername(email);
-    setPassword('SecretKey2024!');
+  const setPresetAccount = (acc: RegisteredAccount) => {
+    setUsername(acc.email);
+    setPassword(acc.password);
     setErrorMsg('');
-    showToast(`Akun dipilih: ${roleName}`, 'info');
+    setShowErrorPopup(false);
+    showToast(`Akun dipilih: ${acc.roleLabel}`, 'info');
   };
 
-  // Interactive QA Tester matching the mockup
+  // Interactive QA Tester matching the PRD test bench
   const triggerQAState = (type: 'normal' | 'wrong' | 'empty' | 'loading' | 'success') => {
     setActiveQA(type);
     setErrorMsg('');
+    setShowErrorPopup(false);
 
     if (type === 'normal') {
-      setUsername('alghifari@it.unand.ac.id');
-      setPassword('SecretKey2024!');
+      setUsername('Wadek1@it.unand.ac.id');
+      setPassword('wadek1ftiunand');
       setIsLoading(false);
-      showToast('State Formulir: Normal input', 'info');
+      showToast('State Formulir: Normal input (Wadek 1)', 'info');
     } else if (type === 'wrong') {
-      setUsername('alghifari@it.unand.ac.id');
-      setPassword('salah');
-      setErrorMsg('Email atau kata sandi SSO tidak sesuai. Periksa kembali NIP/Akun Anda.');
-      showToast('State Formulir: Password salah (Error 401)', 'error');
+      setUsername('Wadek1@it.unand.ac.id');
+      setPassword('salah_password');
+      setErrorMsg('Sandi atau NIP/NIM/Email Anda salah.');
+      setShowErrorPopup(true);
+      showToast('State Formulir: Password salah (Error 401 Popup)', 'error');
     } else if (type === 'empty') {
       setUsername('');
       setPassword('');
-      setErrorMsg('Email dan kata sandi SSO wajib diisi.');
+      setErrorMsg('Sandi atau NIP/NIM/Email Anda salah.');
+      setShowErrorPopup(true);
       showToast('State Formulir: Validasi input kosong', 'warning');
     } else if (type === 'loading') {
       setIsLoading(true);
       showToast('State Formulir: Simulasi loading autentikasi...', 'info');
       setTimeout(() => setIsLoading(false), 2000);
     } else if (type === 'success') {
-      setUsername('alghifari@it.unand.ac.id');
-      setPassword('SecretKey2024!');
+      setUsername('Wadek1@it.unand.ac.id');
+      setPassword('wadek1ftiunand');
       setIsLoading(true);
       setTimeout(() => {
         setIsLoading(false);
-        login('admin');
+        login('wadek1');
         showToast('Login SSO berhasil diverifikasi!', 'success');
       }, 500);
     }
@@ -123,8 +244,46 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100/80 flex items-center justify-center p-4 md:p-8 font-sans selection:bg-blue-600 selection:text-white">
+      {/* ── POPUP MODAL NOTIFIKASI JIKA SALAH KREDENSIAL ── */}
+      {showErrorPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 text-center animate-in zoom-in-95 duration-150 relative">
+            <button
+              onClick={() => setShowErrorPopup(false)}
+              className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3.5 border border-rose-200">
+              <ShieldAlert className="w-6 h-6 text-rose-600" />
+            </div>
+
+            <h4 className="text-base font-bold text-slate-800 mb-1.5">
+              Autentikasi Gagal
+            </h4>
+
+            <p className="text-xs md:text-sm text-slate-600 leading-relaxed mb-5 font-medium">
+              {errorMsg || 'Sandi atau NIP/NIM/Email Anda salah.'}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowErrorPopup(false);
+                setPassword('');
+              }}
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-[0.99] transition-all shadow-sm cursor-pointer"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── CARD LOGIN UTAMA ── */}
       <div className="bg-white rounded-2xl shadow-xl max-w-5xl w-full grid grid-cols-1 lg:grid-cols-12 overflow-hidden border border-slate-200/80">
-        {/* Left Side: Institutional Blue Brand Hero (5.5 cols) */}
+        {/* Left Side: Institutional Blue Brand Hero (6 cols) */}
         <div className="lg:col-span-6 bg-[#082c78] p-8 md:p-10 text-white flex flex-col justify-between relative overflow-hidden">
           {/* Top Brand Identity */}
           <div className="relative z-10">
@@ -164,7 +323,7 @@ export const LoginPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Middle: Campus Illustration / Limau Manih Card */}
+          {/* Middle: Campus Illustration / Limau Manis Card */}
           <div className="relative z-10 my-6 bg-[#172554]/90 rounded-xl p-4 border border-blue-300/20">
             <div className="h-28 rounded-lg bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-white/10 relative overflow-hidden flex items-end p-3 shadow-inner">
               <div className="absolute inset-0 opacity-30 bg-[radial-gradient(#3b82f6_1px,transparent_1px)] [background-size:12px_12px]" />
@@ -213,11 +372,11 @@ export const LoginPage: React.FC = () => {
           {/* Bottom Footer */}
           <div className="relative z-10 flex items-center justify-between text-[11px] text-blue-200/80 pt-2 border-t border-white/10">
             <span>© 2025 Universitas Andalas</span>
-            <span className="font-mono text-[10px]">SSO Authenticator v2.8</span>
+            <span className="font-mono text-[10px]">Python API • SSO v2.8</span>
           </div>
         </div>
 
-        {/* Right Side: SSO Login Form (6.5 cols) */}
+        {/* Right Side: SSO Login Form (6 cols) */}
         <div className="lg:col-span-6 p-7 md:p-9 flex flex-col justify-between bg-white">
           <div>
             <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 mb-1">
@@ -228,110 +387,41 @@ export const LoginPage: React.FC = () => {
               Selamat Datang Kembali
             </h3>
             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-              Gunakan akun resmi single sign-on untuk mengakses konsol penjadwalan akademik.
+              Gunakan akun resmi single sign-on untuk mengakses konsol penjadwalan akademik sesuai peran Anda.
             </p>
 
-            {/* Quick Account Switcher Pills for Testing/Evaluation */}
+            {/* Quick Role Switcher Buttons Sesuai Daftar User */}
             <div className="mt-4 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-blue-600" />
-                <span>Pilih Akun Demo (RBAC Role-Based Access):</span>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-blue-600" />
+                  Pilih Akun Login Cepat:
+                </span>
+                <span className="text-[9px] text-slate-400 font-normal">Klik untuk mengisi otomatis</span>
               </div>
               <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-                <button
-                  type="button"
-                  onClick={() => setPresetAccount('alghifari@it.unand.ac.id', 'Admin Fakultas')}
-                  className={`p-1.5 rounded-lg border text-left font-bold transition-all ${
-                    username === 'alghifari@it.unand.ac.id'
-                      ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="truncate">👨‍💼 Admin</div>
-                  <div className="text-[9px] opacity-80 font-normal">Fakultas</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPresetAccount('rahmadi@it.unand.ac.id', 'Wakil Dekan I')}
-                  className={`p-1.5 rounded-lg border text-left font-bold transition-all ${
-                    username === 'rahmadi@it.unand.ac.id'
-                      ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="truncate">🎓 Wadek I</div>
-                  <div className="text-[9px] opacity-80 font-normal">Otorisasi</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPresetAccount('kaprodi.si@it.unand.ac.id', 'Kaprodi Sistem Informasi')}
-                  className={`p-1.5 rounded-lg border text-left font-bold transition-all ${
-                    username === 'kaprodi.si@it.unand.ac.id'
-                      ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="truncate">💻 Prodi SI</div>
-                  <div className="text-[9px] opacity-80 font-normal">Pengaju MK</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPresetAccount('kaprodi.if@it.unand.ac.id', 'Kaprodi Informatika')}
-                  className={`p-1.5 rounded-lg border text-left font-bold transition-all ${
-                    username === 'kaprodi.if@it.unand.ac.id'
-                      ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="truncate">🖥️ Prodi IF</div>
-                  <div className="text-[9px] opacity-80 font-normal">Pengaju MK</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPresetAccount('kaprodi.tk@it.unand.ac.id', 'Kaprodi Teknik Komputer')}
-                  className={`p-1.5 rounded-lg border text-left font-bold transition-all ${
-                    username === 'kaprodi.tk@it.unand.ac.id'
-                      ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="truncate">🔌 Prodi TK</div>
-                  <div className="text-[9px] opacity-80 font-normal">Pengaju MK</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPresetAccount('rahmad@it.unand.ac.id', 'Dosen Pengampu')}
-                  className={`p-1.5 rounded-lg border text-left font-bold transition-all ${
-                    username === 'rahmad@it.unand.ac.id'
-                      ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="truncate">📚 Dosen</div>
-                  <div className="text-[9px] opacity-80 font-normal">Ruang &amp; Jadwal</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPresetAccount('faris.22@student.unand.ac.id', 'Mahasiswa Aktif')}
-                  className={`p-1.5 rounded-lg border text-left font-bold transition-all ${
-                    username === 'faris.22@student.unand.ac.id'
-                      ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="truncate">🎒 Mahasiswa</div>
-                  <div className="text-[9px] opacity-80 font-normal">Cari Ruang &amp; KRS</div>
-                </button>
+                {OFFICIAL_ACCOUNTS.map((acc) => {
+                  const isSelected = username.toLowerCase() === acc.email.toLowerCase();
+                  return (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => setPresetAccount(acc)}
+                      className={`p-1.5 rounded-lg border text-left font-bold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#082c78] text-white border-blue-900 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="truncate">{acc.icon} {acc.role === 'wadek1' ? 'Wadek 1' : acc.role === 'departemen_si' ? 'Kadep SI' : acc.role === 'departemen_if' ? 'Kadep IF' : acc.role === 'departemen_tk' ? 'Kadep TK' : acc.role === 'dosen' ? 'Dosen' : acc.role === 'mahasiswa' ? 'Mahasiswa' : 'Admin'}</div>
+                      <div className="text-[9px] opacity-80 font-normal truncate">{acc.email.split('@')[0]}</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Error Message if any */}
+            {/* Error Message Inline (selain Popup) */}
             {errorMsg && (
               <div className="mt-3 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -339,11 +429,11 @@ export const LoginPage: React.FC = () => {
               </div>
             )}
 
-            {/* Form */}
+            {/* Form Input */}
             <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Email Institusi / NIP SSO
+                  Email Institusi / NIP / NIM SSO
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -351,7 +441,7 @@ export const LoginPage: React.FC = () => {
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="nama@it.unand.ac.id"
+                    placeholder="Wadek1@it.unand.ac.id atau NIP/NIM"
                     className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 focus:outline-hidden text-slate-800"
                   />
                 </div>
@@ -385,7 +475,7 @@ export const LoginPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="text-slate-400 hover:text-slate-600 absolute right-3 top-1/2 -translate-y-1/2 p-0.5"
+                    className="text-slate-400 hover:text-slate-600 absolute right-3 top-1/2 -translate-y-1/2 p-0.5 cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -419,7 +509,7 @@ export const LoginPage: React.FC = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Memverifikasi Kredensial SSO...</span>
+                    <span>Memverifikasi ke Backend Python...</span>
                   </>
                 ) : (
                   <>
@@ -431,10 +521,81 @@ export const LoginPage: React.FC = () => {
             </form>
           </div>
 
+          {/* Interactive QA State Tester (Sesuai Mockup) */}
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                <SlidersHorizontal className="w-3 h-3 text-slate-500" />
+                Uji Coba State Formulir (Interaktif):
+              </span>
+              <span className="text-[9px] font-mono text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.2 rounded">
+                Interactive QA
+              </span>
+            </div>
+
+            <div className="grid grid-cols-5 gap-1 text-[10px]">
+              <button
+                type="button"
+                onClick={() => triggerQAState('normal')}
+                className={`py-1 px-1 rounded text-center font-medium border transition-colors cursor-pointer ${
+                  activeQA === 'normal'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200 font-bold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                1. Normal
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerQAState('wrong')}
+                className={`py-1 px-1 rounded text-center font-medium border transition-colors cursor-pointer ${
+                  activeQA === 'wrong'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                2. Salah Sandi
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerQAState('empty')}
+                className={`py-1 px-1 rounded text-center font-medium border transition-colors cursor-pointer ${
+                  activeQA === 'empty'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 font-bold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                3. Validasi Kosong
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerQAState('loading')}
+                className={`py-1 px-1 rounded text-center font-medium border transition-colors cursor-pointer ${
+                  activeQA === 'loading'
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200 font-bold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                4. Loading
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerQAState('success')}
+                className={`py-1 px-1 rounded text-center font-medium border transition-colors cursor-pointer ${
+                  activeQA === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                5. Berhasil
+              </button>
+            </div>
+          </div>
+
           {/* Bottom Help */}
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
             <span>UPT TIK UNAND &bull; FTI Kampus Limau Manis</span>
-            <span className="text-slate-400 font-mono">SSO v2.8</span>
+            <span className="text-slate-400 font-mono">Backend Python: Port 8000</span>
           </div>
         </div>
       </div>

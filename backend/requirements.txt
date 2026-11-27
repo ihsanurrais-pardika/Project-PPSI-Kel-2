@@ -1,0 +1,11 @@
+# Dependencies untuk Backend Engine SIPRAMA FTI UNAND
+# Google OR-Tools CP-SAT, FastAPI, MySQL & Ekspor Laporan (Excel/PDF)
+
+ortools>=9.8.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+pymysql>=1.1.0
+bcrypt>=4.1.0
+openpyxl>=3.1.0
+fpdf2>=2.7.0

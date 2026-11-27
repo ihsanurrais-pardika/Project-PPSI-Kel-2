@@ -445,6 +445,1144 @@ const MASTER_ROOMS: RoomDefinition[] = [
   },
 ];
 
+// ─── Pop-up Modal Cari Kelas Pengganti (Flow 3-Step: Form -> Results -> Confirm) ──
+interface CariKelasPenggantiModalProps {
+  course: CourseScheduleCell;
+  userRole: string;
+  userProdi: 'SI' | 'IF' | 'TK';
+  allRooms: RoomDefinition[];
+  dayDateMapping: Record<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat', { dateStr: string; displayDate: string }>;
+  onClose: () => void;
+  showToast: (msg: string, type?: 'success' | 'info' | 'error' | 'warning' | any) => void;
+}
+
+const CariKelasPenggantiModal: React.FC<CariKelasPenggantiModalProps> = ({
+  course,
+  userRole,
+  userProdi,
+  allRooms,
+  dayDateMapping,
+  onClose,
+  showToast,
+}) => {
+  const [step, setStep] = useState<'form' | 'results' | 'confirm'>('form');
+
+  // Find original day of this course from allRooms
+  const originalDay = useMemo<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'>(() => {
+    for (const r of allRooms) {
+      for (const [day, sched] of Object.entries(r.schedules)) {
+        if (Object.values(sched).some((c) => c?.id === course.id || c?.code === course.code)) {
+          return day as any;
+        }
+      }
+    }
+    return 'Senin';
+  }, [course, allRooms]);
+
+  // Form states
+  const [formDay, setFormDay] = useState<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'>(originalDay);
+  const [formDate, setFormDate] = useState<string>(dayDateMapping[originalDay]?.dateStr || '2024-11-25');
+
+  // Parse time
+  const timeParts = (course.sessionTime || '07:30 - 09:10').split(' - ');
+  const [formTimeStart, setFormTimeStart] = useState(timeParts[0]?.trim() || '07:30');
+  const [formTimeEnd, setFormTimeEnd] = useState(timeParts[1]?.trim() || '09:10');
+  const [formMinCapacity, setFormMinCapacity] = useState(course.enrolled || 30);
+  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung FTI' | 'GKB'>('Semua');
+  const [formAccessibility, setFormAccessibility] = useState(false);
+
+  // Validation error (E1 flow)
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Selected room
+  const [selectedRoom, setSelectedRoom] = useState<RoomDefinition | null>(null);
+
+  const timeToMin = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const SESSION_TIMES = [
+    { key: 'sesi1', start: '07:30', end: '09:10' },
+    { key: 'sesi2', start: '09:20', end: '11:00' },
+    { key: 'sesi3', start: '11:10', end: '12:50' },
+    { key: 'sesi4', start: '13:30', end: '15:10' },
+    { key: 'sesi5', start: '15:30', end: '17:10' },
+  ];
+
+  // Available rooms calculation
+  const availableRooms = useMemo(() => {
+    if (step !== 'results') return [];
+
+    const reqStart = timeToMin(formTimeStart);
+    const reqEnd = timeToMin(formTimeEnd);
+    const conflictingSessions = SESSION_TIMES
+      .filter((s) => reqStart < timeToMin(s.end) && reqEnd > timeToMin(s.start))
+      .map((s) => s.key);
+
+    return allRooms
+      .filter((room) => {
+        // 1. Hak Akses: Prodi Sendiri & GKB Bersama
+        const isOwnProdi = room.dept === userProdi;
+        const isGKB = room.dept === 'GKB' || room.building === 'GKB';
+        if (!isOwnProdi && !isGKB) return false;
+
+        // 2. Filter Gedung
+        if (formBuilding !== 'Semua' && room.building !== formBuilding) return false;
+
+        // 3. Aksesibilitas
+        if (formAccessibility && !(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204')) {
+          return false;
+        }
+
+        // 4. Kapasitas
+        if (room.capacity < formMinCapacity) return false;
+
+        // 5. Bebas bentrok pada sesi waktu terpilih
+        const daySched = room.schedules[formDay] || {};
+        const hasConflict = conflictingSessions.some((sk) => !!(daySched as any)[sk]);
+        if (hasConflict) return false;
+
+        // 6. Lewati ruang asal jika hari sama
+        if (room.code === course.roomName && formDay === originalDay) return false;
+
+        return true;
+      })
+      .sort((a, b) => {
+        const aDiff = Math.abs(a.capacity - (course.enrolled || 40));
+        const bDiff = Math.abs(b.capacity - (course.enrolled || 40));
+        return aDiff - bDiff;
+      });
+  }, [step, formDay, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userProdi, allRooms, course, originalDay]);
+
+  const handleSearch = () => {
+    if (!formDate) {
+      setValidationError('Tanggal pelaksanaan wajib diisi.');
+      return;
+    }
+    if (!formTimeStart || !formTimeEnd) {
+      setValidationError('Jam mulai dan jam selesai wajib diisi.');
+      return;
+    }
+    const start = timeToMin(formTimeStart);
+    const end = timeToMin(formTimeEnd);
+    if (end <= start) {
+      setValidationError('Jam selesai harus lebih akhir dari jam mulai.');
+      return;
+    }
+    if (end - start < 30) {
+      setValidationError('Durasi minimal pencarian ruang adalah 30 menit.');
+      return;
+    }
+    setValidationError(null);
+    setStep('results');
+  };
+
+  const handleSelectRoom = (room: RoomDefinition) => {
+    setSelectedRoom(room);
+    setStep('confirm');
+  };
+
+  const handleConfirm = () => {
+    if (!selectedRoom) return;
+    const formattedDate = formDate
+      ? new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+      : formDay;
+    const actionLabel = userRole === 'dosen' ? 'Pengajuan kelas pengganti' : 'Konfirmasi kelas pengganti';
+    showToast(
+      `Berhasil! ${actionLabel} ${course.name} (${course.classLabel}) dialokasikan ke ruang ${selectedRoom.code} pada ${formDay}, ${formattedDate} (${formTimeStart}–${formTimeEnd}).`,
+      'success'
+    );
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="bg-[#082c78] text-white px-6 py-4 flex items-start justify-between gap-4 shrink-0">
+          <div>
+            <div className="flex items-center gap-2 text-blue-200 text-xs font-semibold mb-1">
+              <Search className="w-3.5 h-3.5" />
+              <span>Cari Ruang Kosong untuk Kelas Pengganti (Per Pertemuan)</span>
+            </div>
+            <h2 className="text-base font-black leading-snug">{course.name}</h2>
+            <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-blue-200">
+              <span className="font-mono font-bold bg-blue-900/50 px-2 py-0.5 rounded">{course.code}</span>
+              <span>•</span>
+              <span>{course.classLabel}</span>
+              <span>•</span>
+              <span>{course.enrolled} Mahasiswa</span>
+              <span>•</span>
+              <span className="bg-blue-800/60 px-2 py-0.5 rounded font-semibold">{userRole === 'dosen' ? 'Mode Dosen' : 'Mode Mahasiswa (KRS)'}</span>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Info Jadwal Asli */}
+        <div className="bg-blue-50 border-b border-blue-100 px-6 py-3 shrink-0">
+          <p className="text-[11px] font-bold text-blue-700 uppercase tracking-wider mb-2">
+            Informasi Jadwal yang Akan Digantikan
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div>
+              <div className="text-slate-500 text-[10px] font-semibold uppercase tracking-wider">Hari & Waktu Asli</div>
+              <div className="font-bold text-slate-900 mt-0.5">{originalDay}</div>
+              <div className="text-slate-600">{course.sessionTime}</div>
+            </div>
+            <div>
+              <div className="text-slate-500 text-[10px] font-semibold uppercase tracking-wider">Ruang Semula</div>
+              <div className="font-bold text-slate-900 mt-0.5">{course.roomName}</div>
+              <div className="text-slate-600">Kapasitas: {course.capacity} Mhs</div>
+            </div>
+            <div>
+              <div className="text-slate-500 text-[10px] font-semibold uppercase tracking-wider">Dosen Pengampu</div>
+              <div className="font-bold text-slate-900 mt-0.5 truncate">{course.lecturer}</div>
+              <div className="text-slate-600">{course.dept === 'SI' ? 'Sistem Informasi' : course.dept === 'IF' ? 'Informatika' : 'Teknik Komputer'}</div>
+            </div>
+            <div>
+              <div className="text-slate-500 text-[10px] font-semibold uppercase tracking-wider">Sifat Perubahan</div>
+              <div className="font-bold text-emerald-700 mt-0.5">Per Pertemuan</div>
+              <div className="text-slate-600">Kuliah Pengganti</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Step Indicator */}
+        <div className="px-6 pt-4 pb-2 shrink-0">
+          <div className="flex items-center gap-2 text-xs">
+            {(['form', 'results', 'confirm'] as const).map((s, i) => (
+              <React.Fragment key={s}>
+                <div className={`flex items-center gap-1.5 ${step === s ? 'text-blue-700 font-bold' : step > s ? 'text-emerald-600 font-semibold' : 'text-slate-400'}`}>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                    step === s ? 'bg-blue-700 text-white' :
+                    (step === 'results' && s === 'form') || (step === 'confirm' && (s === 'form' || s === 'results')) ? 'bg-emerald-500 text-white' :
+                    'bg-slate-200 text-slate-500'
+                  }`}>
+                    {(step === 'results' && s === 'form') || (step === 'confirm' && (s === 'form' || s === 'results'))
+                      ? <Check className="w-3 h-3" /> : i + 1}
+                  </div>
+                  <span className="hidden sm:inline">
+                    {s === 'form' ? 'Kriteria Pencarian' : s === 'results' ? 'Pilih Ruang' : 'Konfirmasi'}
+                  </span>
+                </div>
+                {i < 2 && <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {step === 'form' && (
+            <div className="space-y-4">
+              {validationError && (
+                <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                  <div>
+                    <div className="font-bold">Masukan Tidak Valid</div>
+                    <div className="mt-0.5">{validationError} Silakan perbaiki dan coba lagi.</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Tanggal Pelaksanaan */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Tanggal Pelaksanaan <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={formDate}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormDate(val);
+                      if (val) {
+                        const d = new Date(val).getDay();
+                        const dayNames: Array<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'> = [
+                          'Senin', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Senin'
+                        ];
+                        if (d >= 1 && d <= 5) setFormDay(dayNames[d]);
+                      }
+                      setValidationError(null);
+                    }}
+                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 font-bold"
+                  />
+                </div>
+
+                {/* Gedung */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Gedung (Opsional)</label>
+                  <select
+                    value={formBuilding}
+                    onChange={(e) => setFormBuilding(e.target.value as any)}
+                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                  >
+                    <option value="Semua">Semua Gedung</option>
+                    <option value="Gedung FTI">Gedung FTI</option>
+                    <option value="GKB">GKB (Gedung Kuliah Bersama)</option>
+                  </select>
+                </div>
+
+                {/* Kapasitas minimum */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Kapasitas Minimum (Opsional)
+                  </label>
+                  <div className="relative">
+                    <Users className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="number"
+                      min={1}
+                      max={150}
+                      value={formMinCapacity}
+                      onChange={(e) => setFormMinCapacity(Number(e.target.value))}
+                      className="w-full pl-9 pr-3 text-xs border border-slate-200 rounded-xl py-2.5 text-slate-800 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                      placeholder="Min. mahasiswa"
+                    />
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    Peserta kelas: {course.enrolled} Mahasiswa
+                  </div>
+                </div>
+
+                {/* Jam Mulai */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Jam Mulai <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={formTimeStart}
+                    onChange={(e) => { setFormTimeStart(e.target.value); setValidationError(null); }}
+                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                  />
+                </div>
+
+                {/* Jam Selesai */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Jam Selesai <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={formTimeEnd}
+                    onChange={(e) => { setFormTimeEnd(e.target.value); setValidationError(null); }}
+                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                  />
+                </div>
+
+                {/* Aksesibilitas */}
+                <div className="sm:col-span-2 pt-1">
+                  <label className="flex items-center gap-2.5 cursor-pointer group">
+                    <div
+                      onClick={() => setFormAccessibility(!formAccessibility)}
+                      className={`w-9 h-5 rounded-full transition-colors relative ${formAccessibility ? 'bg-blue-700' : 'bg-slate-200'}`}
+                    >
+                      <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.75 transition-all shadow-xs ${formAccessibility ? 'left-4.5' : 'left-0.75'}`} />
+                    </div>
+                    <span className="text-xs text-slate-700 group-hover:text-slate-900">
+                      Ramah Disabilitas (Lantai 1 / Akses Kursi Roda)
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Info scope */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-start gap-2 text-xs text-blue-700">
+                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  Sesuai hak akses Anda, pencarian difilter otomatis hanya untuk ruangan <strong>Prodi {userProdi}</strong> dan <strong>GKB Bersama</strong>.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {step === 'results' && (
+            <div className="space-y-3">
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-bold text-slate-600">Filter aktif:</span>
+                {formDate && (
+                  <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold border border-blue-200">
+                    {new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+                <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold border border-blue-200">{formTimeStart} – {formTimeEnd}</span>
+                <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold border border-blue-200">Min. {formMinCapacity} kursi</span>
+                {formBuilding !== 'Semua' && (
+                  <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold border border-blue-200">{formBuilding}</span>
+                )}
+                {formAccessibility && (
+                  <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">Ramah Disabilitas</span>
+                )}
+                <button
+                  onClick={() => setStep('form')}
+                  className="ml-auto flex items-center gap-1 text-slate-500 hover:text-blue-700 font-semibold"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Ubah Kriteria</span>
+                </button>
+              </div>
+
+              {availableRooms.length === 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center space-y-3">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-amber-100 flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-amber-500" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 text-sm">Tidak Ada Ruang Kosong</div>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      Tidak ditemukan ruang yang tersedia pada <strong>{formDay} ({formDate}), {formTimeStart}–{formTimeEnd}</strong> dengan kapasitas minimal {formMinCapacity} kursi.
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-xs">
+                    <span className="text-slate-500">Saran:</span>
+                    <button
+                      onClick={() => { setFormDay('Selasa'); setFormDate(dayDateMapping['Selasa']?.dateStr || '2024-11-26'); setStep('form'); }}
+                      className="text-blue-700 hover:underline font-semibold"
+                    >Coba hari Selasa</button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      onClick={() => { setFormMinCapacity(Math.max(1, formMinCapacity - 10)); setStep('form'); }}
+                      className="text-blue-700 hover:underline font-semibold"
+                    >Kurangi kapasitas minimum</button>
+                    <span className="text-slate-300">|</span>
+                    <button onClick={() => setStep('form')} className="text-blue-700 hover:underline font-semibold">
+                      Ubah jam
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Ditemukan <strong className="text-slate-800">{availableRooms.length} ruang kosong</strong> yang sesuai</span>
+                    <span className="text-[10px]">Diurutkan berdasarkan kesesuaian kapasitas</span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {availableRooms.map((room) => (
+                      <div
+                        key={room.code}
+                        className="border border-slate-200 rounded-xl p-3.5 hover:border-blue-400 hover:bg-blue-50/30 transition-all group cursor-pointer"
+                        onClick={() => handleSelectRoom(room)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-sm text-slate-900 font-mono">{room.code}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                room.dept === 'GKB' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-sky-100 text-sky-800 border-sky-200'
+                              }`}>
+                                {room.dept === 'GKB' ? 'GKB Bersama' : `Prodi ${room.dept}`}
+                              </span>
+                              {(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204') && (
+                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
+                                  ♿ Aksesibel
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                                {room.type}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-600 mt-0.5">{room.name}</div>
+                            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <Building className="w-3 h-3 text-slate-400" />
+                                <span>{room.building}</span>
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-slate-400" />
+                                <span>Lantai {room.floor}</span>
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3 h-3 text-slate-400" />
+                                <span className={`font-semibold ${room.capacity >= course.enrolled ? 'text-emerald-700' : 'text-amber-600'}`}>
+                                  {room.capacity} Kursi
+                                </span>
+                                {room.capacity >= course.enrolled && (
+                                  <Check className="w-3 h-3 text-emerald-500" />
+                                )}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {room.facilities.slice(0, 3).map((f) => (
+                                <span key={f} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">{f}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <button className="shrink-0 mt-1 px-3 py-1.5 text-xs font-bold text-white bg-[#082c78] group-hover:bg-blue-700 rounded-lg transition-colors whitespace-nowrap">
+                            Pilih Ruang →
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {step === 'confirm' && selectedRoom && (
+            <div className="space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center space-y-1">
+                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+                <div className="font-bold text-slate-900">Konfirmasi Pemilihan Ruang Pengganti</div>
+                <p className="text-xs text-slate-500">
+                  Periksa rincian jadwal pengganti di bawah ini sebelum mengirimkan konfirmasi.
+                </p>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                <div className="bg-slate-50 px-4 py-2.5 font-bold text-slate-700 text-[11px] uppercase tracking-wider">
+                  Detail Pengajuan Ruang Pengganti
+                </div>
+                <div className="divide-y divide-slate-100">
+                  <div className="grid grid-cols-2 gap-x-4 px-4 py-3">
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Mata Kuliah</div>
+                      <div className="font-bold text-slate-900 mt-0.5">{course.name}</div>
+                      <div className="text-slate-500 font-mono">{course.code} • {course.classLabel}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Jumlah Peserta</div>
+                      <div className="font-bold text-slate-900 mt-0.5">{course.enrolled} Mahasiswa</div>
+                      <div className={`font-semibold ${selectedRoom.capacity >= course.enrolled ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {selectedRoom.capacity >= course.enrolled ? '✓ Kapasitas ruang mencukupi' : '⚠ Kapasitas ruang lebih kecil'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 px-4 py-3">
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Ruang Semula</div>
+                      <div className="font-bold text-slate-500 mt-0.5 line-through">{course.roomName}</div>
+                      <div className="text-slate-400">Jadwal resmi semester</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Ruang Pengganti</div>
+                      <div className="font-bold text-emerald-700 mt-0.5">{selectedRoom.code}</div>
+                      <div className="text-slate-600">Lt. {selectedRoom.floor} • {selectedRoom.building}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 px-4 py-3">
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Waktu Semula</div>
+                      <div className="font-bold text-slate-500 mt-0.5">{originalDay}, {course.sessionTime}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Waktu Pelaksanaan Baru</div>
+                      <div className="font-bold text-blue-700 mt-0.5">
+                        {formDate && new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}, {formTimeStart} – {formTimeEnd}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="px-4 py-3">
+                    <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider mb-1.5">Fasilitas Ruang Pengganti</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedRoom.facilities.map((f) => (
+                        <span key={f} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-100">{f}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setStep('results')}
+                className="text-xs text-slate-500 hover:text-blue-700 hover:underline flex items-center gap-1"
+              >
+                ← Kembali pilih ruang lain
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-3 shrink-0 bg-slate-50">
+          <button onClick={onClose} className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-4 py-2 rounded-xl hover:bg-slate-100 transition-colors">
+            Batal
+          </button>
+          <div className="flex items-center gap-2">
+            {step === 'form' && (
+              <button
+                onClick={handleSearch}
+                className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-[#082c78] hover:bg-blue-800 rounded-xl transition-colors shadow-xs"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>Cari Ruang Kosong</span>
+              </button>
+            )}
+            {step === 'results' && availableRooms.length === 0 && (
+              <button
+                onClick={() => setStep('form')}
+                className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Ubah Kriteria Pencarian</span>
+              </button>
+            )}
+            {step === 'confirm' && (
+              <button
+                onClick={handleConfirm}
+                className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-xs"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{userRole === 'dosen' ? 'Ajukan Ruang Pengganti' : 'Konfirmasi Ruang Pengganti'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Pop-up Modal Cari Ruang Kosong Umum (Flow 3-Step: Form -> Results -> Confirm) ──
+interface CariRuangKosongModalProps {
+  userRole: string;
+  userProdi: 'SI' | 'IF' | 'TK';
+  allRooms: RoomDefinition[];
+  dayDateMapping: Record<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat', { dateStr: string; displayDate: string }>;
+  defaultDate?: string;
+  onClose: () => void;
+  showToast: (msg: string, type?: 'success' | 'info' | 'error' | 'warning' | any) => void;
+  onNavigateToRoom: (roomCode: string) => void;
+}
+
+const CariRuangKosongModal: React.FC<CariRuangKosongModalProps> = ({
+  userRole,
+  userProdi,
+  allRooms,
+  dayDateMapping,
+  defaultDate,
+  onClose,
+  showToast,
+  onNavigateToRoom,
+}) => {
+  const [step, setStep] = useState<'form' | 'results' | 'confirm'>('form');
+
+  // Form states - ONLY uses Tanggal Pelaksanaan
+  const [formDate, setFormDate] = useState<string>(defaultDate || '2024-11-25');
+  const [formTimeStart, setFormTimeStart] = useState('07:30');
+  const [formTimeEnd, setFormTimeEnd] = useState('09:10');
+  const [formMinCapacity, setFormMinCapacity] = useState(30);
+  const [formBuilding, setFormBuilding] = useState<'Semua' | 'Gedung FTI' | 'GKB'>('Semua');
+  const [formAccessibility, setFormAccessibility] = useState(false);
+  const [usageActivity, setUsageActivity] = useState('Belajar Mandiri & Diskusi Akademik');
+
+  // Validation error (E1 flow)
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Selected room
+  const [selectedRoom, setSelectedRoom] = useState<RoomDefinition | null>(null);
+
+  const timeToMin = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const SESSION_TIMES = [
+    { key: 'sesi1', start: '07:30', end: '09:10' },
+    { key: 'sesi2', start: '09:20', end: '11:00' },
+    { key: 'sesi3', start: '11:10', end: '12:50' },
+    { key: 'sesi4', start: '13:30', end: '15:10' },
+    { key: 'sesi5', start: '15:30', end: '17:10' },
+  ];
+
+  const getDayFromDate = (dateStr: string): 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' => {
+    if (!dateStr) return 'Senin';
+    const d = new Date(dateStr).getDay();
+    const map: Record<number, 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'> = {
+      1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: 'Jumat',
+    };
+    return map[d] || 'Senin';
+  };
+
+  // Available rooms calculation
+  const availableRooms = useMemo(() => {
+    if (step !== 'results') return [];
+
+    const computedDay = getDayFromDate(formDate);
+    const reqStart = timeToMin(formTimeStart);
+    const reqEnd = timeToMin(formTimeEnd);
+    const conflictingSessions = SESSION_TIMES
+      .filter((s) => reqStart < timeToMin(s.end) && reqEnd > timeToMin(s.start))
+      .map((s) => s.key);
+
+    return allRooms
+      .filter((room) => {
+        // 1. Hak Akses: Prodi Sendiri & GKB Bersama
+        const isOwnProdi = room.dept === userProdi;
+        const isGKB = room.dept === 'GKB' || room.building === 'GKB';
+        if (!isOwnProdi && !isGKB) return false;
+
+        // 2. Filter Gedung
+        if (formBuilding !== 'Semua' && room.building !== formBuilding) return false;
+
+        // 3. Aksesibilitas
+        if (formAccessibility && !(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204')) {
+          return false;
+        }
+
+        // 4. Kapasitas
+        if (room.capacity < formMinCapacity) return false;
+
+        // 5. Bebas bentrok pada sesi waktu terpilih
+        const daySched = room.schedules[computedDay] || {};
+        const hasConflict = conflictingSessions.some((sk) => !!(daySched as any)[sk]);
+        if (hasConflict) return false;
+
+        return true;
+      })
+      .sort((a, b) => a.capacity - b.capacity);
+  }, [step, formDate, formTimeStart, formTimeEnd, formMinCapacity, formBuilding, formAccessibility, userProdi, allRooms]);
+
+  const handleSearch = () => {
+    if (!formDate) {
+      setValidationError('Tanggal pelaksanaan wajib diisi.');
+      return;
+    }
+    if (!formTimeStart || !formTimeEnd) {
+      setValidationError('Jam mulai dan jam selesai wajib diisi.');
+      return;
+    }
+    const start = timeToMin(formTimeStart);
+    const end = timeToMin(formTimeEnd);
+    if (end <= start) {
+      setValidationError('Jam selesai harus lebih akhir dari jam mulai.');
+      return;
+    }
+    if (end - start < 30) {
+      setValidationError('Durasi minimal pencarian ruang adalah 30 menit.');
+      return;
+    }
+    setValidationError(null);
+    setStep('results');
+  };
+
+  const handleSelectRoom = (room: RoomDefinition) => {
+    setSelectedRoom(room);
+    setStep('confirm');
+  };
+
+  const handleConfirm = () => {
+    if (!selectedRoom) return;
+    const formattedDate = formDate
+      ? new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+      : '';
+    showToast(
+      `Berhasil! Ruang ${selectedRoom.code} (${selectedRoom.name}) berhasil dipilih untuk kegiatan "${usageActivity}" pada tanggal ${formattedDate} (${formTimeStart}–${formTimeEnd}).`,
+      'success'
+    );
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="bg-emerald-700 text-white px-6 py-4 flex items-start justify-between gap-4 shrink-0">
+          <div>
+            <div className="flex items-center gap-2 text-emerald-100 text-xs font-semibold mb-1">
+              <Search className="w-3.5 h-3.5" />
+              <span>Cari Ruang Kosong (Monitoring &amp; Peminjaman Ruang)</span>
+            </div>
+            <h2 className="text-base font-black leading-snug">Pencarian Ruang Kosong Luang</h2>
+            <p className="text-xs text-emerald-100 mt-0.5">
+              Identifikasi ruang yang tidak terpakai pada slot waktu untuk kebutuhan kegiatan akademik &amp; mandiri
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Step Indicator */}
+        <div className="px-6 pt-4 pb-2 shrink-0 border-b border-slate-100">
+          <div className="flex items-center gap-2 text-xs">
+            {(['form', 'results', 'confirm'] as const).map((s, i) => (
+              <React.Fragment key={s}>
+                <div className={`flex items-center gap-1.5 ${step === s ? 'text-emerald-700 font-bold' : step > s ? 'text-emerald-600 font-semibold' : 'text-slate-400'}`}>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                    step === s ? 'bg-emerald-700 text-white' :
+                    (step === 'results' && s === 'form') || (step === 'confirm' && (s === 'form' || s === 'results')) ? 'bg-emerald-500 text-white' :
+                    'bg-slate-200 text-slate-500'
+                  }`}>
+                    {(step === 'results' && s === 'form') || (step === 'confirm' && (s === 'form' || s === 'results'))
+                      ? <Check className="w-3 h-3" /> : i + 1}
+                  </div>
+                  <span className="hidden sm:inline">
+                    {s === 'form' ? 'Kriteria Pencarian' : s === 'results' ? 'Pilih Ruang' : 'Konfirmasi'}
+                  </span>
+                </div>
+                {i < 2 && <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {step === 'form' && (
+            <div className="space-y-4">
+              {validationError && (
+                <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                  <div>
+                    <div className="font-bold">Masukan Tidak Valid</div>
+                    <div className="mt-0.5">{validationError} Silakan perbaiki dan coba lagi.</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Tanggal Pelaksanaan */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Tanggal Pelaksanaan <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={formDate}
+                    onChange={(e) => {
+                      setFormDate(e.target.value);
+                      setValidationError(null);
+                    }}
+                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200 font-bold"
+                  />
+                </div>
+
+                {/* Gedung */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Gedung (Opsional)</label>
+                  <select
+                    value={formBuilding}
+                    onChange={(e) => setFormBuilding(e.target.value as any)}
+                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200"
+                  >
+                    <option value="Semua">Semua Gedung</option>
+                    <option value="Gedung FTI">Gedung FTI</option>
+                    <option value="GKB">GKB (Gedung Kuliah Bersama)</option>
+                  </select>
+                </div>
+
+                {/* Jam Mulai */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Jam Mulai <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={formTimeStart}
+                    onChange={(e) => { setFormTimeStart(e.target.value); setValidationError(null); }}
+                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200"
+                  />
+                </div>
+
+                {/* Jam Selesai */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Jam Selesai <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={formTimeEnd}
+                    onChange={(e) => { setFormTimeEnd(e.target.value); setValidationError(null); }}
+                    className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 bg-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200"
+                  />
+                </div>
+
+                {/* Kapasitas minimum */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Kapasitas Minimum Kursi
+                  </label>
+                  <div className="relative">
+                    <Users className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="number"
+                      min={1}
+                      max={150}
+                      value={formMinCapacity}
+                      onChange={(e) => setFormMinCapacity(Number(e.target.value))}
+                      className="w-full pl-9 pr-3 text-xs border border-slate-200 rounded-xl py-2.5 text-slate-800 bg-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200"
+                      placeholder="Min. kapasitas peserta"
+                    />
+                  </div>
+                </div>
+
+                {/* Aksesibilitas */}
+                <div className="sm:col-span-2 pt-1">
+                  <label className="flex items-center gap-2.5 cursor-pointer group">
+                    <div
+                      onClick={() => setFormAccessibility(!formAccessibility)}
+                      className={`w-9 h-5 rounded-full transition-colors relative ${formAccessibility ? 'bg-emerald-600' : 'bg-slate-200'}`}
+                    >
+                      <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.75 transition-all shadow-xs ${formAccessibility ? 'left-4.5' : 'left-0.75'}`} />
+                    </div>
+                    <span className="text-xs text-slate-700 group-hover:text-slate-900">
+                      Ramah Disabilitas (Lantai 1 / Akses Kursi Roda)
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Info scope */}
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-start gap-2 text-xs text-emerald-800">
+                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
+                <span>
+                  Sesuai ketentuan, Anda hanya dapat melihat dan memilih ruang <strong>Prodi {userProdi}</strong> dan <strong>Gedung Kuliah Bersama (GKB)</strong>.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {step === 'results' && (
+            <div className="space-y-3">
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-bold text-slate-600">Filter aktif:</span>
+                {formDate && (
+                  <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">
+                    {new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+                <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">{formTimeStart} – {formTimeEnd}</span>
+                <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">Min. {formMinCapacity} kursi</span>
+                {formBuilding !== 'Semua' && (
+                  <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">{formBuilding}</span>
+                )}
+                {formAccessibility && (
+                  <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">Ramah Disabilitas</span>
+                )}
+                <button
+                  onClick={() => setStep('form')}
+                  className="ml-auto flex items-center gap-1 text-slate-500 hover:text-emerald-700 font-semibold"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Ubah Kriteria</span>
+                </button>
+              </div>
+
+              {availableRooms.length === 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center space-y-3">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-amber-100 flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-amber-500" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 text-sm">Tidak Ada Ruang Kosong</div>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      Tidak ditemukan ruang yang luang pada tanggal <strong>{new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}, {formTimeStart}–{formTimeEnd}</strong> dengan kapasitas minimal {formMinCapacity} kursi.
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-xs">
+                    <span className="text-slate-500">Saran:</span>
+                    <button
+                      onClick={() => { setFormMinCapacity(Math.max(1, formMinCapacity - 10)); setStep('form'); }}
+                      className="text-emerald-700 hover:underline font-semibold"
+                    >Kurangi kapasitas minimum</button>
+                    <span className="text-slate-300">|</span>
+                    <button onClick={() => setStep('form')} className="text-emerald-700 hover:underline font-semibold">
+                      Ubah jam atau tanggal
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Ditemukan <strong className="text-slate-800">{availableRooms.length} ruang kosong</strong> yang luang</span>
+                    <span className="text-[10px]">Diurutkan berdasarkan kapasitas</span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {availableRooms.map((room) => (
+                      <div
+                        key={room.code}
+                        className="border border-slate-200 rounded-xl p-3.5 hover:border-emerald-400 hover:bg-emerald-50/20 transition-all group"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-sm text-slate-900 font-mono">{room.code}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                room.dept === 'GKB' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-sky-100 text-sky-800 border-sky-200'
+                              }`}>
+                                {room.dept === 'GKB' ? 'GKB Bersama' : `Prodi ${room.dept}`}
+                              </span>
+                              {(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204') && (
+                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
+                                  ♿ Aksesibel
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                                {room.type}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-600 mt-0.5">{room.name}</div>
+                            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <Building className="w-3 h-3 text-slate-400" />
+                                <span>{room.building}</span>
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-slate-400" />
+                                <span>Lantai {room.floor}</span>
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3 h-3 text-slate-400" />
+                                <span className="font-semibold text-emerald-700">
+                                  {room.capacity} Kursi
+                                </span>
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {room.facilities.slice(0, 3).map((f) => (
+                                <span key={f} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">{f}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1.5 shrink-0">
+                            <button
+                              onClick={() => handleSelectRoom(room)}
+                              className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors whitespace-nowrap shadow-xs"
+                            >
+                              Pilih Ruang →
+                            </button>
+                            <button
+                              onClick={() => onNavigateToRoom(room.code)}
+                              className="px-3 py-1 text-xs font-semibold text-slate-600 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1"
+                            >
+                              <Compass className="w-3 h-3" />
+                              <span>Rute</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {step === 'confirm' && selectedRoom && (
+            <div className="space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center space-y-1">
+                <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
+                <div className="font-bold text-slate-900">Konfirmasi Pemilihan Ruang Kosong</div>
+                <p className="text-xs text-slate-500">
+                  Rincian ruang terpilih untuk penggunaan pada slot waktu yang ditentukan
+                </p>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                <div className="bg-slate-50 px-4 py-2.5 font-bold text-slate-700 text-[11px] uppercase tracking-wider">
+                  Rincian Ruangan
+                </div>
+                <div className="divide-y divide-slate-100">
+                  <div className="grid grid-cols-2 gap-x-4 px-4 py-3">
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Ruang Terpilih</div>
+                      <div className="font-bold text-emerald-800 text-sm mt-0.5">{selectedRoom.code}</div>
+                      <div className="text-slate-600">{selectedRoom.name}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Kapasitas Kursi</div>
+                      <div className="font-bold text-slate-900 mt-0.5">{selectedRoom.capacity} Kursi</div>
+                      <div className="text-emerald-700 font-semibold">Tersedia / Bebas Bentrok</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 px-4 py-3">
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Lokasi Gedung</div>
+                      <div className="font-semibold text-slate-800 mt-0.5">{selectedRoom.building} • Lantai {selectedRoom.floor}</div>
+                      <div className="text-slate-500">{selectedRoom.dept === 'GKB' ? 'Gedung Kuliah Bersama' : `Departemen ${selectedRoom.dept}`}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Waktu Pelaksanaan</div>
+                      <div className="font-bold text-slate-900 mt-0.5">
+                        {new Date(formDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </div>
+                      <div className="text-emerald-700 font-semibold">{formTimeStart} – {formTimeEnd}</div>
+                    </div>
+                  </div>
+                  <div className="px-4 py-3">
+                    <label className="block text-slate-600 text-[11px] font-bold mb-1">Keperluan Penggunaan Ruang</label>
+                    <input
+                      type="text"
+                      value={usageActivity}
+                      onChange={(e) => setUsageActivity(e.target.value)}
+                      placeholder="Contoh: Belajar mandiri, Rapat kelompok, Kegiatan praktikum susulan..."
+                      className="w-full text-xs border border-slate-200 rounded-lg p-2 text-slate-800 bg-white focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+                  <div className="px-4 py-3">
+                    <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider mb-1.5">Fasilitas Ruang</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedRoom.facilities.map((f) => (
+                        <span key={f} className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">{f}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setStep('results')}
+                className="text-xs text-slate-500 hover:text-emerald-700 hover:underline flex items-center gap-1"
+              >
+                ← Kembali pilih ruang lain
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-3 shrink-0 bg-slate-50">
+          <button onClick={onClose} className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-4 py-2 rounded-xl hover:bg-slate-100 transition-colors">
+            Batal
+          </button>
+          <div className="flex items-center gap-2">
+            {step === 'form' && (
+              <button
+                onClick={handleSearch}
+                className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-xs"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>Cari Ruang Kosong</span>
+              </button>
+            )}
+            {step === 'results' && availableRooms.length === 0 && (
+              <button
+                onClick={() => setStep('form')}
+                className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Ubah Kriteria Pencarian</span>
+              </button>
+            )}
+            {step === 'confirm' && (
+              <button
+                onClick={handleConfirm}
+                className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-xs"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Konfirmasi Pemilihan Ruang</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const HeatmapRuangPage: React.FC = () => {
   const {
     currentUser,
@@ -501,32 +1639,15 @@ export const HeatmapRuangPage: React.FC = () => {
     else if (dayIndex === 5) setSelectedDay('Jumat');
   };
 
-  // Slide-over drawer state
-  // drawerMode: 'cari_kosong' = umum (tidak terikat MK), 'cari_pengganti' = konteks MK tertentu
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<'cari_kosong' | 'cari_pengganti'>('cari_kosong');
-  // The course context used when drawerMode === 'cari_pengganti'
-  const [drawerCourseContext, setDrawerCourseContext] = useState<CourseScheduleCell | null>(null);
-
   // Modal states
   const [selectedCourseDetail, setSelectedCourseDetail] = useState<CourseScheduleCell | null>(null);
+  const [replacementModalCourse, setReplacementModalCourse] = useState<CourseScheduleCell | null>(null);
+  const [isGeneralSearchModalOpen, setIsGeneralSearchModalOpen] = useState(false);
   const [selectedSlotForBooking, setSelectedSlotForBooking] = useState<{
     room: RoomDefinition;
     sessionKey: 'sesi1' | 'sesi2' | 'sesi3' | 'sesi4' | 'sesi5';
     sessionLabel: string;
   } | null>(null);
-
-  // Drawer search criteria
-  const [instantDay, setInstantDay] = useState('Senin');
-  const [instantDate, setInstantDate] = useState('2024-11-25');
-  const [instantTimeStart, setInstantTimeStart] = useState('07:30');
-  const [instantTimeEnd, setInstantTimeEnd] = useState('09:10');
-  const [instantSession, setInstantSession] = useState('07:30 - 09:10 (Sesi 1)');
-  const [instantMinCap, setInstantMinCap] = useState(40);
-  const [instantBuilding, setInstantBuilding] = useState<'Semua' | 'Gedung FTI' | 'GKB'>('Semua');
-  const [instantAccessibility, setInstantAccessibility] = useState(false);
-  const [drawerValidationError, setDrawerValidationError] = useState<string | null>(null);
-  const [drawerSearchDone, setDrawerSearchDone] = useState(false);
 
   // Dosen replacement form state
   const [replacementCourse, setReplacementCourse] = useState('SI-1204 - Basis Data Terdistribusi');
@@ -600,57 +1721,6 @@ export const HeatmapRuangPage: React.FC = () => {
     setSelectedSlotForBooking({ room, sessionKey, sessionLabel });
   };
 
-  const handleAllocateInstant = (roomCode: string) => {
-    const label = drawerMode === 'cari_pengganti'
-      ? `Ruang ${roomCode} berhasil dialokasikan sebagai ruang pengganti untuk ${drawerCourseContext?.name || 'kelas'} pada ${instantDay} (${instantDate}), ${instantTimeStart}–${instantTimeEnd}!`
-      : `Ruang ${roomCode} berhasil dicatat sebagai ruang kosong untuk digunakan pada ${instantDay} (${instantDate}), ${instantTimeStart}–${instantTimeEnd}!`;
-    showToast(label, 'success');
-    setIsDrawerOpen(false);
-    setDrawerSearchDone(false);
-  };
-
-  // Open drawer in "Cari Ruang Kosong" mode (general – no course context)
-  const handleOpenDrawerGeneral = () => {
-    setDrawerMode('cari_kosong');
-    setDrawerCourseContext(null);
-    setDrawerValidationError(null);
-    setDrawerSearchDone(false);
-    setInstantDay(selectedDay);
-    setInstantDate(selectedDate || dayDateMapping[selectedDay]?.dateStr || '2024-11-25');
-    setInstantTimeStart('07:30');
-    setInstantTimeEnd('09:10');
-    setInstantMinCap(30);
-    setIsDrawerOpen(true);
-  };
-
-  // Open drawer in "Cari Kelas Pengganti" mode (tied to a specific course)
-  const handleOpenDrawerReplacement = (course: CourseScheduleCell) => {
-    setDrawerMode('cari_pengganti');
-    setDrawerCourseContext(course);
-    setDrawerValidationError(null);
-    setDrawerSearchDone(false);
-    // Pre-fill with the course's original day/session
-    const dayMap: Record<string, 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat'> = {
-      Senin: 'Senin', Selasa: 'Selasa', Rabu: 'Rabu', Kamis: 'Kamis', Jumat: 'Jumat',
-    };
-    // Find which day this course is on (from MASTER_ROOMS schedules)
-    let foundDay: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' = selectedDay;
-    for (const room of MASTER_ROOMS) {
-      for (const [day, sched] of Object.entries(room.schedules)) {
-        if (Object.values(sched).some((c) => c?.id === course.id)) {
-          foundDay = dayMap[day] || (day as any);
-          break;
-        }
-      }
-    }
-    setInstantDay(foundDay);
-    setInstantDate(dayDateMapping[foundDay]?.dateStr || '2024-11-25');
-    const timeParts = course.sessionTime.split(' - ');
-    setInstantTimeStart(timeParts[0] || '07:30');
-    setInstantTimeEnd(timeParts[1] || '09:10');
-    setInstantMinCap(course.enrolled || 30);
-    setIsDrawerOpen(true);
-  };
 
   // Submit Dosen Replacement
   const handleConfirmDosenReplacement = (e: React.FormEvent) => {
@@ -813,7 +1883,7 @@ export const HeatmapRuangPage: React.FC = () => {
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Cari Ruang Kosong – general */}
           <button
-            onClick={handleOpenDrawerGeneral}
+            onClick={() => setIsGeneralSearchModalOpen(true)}
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm active:scale-98 transition-all"
           >
             <Search className="w-3.5 h-3.5" />
@@ -1171,306 +2241,6 @@ export const HeatmapRuangPage: React.FC = () => {
           <span className="font-medium text-slate-600">{visibleRooms.length} Ruangan Ditampilkan ({getProdiFullName(activeProdiView)} & GKB)</span>
         </div>
       </div>
-
-      {/* ── Slide-over Drawer: Cari Ruang Kosong / Cari Kelas Pengganti ─── */}
-      {isDrawerOpen && (() => {
-        // Compute available rooms for drawer
-        const drawerTimeStart = instantTimeStart;
-        const drawerTimeEnd = instantTimeEnd;
-
-        const timeToMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-        const SESSION_INDICES: Record<string, number[]> = {
-          'sesi1': [1], 'sesi2': [2], 'sesi3': [3], 'sesi4': [4], 'sesi5': [5],
-        };
-        const SESSION_TIMES = [
-          { key: 'sesi1', start: '07:30', end: '09:10' },
-          { key: 'sesi2', start: '09:20', end: '11:00' },
-          { key: 'sesi3', start: '11:10', end: '12:50' },
-          { key: 'sesi4', start: '13:30', end: '15:10' },
-          { key: 'sesi5', start: '15:30', end: '17:10' },
-        ];
-
-        const reqStart = timeToMin(drawerTimeStart);
-        const reqEnd = timeToMin(drawerTimeEnd);
-        const conflictingSessions = SESSION_TIMES
-          .filter(s => reqStart < timeToMin(s.end) && reqEnd > timeToMin(s.start))
-          .map(s => s.key);
-
-        const drawerAvailableRooms = drawerSearchDone ? visibleRooms.filter((room) => {
-          if (instantBuilding !== 'Semua' && room.building !== instantBuilding) return false;
-          if (instantAccessibility && !(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204')) return false;
-          if (room.capacity < instantMinCap) return false;
-          const daySched = room.schedules[instantDay] || {};
-          const hasConflict = conflictingSessions.some(sk => !!(daySched as any)[sk]);
-          if (hasConflict) return false;
-          // For replacement mode: skip the original room
-          if (drawerMode === 'cari_pengganti' && drawerCourseContext && room.code === drawerCourseContext.roomName) return false;
-          return true;
-        }) : [];
-
-        const handleDrawerSearch = () => {
-          const start = timeToMin(drawerTimeStart);
-          const end = timeToMin(drawerTimeEnd);
-          if (!instantDay) { setDrawerValidationError('Hari perkuliahan wajib dipilih.'); return; }
-          if (!drawerTimeStart || !drawerTimeEnd) { setDrawerValidationError('Jam mulai dan jam selesai wajib diisi.'); return; }
-          if (end <= start) { setDrawerValidationError('Jam selesai harus lebih akhir dari jam mulai.'); return; }
-          if (end - start < 30) { setDrawerValidationError('Durasi minimal pencarian ruang adalah 30 menit.'); return; }
-          setDrawerValidationError(null);
-          setDrawerSearchDone(true);
-        };
-
-        return (
-          <div className="fixed inset-0 z-50 overflow-hidden">
-            <div onClick={() => { setIsDrawerOpen(false); setDrawerSearchDone(false); }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200" />
-            <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-              <div className="w-screen max-w-lg bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
-
-                {/* Drawer Header */}
-                <div className={`p-5 border-b border-slate-100 flex items-center justify-between ${drawerMode === 'cari_pengganti' ? 'bg-blue-50' : 'bg-emerald-50'}`}>
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${drawerMode === 'cari_pengganti' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                      <Search className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-slate-900 leading-tight">
-                        {drawerMode === 'cari_pengganti' ? 'Cari Kelas Pengganti' : 'Cari Ruang Kosong'}
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {drawerMode === 'cari_pengganti'
-                          ? `Ruang alternatif untuk: ${drawerCourseContext?.name} (${drawerCourseContext?.classLabel})`
-                          : `Pencarian ruang kosong umum — Prodi ${activeProdiView === 'ALL' ? 'Semua' : activeProdiView} & GKB`}
-                      </p>
-                    </div>
-                  </div>
-                  <button onClick={() => { setIsDrawerOpen(false); setDrawerSearchDone(false); }} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Context banner for replacement mode */}
-                {drawerMode === 'cari_pengganti' && drawerCourseContext && (
-                  <div className="px-5 py-3 bg-blue-50 border-b border-blue-100">
-                    <p className="text-[11px] font-bold text-blue-700 uppercase tracking-wider mb-1.5">Kelas yang Akan Digantikan</p>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <div className="text-slate-400 text-[10px] font-semibold">Kode MK</div>
-                        <div className="font-mono font-black text-blue-800">{drawerCourseContext.code}</div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400 text-[10px] font-semibold">Kelas</div>
-                        <div className="font-bold text-slate-800">{drawerCourseContext.classLabel}</div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400 text-[10px] font-semibold">Ruang Semula</div>
-                        <div className="font-bold text-slate-500 line-through">{drawerCourseContext.roomName}</div>
-                      </div>
-                      <div className="col-span-3">
-                        <div className="text-slate-400 text-[10px] font-semibold">Waktu Semula</div>
-                        <div className="font-semibold text-slate-700">{drawerCourseContext.sessionTime} • {drawerCourseContext.enrolled}/{drawerCourseContext.capacity} Mhs</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto p-5 space-y-4">
-
-                  {/* Validation Error (E1) */}
-                  {drawerValidationError && (
-                    <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
-                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
-                      <div>
-                        <div className="font-bold">Masukan Tidak Valid</div>
-                        <div className="mt-0.5">{drawerValidationError}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Filter Form */}
-                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
-                    <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Filter className="w-3.5 h-3.5" />
-                      <span>Kriteria Pencarian {drawerSearchDone && <span className="text-emerald-600 ml-1 normal-case font-semibold">(Klik Cari ulang jika diubah)</span>}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hari <span className="text-red-500">*</span></label>
-                        <select
-                          value={instantDay}
-                          onChange={e => {
-                            const newDay = e.target.value as any;
-                            setInstantDay(newDay);
-                            setInstantDate(dayDateMapping[newDay]?.dateStr || '2024-11-25');
-                            setDrawerSearchDone(false);
-                            setDrawerValidationError(null);
-                          }}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500"
-                        >
-                          {['Senin','Selasa','Rabu','Kamis','Jumat'].map(d => (
-                            <option key={d} value={d}>
-                              {d} ({dayDateMapping[d as any]?.displayDate})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                          Tanggal Pelaksanaan <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          value={instantDate}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setInstantDate(val);
-                            if (val) {
-                              const d = new Date(val).getDay();
-                              if (d === 1) setInstantDay('Senin');
-                              else if (d === 2) setInstantDay('Selasa');
-                              else if (d === 3) setInstantDay('Rabu');
-                              else if (d === 4) setInstantDay('Kamis');
-                              else if (d === 5) setInstantDay('Jumat');
-                            }
-                            setDrawerSearchDone(false);
-                            setDrawerValidationError(null);
-                          }}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500 font-bold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Jam Mulai <span className="text-red-500">*</span></label>
-                        <input type="time" value={instantTimeStart} onChange={e => { setInstantTimeStart(e.target.value); setDrawerSearchDone(false); setDrawerValidationError(null); }}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Jam Selesai <span className="text-red-500">*</span></label>
-                        <input type="time" value={instantTimeEnd} onChange={e => { setInstantTimeEnd(e.target.value); setDrawerSearchDone(false); setDrawerValidationError(null); }}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Kapasitas Min.</label>
-                        <input type="number" value={instantMinCap} onChange={e => { setInstantMinCap(Number(e.target.value)); setDrawerSearchDone(false); }} min={1} max={150}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500" />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Gedung</label>
-                        <select value={instantBuilding} onChange={e => { setInstantBuilding(e.target.value as any); setDrawerSearchDone(false); }}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:border-blue-500">
-                          <option value="Semua">Semua Gedung</option>
-                          <option value="Gedung FTI">Gedung FTI</option>
-                          <option value="GKB">GKB Bersama</option>
-                        </select>
-                      </div>
-                      <div className="col-span-2 pt-1">
-                        <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
-                          <input type="checkbox" checked={instantAccessibility} onChange={e => { setInstantAccessibility(e.target.checked); setDrawerSearchDone(false); }} className="rounded" />
-                          <span>Ramah Disabilitas (Lantai 1 / Akses Kursi Roda)</span>
-                        </label>
-                      </div>
-                    </div>
-                    <button onClick={handleDrawerSearch}
-                      className={`w-full py-2 text-xs font-bold text-white rounded-lg transition-colors flex items-center justify-center gap-1.5 ${drawerMode === 'cari_pengganti' ? 'bg-[#082c78] hover:bg-blue-800' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
-                      <Search className="w-3.5 h-3.5" />
-                      <span>Cari Ruang {drawerMode === 'cari_pengganti' ? 'Pengganti' : 'Kosong'}</span>
-                    </button>
-                  </div>
-
-                  {/* Results */}
-                  {drawerSearchDone && (
-                    <div className="space-y-3">
-                      {drawerAvailableRooms.length === 0 ? (
-                        /* A1: No available rooms */
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center space-y-2">
-                          <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
-                          <div className="font-bold text-slate-800 text-sm">Tidak Ada Ruang Kosong</div>
-                          <p className="text-xs text-slate-500">
-                            Tidak ditemukan ruang yang tersedia pada <strong>{instantDay}, {instantTimeStart}–{instantTimeEnd}</strong> dengan kapasitas minimal {instantMinCap} kursi.
-                          </p>
-                          <div className="text-xs text-slate-500">
-                            Saran: ubah hari, jam, atau kurangi kapasitas minimum.
-                          </div>
-                          <button onClick={() => setDrawerSearchDone(false)} className="text-xs text-blue-700 hover:underline font-semibold flex items-center gap-1 mx-auto">
-                            <RefreshCw className="w-3 h-3" /> Ubah Kriteria
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center justify-between text-xs text-slate-500">
-                            <span>Ditemukan <strong className="text-slate-800">{drawerAvailableRooms.length} ruang</strong> yang tersedia</span>
-                            <button onClick={() => setDrawerSearchDone(false)} className="flex items-center gap-1 text-slate-500 hover:text-blue-700 font-semibold">
-                              <RefreshCw className="w-3 h-3" /><span>Ubah</span>
-                            </button>
-                          </div>
-                          {drawerAvailableRooms.map((room) => (
-                            <div key={room.id} className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs hover:border-blue-300 transition-colors">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <h4 className="text-sm font-black text-slate-800 font-mono">{room.code}</h4>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${room.dept === 'GKB' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-sky-50 text-sky-800 border-sky-200'}`}>
-                                      {room.dept === 'GKB' ? 'GKB Bersama' : `Prodi ${room.dept}`}
-                                    </span>
-                                    {(room.code === 'G-101' || room.code === 'GKB-101' || room.code === 'G-102' || room.code === 'GKB-204') && (
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">♿</span>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-slate-500 mt-0.5">{room.name} • Lt. {room.floor}</p>
-                                  <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
-                                    <span className="flex items-center gap-1"><Building className="w-3 h-3" />{room.building}</span>
-                                    <span className={`font-semibold flex items-center gap-1 ${room.capacity >= instantMinCap ? 'text-emerald-700' : 'text-amber-600'}`}>
-                                      <Users className="w-3 h-3" />{room.capacity} Kursi
-                                      {room.capacity >= instantMinCap && <Check className="w-3 h-3" />}
-                                    </span>
-                                  </div>
-                                  <div className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-500">
-                                    <Clock className="w-3 h-3" />
-                                    <span>Tersedia: <strong>{instantDay} ({instantDate})</strong>, {instantTimeStart}–{instantTimeEnd}</span>
-                                  </div>
-                                  <div className="mt-1.5 flex flex-wrap gap-1">
-                                    {room.facilities.slice(0, 2).map(f => (
-                                      <span key={f} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{f}</span>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="flex flex-col gap-1.5 shrink-0">
-                                  <button onClick={() => handleAllocateInstant(room.code)}
-                                    className={`px-3 py-1.5 text-xs font-bold text-white rounded-lg transition-colors ${drawerMode === 'cari_pengganti' ? 'bg-[#082c78] hover:bg-blue-800' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
-                                    {drawerMode === 'cari_pengganti' ? 'Pilih Ruang' : 'Gunakan'}
-                                  </button>
-                                  <button onClick={() => handleOpenNavForRoom(room.code)}
-                                    className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1 justify-center">
-                                    <Compass className="w-3 h-3" /><span>Rute</span>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Info scope */}
-                  {!drawerSearchDone && (
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-start gap-2 text-xs text-blue-700">
-                      <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      <span>Pencarian dibatasi pada ruang <strong>Prodi {activeProdiView === 'ALL' ? 'Semua' : activeProdiView}</strong> dan <strong>GKB Bersama</strong> sesuai hak akses Anda.</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Drawer Footer */}
-                <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end">
-                  <button onClick={() => { setIsDrawerOpen(false); setDrawerSearchDone(false); }}
-                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors">
-                    Tutup
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* ── Modal 1: Pengajuan Ruang Pengganti (Khusus Dosen) ─────────── */}
       {selectedSlotForBooking && currentRole === 'dosen' && (
@@ -1906,7 +2676,7 @@ export const HeatmapRuangPage: React.FC = () => {
                           onClick={() => {
                             const courseToReplace = selectedCourseDetail;
                             setSelectedCourseDetail(null);
-                            handleOpenDrawerReplacement(courseToReplace);
+                            setReplacementModalCourse(courseToReplace);
                           }}
                           className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#082c78] hover:bg-blue-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
                           title="Buka form pencarian ruang kosong untuk kelas pengganti ini"
@@ -1931,6 +2701,33 @@ export const HeatmapRuangPage: React.FC = () => {
             })()}
           </div>
         </div>
+      )}
+
+      {/* ── Pop-up Modal: Cari Kelas Pengganti (Flow 3-Step Form -> Results -> Confirm) ── */}
+      {replacementModalCourse && (
+        <CariKelasPenggantiModal
+          course={replacementModalCourse}
+          userRole={currentRole}
+          userProdi={activeProdiView === 'ALL' ? 'SI' : activeProdiView}
+          allRooms={MASTER_ROOMS}
+          dayDateMapping={dayDateMapping}
+          onClose={() => setReplacementModalCourse(null)}
+          showToast={showToast}
+        />
+      )}
+
+      {/* ── Pop-up Modal: Cari Ruang Kosong Umum (Flow 3-Step: Form -> Results -> Confirm) ── */}
+      {isGeneralSearchModalOpen && (
+        <CariRuangKosongModal
+          userRole={currentRole}
+          userProdi={activeProdiView === 'ALL' ? 'SI' : activeProdiView}
+          allRooms={MASTER_ROOMS}
+          dayDateMapping={dayDateMapping}
+          defaultDate={selectedDate || '2024-11-25'}
+          onClose={() => setIsGeneralSearchModalOpen(false)}
+          showToast={showToast}
+          onNavigateToRoom={(roomCode) => handleOpenNavForRoom(roomCode)}
+        />
       )}
     </div>
   );

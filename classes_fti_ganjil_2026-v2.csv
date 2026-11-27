@@ -1,0 +1,197 @@
+﻿id,course_code,department,semester,name,class_label,sks,enrolled_count,enrolled_is_estimated,room_type_needed,is_mandatory,is_elective,rombel_key,requires_room,requires_accessibility,is_transition_course,lecturer_ids,lecturer_names
+SCE61101-A,SCE61101,TK,1,Fisika 1,A,2,50,False,Teori,True,False,TK-S1-A,True,False,False,EXT-FISIKA,Dosen Departemen Fisika
+SCE61101-B,SCE61101,TK,1,Fisika 1,B,2,50,False,Teori,True,False,TK-S1-B,True,False,False,EXT-FISIKA,Dosen Departemen Fisika
+SCE61102-A,SCE61102,TK,1,Aljabar Linear 1,A,2,40,False,Teori,True,False,TK-S1-A,True,False,False,TK-DESTA; EXT-MTK,"Desta Yolanda, MT / Dosen Departemen Matematika"
+SCE61102-B,SCE61102,TK,1,Aljabar Linear 1,B,2,40,False,Teori,True,False,TK-S1-B,True,False,False,TK-DESTA; EXT-MTK,"Desta Yolanda, MT / Dosen Departemen Matematika"
+SCE61102-C,SCE61102,TK,1,Aljabar Linear 1,C,2,40,False,Teori,True,False,TK-S1-C,True,False,False,TK-DESTA; EXT-MTK,"Desta Yolanda, MT / Dosen Departemen Matematika"
+SCE61103-A,SCE61103,TK,1,Matematika 1,A,3,40,False,Teori,True,False,TK-S1-A,True,False,False,TK-WERMAN; EXT-MTK,"Ir. Werman Kasoep, M.Kom / Dosen Departemen Matematika"
+SCE61103-B,SCE61103,TK,1,Matematika 1,B,3,40,False,Teori,True,False,TK-S1-B,True,False,False,TK-WERMAN; EXT-MTK,"Ir. Werman Kasoep, M.Kom / Dosen Departemen Matematika"
+SCE61103-C,SCE61103,TK,1,Matematika 1,C,3,40,False,Teori,True,False,TK-S1-C,True,False,False,TK-WERMAN; EXT-MTK,"Ir. Werman Kasoep, M.Kom / Dosen Departemen Matematika"
+SCE61104-A,SCE61104,TK,1,Kimia 1,A,2,50,False,Teori,True,False,TK-S1-A,True,False,False,EXT-BUSTANUL; EXT-OLLY,"Bustanul Arifin, M.Si / Olly Norita Tetra, M.Si"
+SCE61104-B,SCE61104,TK,1,Kimia 1,B,2,45,False,Teori,True,False,TK-S1-B,True,False,False,EXT-BUSTANUL; EXT-OLLY,"Bustanul Arifin, M.Si / Olly Norita Tetra, M.Si"
+SCE61105-A,SCE61105,TK,1,Matematika Diskrit,A,3,50,False,Teori,True,False,TK-S1-A,True,False,False,TK-DODY; EXT-MTK,"Dody Ichwana Putra, Ph.D.(Eng) / Dosen Departemen Matematika"
+SCE61105-B,SCE61105,TK,1,Matematika Diskrit,B,3,50,False,Teori,True,False,TK-S1-B,True,False,False,TK-DODY; EXT-MTK,"Dody Ichwana Putra, Ph.D.(Eng) / Dosen Departemen Matematika"
+SCE61106-A,SCE61106,TK,1,Probabilitas dan Statistika 1,A,2,40,False,Teori,True,False,TK-S1-A,True,False,False,TK-WERMAN; TK-DODON; TK-HAFIZ,"Ir. Werman Kasoep, M.Kom / Dodon Yendri, M.Kom / Dr. Eng. Mohammad Hafiz Hersyah, MT"
+SCE61106-B,SCE61106,TK,1,Probabilitas dan Statistika 1,B,2,40,False,Teori,True,False,TK-S1-B,True,False,False,TK-WERMAN; TK-DODON; TK-HAFIZ,"Ir. Werman Kasoep, M.Kom / Dodon Yendri, M.Kom / Dr. Eng. Mohammad Hafiz Hersyah, MT"
+CCE61101-A,CCE61101,TK,1,Pengenalan Teknik Komputer,A,2,50,False,Teori,True,False,TK-S1-A,True,False,False,TK-BUDI; TK-RIZKA; TK-DESTA,"Dr. Eng. Budi Rahmadya, MT / Rizka Hadelina, MT / Desta Yolanda, MT"
+CCE61101-B,CCE61101,TK,1,Pengenalan Teknik Komputer,B,2,50,False,Teori,True,False,TK-S1-B,True,False,False,TK-BUDI; TK-RIZKA; TK-DESTA,"Dr. Eng. Budi Rahmadya, MT / Rizka Hadelina, MT / Desta Yolanda, MT"
+MWU60104-TK-A,MWU60104,TK,1,Bahasa Indonesia,A,2,50,False,Teori,True,False,TK-S1-A,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+MWU60104-TK-B,MWU60104,TK,1,Bahasa Indonesia,B,2,50,False,Teori,True,False,TK-S1-B,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+MWU60101-TK-A,MWU60101,TK,1,Agama,A,2,50,False,Teori,True,False,TK-S1-A,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+MWU60101-TK-B,MWU60101,TK,1,Agama,B,2,50,False,Teori,True,False,TK-S1-B,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+SCE61113-A,SCE61113,TK,3,Fisika 3,A,3,50,False,Teori,True,False,TK-S3-A,True,False,False,EXT-FISIKA,Dosen Departemen Fisika
+SCE61113-B,SCE61113,TK,3,Fisika 3,B,3,50,False,Teori,True,False,TK-S3-B,True,False,False,EXT-FISIKA,Dosen Departemen Fisika
+SCE61114-A,SCE61114,TK,3,Matematika 3,A,3,50,False,Teori,True,False,TK-S3-A,True,False,False,TK-DODY; EXT-MTK,"Dody Ichwana Putra, Ph.D.(Eng) / Dosen Departemen Matematika"
+SCE61114-B,SCE61114,TK,3,Matematika 3,B,3,50,False,Teori,True,False,TK-S3-B,True,False,False,TK-DODY; EXT-MTK,"Dody Ichwana Putra, Ph.D.(Eng) / Dosen Departemen Matematika"
+CCE61105-A,CCE61105,TK,3,Pengantar Analisis Rangkaian,A,2,50,False,Teori,True,False,TK-S3-A,True,False,False,TK-LATHIFAH; TK-DESTA,"Lathifah Arief, MT / Desta Yolanda, MT"
+CCE61105-B,CCE61105,TK,3,Pengantar Analisis Rangkaian,B,2,50,False,Teori,True,False,TK-S3-B,True,False,False,TK-LATHIFAH; TK-DESTA,"Lathifah Arief, MT / Desta Yolanda, MT"
+CCE61106-A,CCE61106,TK,3,Sistem Operasi,A,3,50,False,Teori,True,False,TK-S3-A,True,False,False,TK-NEFY; TK-PRAMA,"Nefy Puteri Novani, MT / Pramawahyudi, MT"
+CCE61106-B,CCE61106,TK,3,Sistem Operasi,B,3,50,False,Teori,True,False,TK-S3-B,True,False,False,TK-NEFY; TK-PRAMA,"Nefy Puteri Novani, MT / Pramawahyudi, MT"
+CCE61107-A,CCE61107,TK,3,Organisasi dan Arsitektur Komputer 1,A,3,50,False,Teori,True,False,TK-S3-A,True,False,False,TK-TATI; TK-NEFY,"Dr. Eng. Tati Erlina, M.I.T / Nefy Puteri Novani, MT"
+CCE61107-B,CCE61107,TK,3,Organisasi dan Arsitektur Komputer 1,B,3,50,False,Teori,True,False,TK-S3-B,True,False,False,TK-TATI; TK-NEFY,"Dr. Eng. Tati Erlina, M.I.T / Nefy Puteri Novani, MT"
+CCE61108-A,CCE61108,TK,3,Sistem Basis Data,A,2,50,False,Teori,True,False,TK-S3-A,True,False,False,TK-DODON; TK-PRAMA,"Dodon Yendri, M.Kom / Pramawahyudi, MT"
+CCE61108-B,CCE61108,TK,3,Sistem Basis Data,B,2,50,False,Teori,True,False,TK-S3-B,True,False,False,TK-DODON; TK-PRAMA,"Dodon Yendri, M.Kom / Pramawahyudi, MT"
+CCE61109-A,CCE61109,TK,3,Praktikum Basis Data,A,1,50,False,Lab,True,False,TK-S3-A,True,False,False,TK-DODON; TK-PRAMA,"Dodon Yendri, M.Kom / Pramawahyudi, MT"
+CCE61110-A,CCE61110,TK,3,Rangkaian Logika Digital,A,2,50,False,Teori,True,False,TK-S3-A,True,False,False,TK-TATI; TK-NEFY,"Dr. Eng. Tati Erlina, M.I.T / Nefy Puteri Novani, MT"
+CCE61110-B,CCE61110,TK,3,Rangkaian Logika Digital,B,2,50,False,Teori,True,False,TK-S3-B,True,False,False,TK-TATI; TK-NEFY,"Dr. Eng. Tati Erlina, M.I.T / Nefy Puteri Novani, MT"
+CCE61111-A,CCE61111,TK,3,Praktikum Logika Digital,A,1,50,False,Lab,True,False,TK-S3-A,True,False,False,TK-YOAN,"Yoan Purbolingga, MT"
+CCE62104-A,CCE62104,TK,3,Struktur Data,A,2,50,False,Teori,False,False,,True,False,True,TK-DODON; TK-RIFKI,"Dodon Yendri, M.Kom / Rifki Suwandi, MT"
+CCE62104-B,CCE62104,TK,3,Struktur Data,B,2,50,False,Teori,False,False,,True,False,True,TK-DODON; TK-RIFKI,"Dodon Yendri, M.Kom / Rifki Suwandi, MT"
+CCE61123-A,CCE61123,TK,5,Sistem Tertanam dan IoT,A,3,50,False,Teori,True,False,TK-S5-A,True,False,False,TK-BUDI; TK-YOAN,"Dr. Eng. Budi Rahmadya, MT / Yoan Purbolingga, MT"
+CCE61123-B,CCE61123,TK,5,Sistem Tertanam dan IoT,B,3,50,False,Teori,True,False,TK-S5-B,True,False,False,TK-DODY; TK-RIZKA,"Dody Ichwana Putra, Ph.D.(Eng) / Rizka Hadelina, MT"
+CCE61124-A,CCE61124,TK,5,Praktikum Sistem Tertanam dan IoT,A,1,50,False,Lab,True,False,TK-S5-A,True,False,False,TK-DODY; TK-BUDI; TK-YOAN,"Dody Ichwana Putra, Ph.D.(Eng) / Dr. Eng. Budi Rahmadya, MT / Yoan Purbolingga, MT"
+CCE61124-B,CCE61124,TK,5,Praktikum Sistem Tertanam dan IoT,B,1,50,False,Lab,True,False,TK-S5-B,True,False,False,TK-DODY; TK-BUDI; TK-YOAN,"Dody Ichwana Putra, Ph.D.(Eng) / Dr. Eng. Budi Rahmadya, MT / Yoan Purbolingga, MT"
+CCE61125-A,CCE61125,TK,5,Perancangan VLSI,A,2,50,False,Teori,True,False,TK-S5-A,True,False,False,TK-RIAN; TK-TATI,"Dr. Eng. Rian Ferdian, MT / Dr. Eng. Tati Erlina, M.I.T"
+CCE61125-B,CCE61125,TK,5,Perancangan VLSI,B,2,50,False,Teori,True,False,TK-S5-B,True,False,False,TK-RIAN; TK-TATI,"Dr. Eng. Rian Ferdian, MT / Dr. Eng. Tati Erlina, M.I.T"
+CCE61126-A,CCE61126,TK,5,Praktikum Perancangan VLSI,A,1,50,False,Lab,True,False,TK-S5-A,True,False,False,TK-RIAN; TK-YOAN,"Dr. Eng. Rian Ferdian, MT / Yoan Purbolingga, MT"
+CCE61127-A,CCE61127,TK,5,Elektronika,A,2,50,False,Teori,True,False,TK-S5-A,True,False,False,TK-RAHMADI; TK-YOAN,"Dr. Eng. Rahmadi Kurnia / Yoan Purbolingga, MT"
+CCE61127-B,CCE61127,TK,5,Elektronika,B,2,50,False,Teori,True,False,TK-S5-B,True,False,False,TK-RAHMADI; TK-YOAN,"Dr. Eng. Rahmadi Kurnia / Yoan Purbolingga, MT"
+CCE61128-A,CCE61128,TK,5,Praktikum Elektronika,A,1,50,False,Lab,True,False,TK-S5-A,True,False,False,TK-RAHMADI; TK-YOAN,"Dr. Eng. Rahmadi Kurnia / Yoan Purbolingga, MT"
+CCE61129-A,CCE61129,TK,5,Pemrograman Paralel,A,2,50,False,Teori,True,False,TK-S5-A,True,False,False,TK-DODY; TK-DESTA,"Dody Ichwana Putra, Ph.D.(Eng) / Desta Yolanda, MT"
+CCE61129-B,CCE61129,TK,5,Pemrograman Paralel,B,2,50,False,Teori,True,False,TK-S5-B,True,False,False,TK-DODY; TK-DESTA,"Dody Ichwana Putra, Ph.D.(Eng) / Desta Yolanda, MT"
+CCE61130-A,CCE61130,TK,5,Pengalaman Pengguna,A,2,50,False,Teori,True,False,TK-S5-A,True,False,False,TK-HAFIZ; TK-RIFKI,"Dr. Eng. Mohammad Hafiz Hersyah, MT / Rifki Suwandi, MT"
+CCE61130-B,CCE61130,TK,5,Pengalaman Pengguna,B,2,50,False,Teori,True,False,TK-S5-B,True,False,False,TK-HAFIZ; TK-PRAMA,"Dr. Eng. Mohammad Hafiz Hersyah, MT / Pramawahyudi, MT"
+CCE61131-A,CCE61131,TK,5,Etika Profesi,A,2,50,False,Teori,True,False,TK-S5-A,True,False,False,TK-LATHIFAH; TK-RIFKI,"Lathifah Arief, MT / Rifki Suwandi, MT"
+CCE61131-B,CCE61131,TK,5,Etika Profesi,B,2,50,False,Teori,True,False,TK-S5-B,True,False,False,TK-LATHIFAH; TK-RIFKI,"Lathifah Arief, MT / Rifki Suwandi, MT"
+AND60102-TK-A,AND60102,TK,5,Kewirausahaan,A,3,50,False,Teori,True,False,TK-S5-A,True,False,False,TK-RIFKI; TK-YOAN,"Rifki Suwandi, MT / Yoan Purbolingga, MT"
+AND60102-TK-B,AND60102,TK,5,Kewirausahaan,B,3,50,False,Teori,True,False,TK-S5-B,True,False,False,TK-RIFKI; TK-YOAN,"Rifki Suwandi, MT / Yoan Purbolingga, MT"
+CCE60140-A,CCE60140,TK,7,Proyek Perancangan Teknik Komputer (Capstone Project),A,4,50,False,Teori,True,False,TK-S7-A,True,False,False,TK-RIAN; TK-RIZKA,"Dr. Eng. Rian Ferdian, MT / Rizka Hadelina, MT"
+CCE60140-B,CCE60140,TK,7,Proyek Perancangan Teknik Komputer (Capstone Project),B,4,50,False,Teori,True,False,TK-S7-B,True,False,False,TK-RIAN; TK-RIZKA,"Dr. Eng. Rian Ferdian, MT / Rizka Hadelina, MT"
+AND60101-TK-A,AND60101,TK,7,KKN,A,4,50,False,Teori,True,False,,False,False,False,EXT-MKWU,Dosen MKWU / MKWK
+ECS61201-A,ECS61201,TK,7,Strategi Teknologi Terkini,A,2,50,False,Teori,False,True,,True,False,False,TK-RIFKI; TK-LATHIFAH,"Rifki Suwandi, MT / Lathifah Arief, MT"
+ECS61202-A,ECS61202,TK,7,Kapita Selekta,A,2,50,False,Teori,False,True,,True,False,False,TK-HAFIZ; TK-LATHIFAH,"Dr. Eng. Mohammad Hafiz Hersyah, MT / Lathifah Arief, MT"
+ECS60221-A,ECS60221,TK,7,Komputasi Awan,A,2,50,False,Teori,False,True,,True,False,False,TK-HAFIZ; TK-PRAMA,"Dr. Eng. Mohammad Hafiz Hersyah, MT / Pramawahyudi, MT"
+ECS60203-A,ECS60203,TK,7,Pembelajaran Mesin Lanjut (Deep Learning),A,2,50,False,Teori,False,True,,True,False,False,TK-RIZKA; TK-YOAN; TK-DODY,"Rizka Hadelina, MT / Yoan Purbolingga, MT / Dody Ichwana Putra, Ph.D.(Eng)"
+ECS60218-A,ECS60218,TK,7,Jaringan Nirkabel dan Bergerak,A,2,50,False,Teori,False,True,,True,False,False,TK-BUDI; TK-RIFKI,"Dr. Eng. Budi Rahmadya, MT / Rifki Suwandi, MT"
+ECS60219-A,ECS60219,TK,7,Sistem Komunikasi Nirkabel,A,2,50,False,Teori,False,True,,True,False,False,TK-BUDI,"Dr. Eng. Budi Rahmadya, MT"
+ECS60206-A,ECS60206,TK,7,Sistem Cerdas,A,2,50,False,Teori,False,True,,True,False,False,TK-HAFIZ; TK-RIZKA,"Dr. Eng. Mohammad Hafiz Hersyah, MT / Rizka Hadelina, MT"
+CCE62142-A,CCE62142,TK,7,Tugas Akhir,A,4,50,False,Teori,True,False,,False,False,False,TK-ALL,Semua Dosen DTK
+CCE62142-B,CCE62142,TK,7,Tugas Akhir,B,4,50,False,Teori,True,False,,False,False,False,TK-ALL,Semua Dosen DTK
+MWU60102-A,MWU60102,SI,1,Pancasila,A,2,40,True,Teori,True,False,SI-S1-A,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+MWU60102-B,MWU60102,SI,1,Pancasila,B,2,40,True,Teori,True,False,SI-S1-B,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+MWU60104-SI-A,MWU60104,SI,1,Bahasa Indonesia,A,2,40,True,Teori,True,False,SI-S1-A,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+MWU60104-SI-B,MWU60104,SI,1,Bahasa Indonesia,B,2,40,True,Teori,True,False,SI-S1-B,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+DSI61101-A,DSI61101,SI,1,Konsep Sistem Informasi,A,2,40,True,Teori,True,False,SI-S1-A,True,False,False,SI-TBD-01,Dosen SI 01 (Placeholder)
+DSI61101-B,DSI61101,SI,1,Konsep Sistem Informasi,B,2,40,True,Teori,True,False,SI-S1-B,True,False,False,SI-TBD-01,Dosen SI 01 (Placeholder)
+DSI61101-C,DSI61101,SI,1,Konsep Sistem Informasi,C,2,40,True,Teori,True,False,SI-S1-C,True,False,False,SI-TBD-01,Dosen SI 01 (Placeholder)
+DSI61102-A,DSI61102,SI,1,Pengantar Bisnis dan Manajemen,A,2,40,True,Teori,True,False,SI-S1-A,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61102-B,DSI61102,SI,1,Pengantar Bisnis dan Manajemen,B,2,40,True,Teori,True,False,SI-S1-B,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61102-C,DSI61102,SI,1,Pengantar Bisnis dan Manajemen,C,2,40,True,Teori,True,False,SI-S1-C,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61103-A,DSI61103,SI,1,Komunikasi Bisnis dan Teknis,A,2,40,True,Teori,True,False,SI-S1-A,True,False,False,SI-TBD-02,Dosen SI 02 (Placeholder)
+DSI61103-B,DSI61103,SI,1,Komunikasi Bisnis dan Teknis,B,2,40,True,Teori,True,False,SI-S1-B,True,False,False,SI-TBD-02,Dosen SI 02 (Placeholder)
+DSI61103-C,DSI61103,SI,1,Komunikasi Bisnis dan Teknis,C,2,40,True,Teori,True,False,SI-S1-C,True,False,False,SI-TBD-02,Dosen SI 02 (Placeholder)
+DSI61104-A,DSI61104,SI,1,Algoritma dan Pemrograman Dasar,A,3,40,True,Teori,True,False,SI-S1-A,True,False,False,SI-TBD-03,Dosen SI 03 (Placeholder)
+DSI61104-B,DSI61104,SI,1,Algoritma dan Pemrograman Dasar,B,3,40,True,Teori,True,False,SI-S1-B,True,False,False,SI-TBD-03,Dosen SI 03 (Placeholder)
+DSI61104-C,DSI61104,SI,1,Algoritma dan Pemrograman Dasar,C,3,40,True,Teori,True,False,SI-S1-C,True,False,False,SI-TBD-03,Dosen SI 03 (Placeholder)
+DSI61104-D,DSI61104,SI,1,Algoritma dan Pemrograman Dasar,D,3,40,True,Teori,True,False,SI-S1-D,True,False,False,SI-TBD-03,Dosen SI 03 (Placeholder)
+DSI61105-A,DSI61105,SI,1,Matematika Diskrit,A,3,40,True,Teori,True,False,SI-S1-A,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61105-B,DSI61105,SI,1,Matematika Diskrit,B,3,40,True,Teori,True,False,SI-S1-B,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61105-C,DSI61105,SI,1,Matematika Diskrit,C,3,40,True,Teori,True,False,SI-S1-C,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61106-A,DSI61106,SI,1,Aljabar Linear,A,2,40,True,Teori,True,False,SI-S1-A,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61106-B,DSI61106,SI,1,Aljabar Linear,B,2,40,True,Teori,True,False,SI-S1-B,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61106-C,DSI61106,SI,1,Aljabar Linear,C,2,40,True,Teori,True,False,SI-S1-C,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61107-A,DSI61107,SI,1,Bahasa Inggris,A,2,40,True,Teori,True,False,SI-S1-A,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61107-B,DSI61107,SI,1,Bahasa Inggris,B,2,40,True,Teori,True,False,SI-S1-B,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+DSI61107-C,DSI61107,SI,1,Bahasa Inggris,C,2,40,True,Teori,True,False,SI-S1-C,True,False,False,EXT-SERVICE-SI,Dosen Service SI (TBD)
+AND60102-SI-A,AND60102,SI,1,Kewirausahaan,A,3,40,True,Teori,True,False,SI-S1-A,True,False,False,SI-TBD-04,Dosen SI 04 (Placeholder)
+AND60102-SI-B,AND60102,SI,1,Kewirausahaan,B,3,40,True,Teori,True,False,SI-S1-B,True,False,False,SI-TBD-04,Dosen SI 04 (Placeholder)
+DSI61114-A,DSI61114,SI,3,Perancangan Basis Data,A,3,40,True,Teori,True,False,SI-S3-A,True,False,False,SI-TBD-05,Dosen SI 05 (Placeholder)
+DSI61114-B,DSI61114,SI,3,Perancangan Basis Data,B,3,40,True,Teori,True,False,SI-S3-B,True,False,False,SI-TBD-05,Dosen SI 05 (Placeholder)
+DSI61114-C,DSI61114,SI,3,Perancangan Basis Data,C,3,40,True,Teori,True,False,SI-S3-C,True,False,False,SI-TBD-05,Dosen SI 05 (Placeholder)
+DSI61115-A,DSI61115,SI,3,Sistem Operasi,A,2,40,True,Teori,True,False,SI-S3-A,True,False,False,SI-TBD-06,Dosen SI 06 (Placeholder)
+DSI61115-B,DSI61115,SI,3,Sistem Operasi,B,2,40,True,Teori,True,False,SI-S3-B,True,False,False,SI-TBD-06,Dosen SI 06 (Placeholder)
+DSI61116-S3-A,DSI61116,SI,3,Analisis dan Perancangan Sistem Informasi,A,3,40,True,Teori,True,False,SI-S3-A,True,False,False,SI-TBD-07,Dosen SI 07 (Placeholder)
+DSI61116-S3-B,DSI61116,SI,3,Analisis dan Perancangan Sistem Informasi,B,3,40,True,Teori,True,False,SI-S3-B,True,False,False,SI-TBD-07,Dosen SI 07 (Placeholder)
+DSI61117-A,DSI61117,SI,3,Pemrograman Berorientasi Objek,A,3,40,True,Teori,True,False,SI-S3-A,True,False,False,SI-TBD-08,Dosen SI 08 (Placeholder)
+DSI61117-B,DSI61117,SI,3,Pemrograman Berorientasi Objek,B,3,40,True,Teori,True,False,SI-S3-B,True,False,False,SI-TBD-08,Dosen SI 08 (Placeholder)
+DSI61119-A,DSI61119,SI,3,Big Data,A,3,40,True,Teori,True,False,SI-S3-A,True,False,False,SI-TBD-09,Dosen SI 09 (Placeholder)
+DSI61119-B,DSI61119,SI,3,Big Data,B,3,40,True,Teori,True,False,SI-S3-B,True,False,False,SI-TBD-09,Dosen SI 09 (Placeholder)
+DSI62108-A,DSI62108,SI,3,Basis Data,A,3,40,True,Teori,False,False,,True,False,True,SI-TBD-10,Dosen SI 10 (Placeholder)
+DSI62108-B,DSI62108,SI,3,Basis Data,B,3,40,True,Teori,False,False,,True,False,True,SI-TBD-10,Dosen SI 10 (Placeholder)
+DSI62110-A,DSI62110,SI,3,Manajemen Proses Bisnis,A,3,40,True,Teori,False,False,,True,False,True,SI-TBD-11,Dosen SI 11 (Placeholder)
+DSI62110-B,DSI62110,SI,3,Manajemen Proses Bisnis,B,3,40,True,Teori,False,False,,True,False,True,SI-TBD-11,Dosen SI 11 (Placeholder)
+DSI62111-A,DSI62111,SI,3,Rekayasa Perangkat Lunak,A,2,40,True,Teori,False,False,,True,False,True,SI-TBD-12,Dosen SI 12 (Placeholder)
+DSI62111-B,DSI62111,SI,3,Rekayasa Perangkat Lunak,B,2,40,True,Teori,False,False,,True,False,True,SI-TBD-12,Dosen SI 12 (Placeholder)
+DSI61128-A,DSI61128,SI,5,Manajemen Proyek Sistem Informasi,A,3,40,True,Teori,True,False,SI-S5-A,True,False,False,SI-TBD-13,Dosen SI 13 (Placeholder)
+DSI61128-B,DSI61128,SI,5,Manajemen Proyek Sistem Informasi,B,3,40,True,Teori,True,False,SI-S5-B,True,False,False,SI-TBD-13,Dosen SI 13 (Placeholder)
+DSI61130-A,DSI61130,SI,5,Pemrograman Mobile,A,3,40,True,Teori,True,False,SI-S5-A,True,False,False,SI-TBD-14,Dosen SI 14 (Placeholder)
+DSI61130-B,DSI61130,SI,5,Pemrograman Mobile,B,3,40,True,Teori,True,False,SI-S5-B,True,False,False,SI-TBD-14,Dosen SI 14 (Placeholder)
+DSI61131-S5-A,DSI61131,SI,5,Etika Profesi,A,2,40,True,Teori,True,False,SI-S5-A,True,False,False,SI-TBD-01,Dosen SI 01 (Placeholder)
+DSI61131-S5-B,DSI61131,SI,5,Etika Profesi,B,2,40,True,Teori,True,False,SI-S5-B,True,False,False,SI-TBD-01,Dosen SI 01 (Placeholder)
+DSI61132-A,DSI61132,SI,5,Business Intelligence,A,3,40,True,Teori,True,False,SI-S5-A,True,False,False,SI-TBD-02,Dosen SI 02 (Placeholder)
+DSI61132-B,DSI61132,SI,5,Business Intelligence,B,3,40,True,Teori,True,False,SI-S5-B,True,False,False,SI-TBD-02,Dosen SI 02 (Placeholder)
+DSI61133-A,DSI61133,SI,5,Machine Learning,A,3,40,True,Teori,True,False,SI-S5-A,True,False,False,SI-TBD-03,Dosen SI 03 (Placeholder)
+DSI61133-B,DSI61133,SI,5,Machine Learning,B,3,40,True,Teori,True,False,SI-S5-B,True,False,False,SI-TBD-03,Dosen SI 03 (Placeholder)
+DSI62121-A,DSI62121,SI,5,Perencanaan Strategis Teknologi Informasi,A,3,40,True,Teori,False,False,,True,False,True,SI-TBD-04,Dosen SI 04 (Placeholder)
+DSI61116-S5-A,DSI61116,SI,5,Analisis dan Perancangan Sistem Informasi,A,3,40,True,Teori,False,False,,True,False,True,SI-TBD-05,Dosen SI 05 (Placeholder)
+DSI61116-S5-B,DSI61116,SI,5,Analisis dan Perancangan Sistem Informasi,B,3,40,True,Teori,False,False,,True,False,True,SI-TBD-05,Dosen SI 05 (Placeholder)
+AND60101-SI-A,AND60101,SI,7,KKN,A,4,40,True,Teori,True,False,,False,False,False,EXT-MKWU,Dosen MKWU / MKWK
+AND60101-SI-B,AND60101,SI,7,KKN,B,4,40,True,Teori,True,False,,False,False,False,EXT-MKWU,Dosen MKWU / MKWK
+DSI60140-A,DSI60140,SI,7,Proyek Pengembangan Sistem Informasi,A,4,40,True,Teori,True,False,SI-S7-A,True,False,False,SI-TBD-06,Dosen SI 06 (Placeholder)
+DSI60140-B,DSI60140,SI,7,Proyek Pengembangan Sistem Informasi,B,4,40,True,Teori,True,False,SI-S7-B,True,False,False,SI-TBD-06,Dosen SI 06 (Placeholder)
+DSI60142-A,DSI60142,SI,7,Metode Penelitian,A,2,40,True,Teori,True,False,SI-S7-A,True,False,False,SI-TBD-07,Dosen SI 07 (Placeholder)
+DSI62134-A,DSI62134,SI,7,Transformasi Digital,A,2,40,True,Teori,True,False,SI-S7-A,True,False,False,SI-TBD-08,Dosen SI 08 (Placeholder)
+DSI62134-B,DSI62134,SI,7,Transformasi Digital,B,2,40,True,Teori,True,False,SI-S7-B,True,False,False,SI-TBD-08,Dosen SI 08 (Placeholder)
+DSI62136-A,DSI62136,SI,7,Tata Kelola Teknologi Informasi,A,3,40,True,Teori,True,False,SI-S7-A,True,False,False,SI-TBD-09,Dosen SI 09 (Placeholder)
+DSI62137-A,DSI62137,SI,7,Pengujian Perangkat Lunak,A,2,40,True,Teori,True,False,SI-S7-A,True,False,False,SI-TBD-10,Dosen SI 10 (Placeholder)
+DSI62137-B,DSI62137,SI,7,Pengujian Perangkat Lunak,B,2,40,True,Teori,True,False,SI-S7-B,True,False,False,SI-TBD-10,Dosen SI 10 (Placeholder)
+DSI61131-S7-A,DSI61131,SI,7,Etika Profesi,A,2,40,True,Teori,False,False,,True,False,True,SI-TBD-11,Dosen SI 11 (Placeholder)
+DSI61131-S7-B,DSI61131,SI,7,Etika Profesi,B,2,40,True,Teori,False,False,,True,False,True,SI-TBD-11,Dosen SI 11 (Placeholder)
+DSI60212-A,DSI60212,SI,7,Customer Relationship Management,A,2,40,True,Teori,False,True,,True,False,False,SI-TBD-12,Dosen SI 12 (Placeholder)
+DSI60207-A,DSI60207,SI,7,Pemrograman Framework,A,2,40,True,Teori,False,True,,True,False,False,SI-TBD-13,Dosen SI 13 (Placeholder)
+DSI60205-A,DSI60205,SI,7,NLP Terapan,A,2,40,True,Teori,False,True,,True,False,False,SI-TBD-14,Dosen SI 14 (Placeholder)
+DSI60221-A,DSI60221,SI,7,Blockchain,A,2,40,True,Teori,False,True,,True,False,False,SI-TBD-01,Dosen SI 01 (Placeholder)
+DIF61101-A,DIF61101,IF,1,Matematika Diskrit,A,3,45,False,Teori,True,False,IF-S1-A,True,False,False,IF-MEZA; IF-ANGGI,"Meza Silvana, MT / Anggi Hadi Wijaya, M.Kom"
+DIF61101-B,DIF61101,IF,1,Matematika Diskrit,B,3,44,False,Teori,True,False,IF-S1-B,True,False,False,IF-MEZA; IF-ANGGI,"Meza Silvana, MT / Anggi Hadi Wijaya, M.Kom"
+DIF61102-A,DIF61102,IF,1,Aljabar Linier,A,3,45,False,Teori,True,False,IF-S1-A,True,False,False,IF-AJENG; IF-ARIFAN,"Ajeng Dwi Asti, M.Kom / Arifan Rahman, M.Kom"
+DIF61102-B,DIF61102,IF,1,Aljabar Linier,B,3,44,False,Teori,True,False,IF-S1-B,True,False,False,IF-AJENG; IF-ARIFAN,"Ajeng Dwi Asti, M.Kom / Arifan Rahman, M.Kom"
+DIF61103-A,DIF61103,IF,1,Kalkulus,A,3,45,False,Teori,True,False,IF-S1-A,True,False,False,IF-AJENG; IF-MEZA,"Ajeng Dwi Asti, M.Kom / Meza Silvana, MT"
+DIF61103-B,DIF61103,IF,1,Kalkulus,B,3,44,False,Teori,True,False,IF-S1-B,True,False,False,IF-AJENG; IF-MEZA,"Ajeng Dwi Asti, M.Kom / Meza Silvana, MT"
+DIF61104-A,DIF61104,IF,1,Algoritma dan Pemrograman,A,2,45,False,Teori,True,False,IF-S1-A,True,False,False,IF-WAHYUDI; IF-AFDHAL,"Dr. Ir. Wahyudi, S.T., M.T. / Afdhal Dinilhak, M.Kom"
+DIF61104-B,DIF61104,IF,1,Algoritma dan Pemrograman,B,2,44,False,Teori,True,False,IF-S1-B,True,False,False,IF-WAHYUDI; IF-AFDHAL,"Dr. Ir. Wahyudi, S.T., M.T. / Afdhal Dinilhak, M.Kom"
+DIF61105-S1,DIF61105,IF,1,Praktikum Algoritma dan Pemrograman,Shift 1,1,30,False,Lab,True,False,IF-S1-Shift 1,True,False,False,IF-WAHYUDI; IF-AFDHAL,"Dr. Ir. Wahyudi, S.T., M.T. / Afdhal Dinilhak, M.Kom"
+DIF61105-S2,DIF61105,IF,1,Praktikum Algoritma dan Pemrograman,Shift 2,1,30,False,Lab,True,False,IF-S1-Shift 2,True,False,False,IF-WAHYUDI; IF-AFDHAL,"Dr. Ir. Wahyudi, S.T., M.T. / Afdhal Dinilhak, M.Kom"
+DIF61105-S3,DIF61105,IF,1,Praktikum Algoritma dan Pemrograman,Shift 3,1,29,False,Lab,True,False,IF-S1-Shift 3,True,False,False,IF-WAHYUDI; IF-AFDHAL,"Dr. Ir. Wahyudi, S.T., M.T. / Afdhal Dinilhak, M.Kom"
+DIF61106-A,DIF61106,IF,1,Organisasi dan Arsitektur Komputer,A,3,45,False,Teori,True,False,IF-S1-A,True,False,False,IF-BUDY; IF-WAHYUDI,"Budy Satria, M.Kom / Dr. Ir. Wahyudi, S.T., M.T."
+DIF61106-B,DIF61106,IF,1,Organisasi dan Arsitektur Komputer,B,3,44,False,Teori,True,False,IF-S1-B,True,False,False,IF-BUDY; IF-WAHYUDI,"Budy Satria, M.Kom / Dr. Ir. Wahyudi, S.T., M.T."
+DIF61107-A,DIF61107,IF,1,Bahasa Inggris,A,3,45,False,Teori,True,False,IF-S1-A,True,False,False,EXT-EDRIA,"Edria Sandika, M.Hum"
+DIF61107-B,DIF61107,IF,1,Bahasa Inggris,B,3,44,False,Teori,True,False,IF-S1-B,True,False,False,EXT-EDRIA,"Edria Sandika, M.Hum"
+MWU60101-IF-A,MWU60101,IF,1,Pendidikan Agama,A,2,89,False,Teori,True,False,IF-S1-A,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+DIF61117-A,DIF61117,IF,3,Pemrograman Berorientasi Objek,A,2,41,False,Teori,True,False,IF-S3-A,True,False,False,IF-NURFIAH; IF-AFDHAL,"Nurfiah, S.ST., M.Kom / Afdhal Dinilhak, M.Kom"
+DIF61117-B,DIF61117,IF,3,Pemrograman Berorientasi Objek,B,2,41,False,Teori,True,False,IF-S3-B,True,False,False,IF-NURFIAH; IF-AFDHAL,"Nurfiah, S.ST., M.Kom / Afdhal Dinilhak, M.Kom"
+DIF61118-S1,DIF61118,IF,3,Praktikum Pemrograman Berorientasi Objek,Shift 1,1,28,False,Lab,True,False,IF-S3-Shift 1,True,False,False,IF-NURFIAH; IF-AFDHAL,"Nurfiah, S.ST., M.Kom / Afdhal Dinilhak, M.Kom"
+DIF61118-S2,DIF61118,IF,3,Praktikum Pemrograman Berorientasi Objek,Shift 2,1,27,False,Lab,True,False,IF-S3-Shift 2,True,False,False,IF-NURFIAH; IF-AFDHAL,"Nurfiah, S.ST., M.Kom / Afdhal Dinilhak, M.Kom"
+DIF61118-S3,DIF61118,IF,3,Praktikum Pemrograman Berorientasi Objek,Shift 3,1,27,False,Lab,True,False,IF-S3-Shift 3,True,False,False,IF-NURFIAH; IF-AFDHAL,"Nurfiah, S.ST., M.Kom / Afdhal Dinilhak, M.Kom"
+DIF61119-A,DIF61119,IF,3,Interaksi Manusia dan Komputer,A,2,41,False,Teori,True,False,IF-S3-A,True,False,False,IF-ANGGI; IF-DERISMA,"Anggi Hadi Wijaya, M.Kom / Dr. Derisma, M.T"
+DIF61119-B,DIF61119,IF,3,Interaksi Manusia dan Komputer,B,2,41,False,Teori,True,False,IF-S3-B,True,False,False,IF-ANGGI; IF-DERISMA,"Anggi Hadi Wijaya, M.Kom / Dr. Derisma, M.T"
+DIF61120-A,DIF61120,IF,3,Rekayasa Perangkat Lunak,A,3,41,False,Teori,True,False,IF-S3-A,True,False,False,IF-RAHMI; IF-ANGGI,"Rahmi Eka Putri, MT / Anggi Hadi Wijaya, M.Kom"
+DIF61120-B,DIF61120,IF,3,Rekayasa Perangkat Lunak,B,3,41,False,Teori,True,False,IF-S3-B,True,False,False,IF-RAHMI; IF-ANGGI,"Rahmi Eka Putri, MT / Anggi Hadi Wijaya, M.Kom"
+DIF61121-A,DIF61121,IF,3,Keamanan Jaringan Komputer,A,2,41,False,Teori,True,False,IF-S3-A,True,False,False,IF-RAHMI; IF-ANGGI,"Rahmi Eka Putri, MT / Anggi Hadi Wijaya, M.Kom"
+DIF61121-B,DIF61121,IF,3,Keamanan Jaringan Komputer,B,2,41,False,Teori,True,False,IF-S3-B,True,False,False,IF-RAHMI; IF-ANGGI,"Rahmi Eka Putri, MT / Anggi Hadi Wijaya, M.Kom"
+DIF61122-A,DIF61122,IF,3,Sistem Operasi,A,2,41,False,Teori,True,False,IF-S3-A,True,False,False,IF-BUDY; IF-ARIFAN,"Budy Satria, M.Kom / Arifan Rahman, M.Kom"
+DIF61122-B,DIF61122,IF,3,Sistem Operasi,B,2,41,False,Teori,True,False,IF-S3-B,True,False,False,IF-BUDY; IF-ARIFAN,"Budy Satria, M.Kom / Arifan Rahman, M.Kom"
+DIF61123-S1,DIF61123,IF,3,Praktikum Sistem Operasi,Shift 1,1,28,False,Lab,True,False,IF-S3-Shift 1,True,False,False,IF-BUDY; IF-ARIFAN,"Budy Satria, M.Kom / Arifan Rahman, M.Kom"
+DIF61123-S2,DIF61123,IF,3,Praktikum Sistem Operasi,Shift 2,1,27,False,Lab,True,False,IF-S3-Shift 2,True,False,False,IF-BUDY; IF-ARIFAN,"Budy Satria, M.Kom / Arifan Rahman, M.Kom"
+DIF61123-S3,DIF61123,IF,3,Praktikum Sistem Operasi,Shift 3,1,27,False,Lab,True,False,IF-S3-Shift 3,True,False,False,IF-BUDY; IF-ARIFAN,"Budy Satria, M.Kom / Arifan Rahman, M.Kom"
+DIF61124-A,DIF61124,IF,3,Desain Web,A,2,41,False,Teori,True,False,IF-S3-A,True,False,False,IF-NURFIAH; IF-ARIFAN,"Nurfiah, S.ST., M.Kom / Arifan Rahman, M.Kom"
+DIF61124-B,DIF61124,IF,3,Desain Web,B,2,41,False,Teori,True,False,IF-S3-B,True,False,False,IF-NURFIAH; IF-ARIFAN,"Nurfiah, S.ST., M.Kom / Arifan Rahman, M.Kom"
+DIF61125-A,DIF61125,IF,3,Pengantar Data Science,A,3,41,False,Teori,True,False,IF-S3-A,True,False,False,IF-WAHYUDI; IF-DERISMA,"Dr. Ir. Wahyudi, S.T., M.T. / Dr. Derisma, M.T"
+DIF61125-B,DIF61125,IF,3,Pengantar Data Science,B,3,41,False,Teori,True,False,IF-S3-B,True,False,False,IF-WAHYUDI; IF-DERISMA,"Dr. Ir. Wahyudi, S.T., M.T. / Dr. Derisma, M.T"
+DIF61126-A,DIF61126,IF,3,Internet of Things,A,3,41,False,Teori,True,False,IF-S3-A,True,False,False,IF-NURFIAH; IF-BUDY,"Nurfiah, S.ST., M.Kom / Budy Satria, M.Kom"
+DIF61126-B,DIF61126,IF,3,Internet of Things,B,3,41,False,Teori,True,False,IF-S3-B,True,False,False,IF-NURFIAH; IF-BUDY,"Nurfiah, S.ST., M.Kom / Budy Satria, M.Kom"
+DIF61137-A,DIF61137,IF,5,Manajemen Proyek Perangkat Lunak,A,3,40,False,Teori,True,False,IF-S5-A,True,False,False,IF-AFDHAL; IF-RAHMI,"Afdhal Dinilhak, M.Kom / Rahmi Eka Putri, MT"
+DIF61138-A,DIF61138,IF,5,Metodologi Penelitian,A,2,40,False,Teori,True,False,IF-S5-A,True,False,False,IF-DERISMA; IF-MEZA,"Dr. Derisma, M.T / Meza Silvana, MT"
+DIF61139-A,DIF61139,IF,5,Deep Learning,A,2,40,False,Teori,True,False,IF-S5-A,True,False,False,IF-MEZA; IF-DERISMA,"Meza Silvana, MT / Dr. Derisma, M.T"
+DIF61140-S1,DIF61140,IF,5,Praktikum Deep Learning,Shift 1,1,20,False,Lab,True,False,IF-S5-Shift 1,True,False,False,IF-MEZA; IF-DERISMA,"Meza Silvana, MT / Dr. Derisma, M.T"
+DIF61140-S2,DIF61140,IF,5,Praktikum Deep Learning,Shift 2,1,20,False,Lab,True,False,IF-S5-Shift 2,True,False,False,IF-MEZA; IF-DERISMA,"Meza Silvana, MT / Dr. Derisma, M.T"
+DIF61141-A,DIF61141,IF,5,Big Data,A,2,40,False,Teori,True,False,IF-S5-A,True,False,False,IF-AJENG; IF-AFDHAL,"Ajeng Dwi Asti, M.Kom / Afdhal Dinilhak, M.Kom"
+DIF61142-S1,DIF61142,IF,5,Praktikum Big Data,Shift 1,1,20,False,Lab,True,False,IF-S5-Shift 1,True,False,False,IF-AJENG; IF-AFDHAL,"Ajeng Dwi Asti, M.Kom / Afdhal Dinilhak, M.Kom"
+DIF61142-S2,DIF61142,IF,5,Praktikum Big Data,Shift 2,1,20,False,Lab,True,False,IF-S5-Shift 2,True,False,False,IF-AJENG; IF-AFDHAL,"Ajeng Dwi Asti, M.Kom / Afdhal Dinilhak, M.Kom"
+DIF61143-A,DIF61143,IF,5,Visualisasi Data,A,3,40,False,Teori,True,False,IF-S5-A,True,False,False,IF-NURFIAH; IF-DERISMA,"Nurfiah, S.ST., M.Kom / Dr. Derisma, M.T"
+DIF61144-A,DIF61144,IF,5,Aplikasi Mobile,A,2,40,False,Teori,True,False,IF-S5-A,True,False,False,IF-NURFIAH; IF-ARIFAN,"Nurfiah, S.ST., M.Kom / Arifan Rahman, M.Kom"
+DIF61145-S1,DIF61145,IF,5,Praktikum Aplikasi Mobile,Shift 1,1,20,False,Lab,True,False,IF-S5-Shift 1,True,False,False,IF-NURFIAH; IF-ARIFAN,"Nurfiah, S.ST., M.Kom / Arifan Rahman, M.Kom"
+DIF61145-S2,DIF61145,IF,5,Praktikum Aplikasi Mobile,Shift 2,1,20,False,Lab,True,False,IF-S5-Shift 2,True,False,False,IF-NURFIAH; IF-ARIFAN,"Nurfiah, S.ST., M.Kom / Arifan Rahman, M.Kom"
+AND61146-A,AND61146,IF,5,Kewirausahaan,A,3,40,False,Teori,True,False,IF-S5-A,True,False,False,IF-RAHMI; IF-AJENG,"Rahmi Eka Putri, MT / Ajeng Dwi Asti, M.Kom"
+MWU60104-IF-A,MWU60104,IF,5,Bahasa Indonesia,A,2,40,False,Teori,True,False,IF-S5-A,True,False,False,EXT-MKWU,Dosen MKWU / MKWK
+DIF60148-A,DIF60148,IF,7,Hukum dan Kebijakan Teknologi Informasi,A,3,43,False,Teori,True,False,IF-S7-A,True,False,False,IF-BUDY; IF-WAHYUDI,"Budy Satria, M.Kom / Dr. Ir. Wahyudi, S.T., M.T."
+DIF61150-A,DIF61150,IF,7,Etika Profesi,A,2,43,False,Teori,True,False,IF-S7-A,True,False,False,IF-RAHMI; IF-AJENG,"Rahmi Eka Putri, MT / Ajeng Dwi Asti, M.Kom"

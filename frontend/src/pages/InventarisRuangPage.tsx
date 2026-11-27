@@ -19,31 +19,42 @@ import {
   Building2,
   X,
   Layers,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 
 export const InventarisRuangPage: React.FC = () => {
-  const { rooms, setSelectedRoomForNav, setIsRoomNavModalOpen, showToast } = useApp();
+  const {
+    rooms,
+    setSelectedRoomForNav,
+    setIsRoomNavModalOpen,
+    showToast,
+    addBackendRoom,
+    updateBackendRoom,
+    deleteBackendRoom,
+    backendStatus,
+  } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBuilding, setSelectedBuilding] = useState('Semua');
   const [selectedType, setSelectedType] = useState('Semua');
   const [selectedFloor, setSelectedFloor] = useState('Semua');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
-  // New room form state
+  // New room form state (sesuai kolom tabel ruang MySQL)
   const [newRoom, setNewRoom] = useState<Partial<Room>>({
     code: '',
     name: '',
-    building: 'Gedung FTI',
+    building: 'Gedung H',
     floor: 1,
-    capacity: 50,
+    capacity: 45,
     type: 'Teori',
-    facilities: ['AC', 'Proyektor', 'Wi-Fi Eduroam'],
+    facilities: [],
     isAccessible: true,
-    status: 'Tersedia',
-    wing: 'Sayap Barat',
+    status: 'Siap Digunakan',
   });
 
   // Filtered rooms
@@ -71,15 +82,40 @@ export const InventarisRuangPage: React.FC = () => {
     setIsRoomNavModalOpen(true);
   };
 
-  const handleAddRoom = (e: React.FormEvent) => {
+  const handleAddRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoom.code || !newRoom.name) {
       showToast('Harap lengkapi kode dan nama ruangan!', 'error');
       return;
     }
-    // In our context or local state, we can alert success
-    showToast(`Ruang ${newRoom.name} (${newRoom.code}) berhasil ditambahkan ke inventaris FTI.`, 'success');
-    setIsAddModalOpen(false);
+    const ok = await addBackendRoom({
+      code: newRoom.code.trim(),
+      name: newRoom.name.trim(),
+      building: (newRoom.building || 'H').replace(/^Gedung\s+/i, ''),
+      floor: Number(newRoom.floor) || 1,
+      capacity: Number(newRoom.capacity) || 45,
+    });
+    if (ok) {
+      setNewRoom({ code: '', name: '', building: 'Gedung H', floor: 1, capacity: 45, type: 'Teori', facilities: [] });
+      setIsAddModalOpen(false);
+    }
+  };
+
+  const handleSaveEditRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRoom) return;
+    const ok = await updateBackendRoom(editingRoom.id, {
+      code: editingRoom.code,
+      name: editingRoom.name.replace(/^Ruang\s+[A-Za-z]+\s+/i, ''),
+      building: editingRoom.building.replace(/^Gedung\s+/i, ''),
+      floor: Number(editingRoom.floor) || 1,
+      capacity: Number(editingRoom.capacity) || 45,
+    });
+    if (ok) setEditingRoom(null);
+  };
+
+  const handleDeleteRoom = async (room: Room) => {
+    await deleteBackendRoom(room.id);
   };
 
   const handleExport = () => {
@@ -130,10 +166,12 @@ export const InventarisRuangPage: React.FC = () => {
               Total Ruang Terdata
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold text-slate-800">28</span>
+              <span className="text-2xl font-bold text-slate-800">{rooms.length}</span>
               <span className="text-xs text-slate-500">Ruang</span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">20 Teori • 8 Laboratorium</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {backendStatus === 'connected' ? 'Sinkron Database MySQL' : 'Mode Offline'}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
             <Boxes className="w-5 h-5" />
@@ -146,10 +184,14 @@ export const InventarisRuangPage: React.FC = () => {
               Total Kapasitas Duduk
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold text-slate-800">1,540</span>
+              <span className="text-2xl font-bold text-slate-800">
+                {rooms.reduce((acc, r) => acc + r.capacity, 0).toLocaleString('id-ID')}
+              </span>
               <span className="text-xs text-slate-500">Kursi</span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Rata-rata 55 kursi per ruang</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Rata-rata {rooms.length ? Math.round(rooms.reduce((acc, r) => acc + r.capacity, 0) / rooms.length) : 0} kursi/ruang
+            </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
             <Armchair className="w-5 h-5" />
@@ -159,15 +201,17 @@ export const InventarisRuangPage: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-              Kesiapan Fasilitas
+              Ruang Gedung H
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold text-emerald-600">96.4%</span>
+              <span className="text-2xl font-bold text-emerald-600">
+                {rooms.filter((r) => r.building.includes('H')).length}
+              </span>
               <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                Operasional
+                Ruang H
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">AC Sentral, LCD & Audio Teruji</p>
+            <p className="text-xs text-slate-400 mt-1">Lantai 1 &amp; Lantai 2</p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <CheckCircle2 className="w-5 h-5" />
@@ -177,13 +221,15 @@ export const InventarisRuangPage: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-              Ramah Disabilitas
+              Ruang Gedung G
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold text-blue-700">18</span>
-              <span className="text-xs text-slate-500">Ruang</span>
+              <span className="text-2xl font-bold text-blue-700">
+                {rooms.filter((r) => r.building.includes('G')).length}
+              </span>
+              <span className="text-xs text-slate-500">Ruang G</span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Lantai 1 & Lift Ready FTI</p>
+            <p className="text-xs text-slate-400 mt-1">Kapasitas Menengah &amp; Besar</p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
             <Accessibility className="w-5 h-5" />
@@ -221,9 +267,9 @@ export const InventarisRuangPage: React.FC = () => {
             }}
             className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="Semua">Semua Gedung (FTI, GKB)</option>
-            <option value="Gedung FTI">Gedung FTI Utama</option>
-            <option value="GKB">GKB Bersama</option>
+            <option value="Semua">Semua Gedung (H &amp; G)</option>
+            <option value="Gedung H">Gedung H</option>
+            <option value="Gedung G">Gedung G</option>
           </select>
 
           <select
@@ -355,18 +401,25 @@ export const InventarisRuangPage: React.FC = () => {
                   className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 py-1 px-2 rounded hover:bg-blue-50 transition-colors"
                 >
                   <Compass className="w-3.5 h-3.5" />
-                  <span>Navigasi Rute</span>
+                  <span>Navigasi</span>
                 </button>
 
-                <button
-                  onClick={() => {
-                    showToast(`Membuka kalender reservasi & spesifikasi mendalam ${room.code} (${room.name})`, 'info');
-                  }}
-                  className="flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-900 py-1 px-2 rounded hover:bg-slate-200/60 transition-colors"
-                >
-                  <span>Lihat Detail & Kalender</span>
-                  <span>→</span>
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setEditingRoom({ ...room })}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-blue-700 py-1 px-2 rounded hover:bg-blue-50 transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    onClick={() => void handleDeleteRoom(room)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700 py-1 px-2 rounded hover:bg-rose-50 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus</span>
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -488,7 +541,7 @@ export const InventarisRuangPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Gedung
@@ -498,9 +551,8 @@ export const InventarisRuangPage: React.FC = () => {
                     onChange={(e) => setNewRoom({ ...newRoom, building: e.target.value })}
                     className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="Gedung FTI">Gedung FTI</option>
-                    <option value="GKB Bersama">GKB Bersama</option>
-                    <option value="Gedung Dekanat">Gedung Dekanat</option>
+                    <option value="Gedung H">Gedung H</option>
+                    <option value="Gedung G">Gedung G</option>
                   </select>
                 </div>
                 <div>
@@ -519,37 +571,6 @@ export const InventarisRuangPage: React.FC = () => {
                     <option value={3}>Lantai 3</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Tipe Ruang
-                  </label>
-                  <select
-                    value={newRoom.type}
-                    onChange={(e) =>
-                      setNewRoom({ ...newRoom, type: e.target.value as any })
-                    }
-                    className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="Teori">Teori</option>
-                    <option value="Laboratorium">Laboratorium</option>
-                    <option value="Seminar">Seminar</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="chkAccess"
-                  checked={newRoom.isAccessible}
-                  onChange={(e) =>
-                    setNewRoom({ ...newRoom, isAccessible: e.target.checked })
-                  }
-                  className="rounded text-blue-600 focus:ring-blue-500"
-                />
-                <label htmlFor="chkAccess" className="text-xs text-slate-700">
-                  Fasilitas Ramah Disabilitas (Lantai 1 / Tersedia Ramp / Akses Lift)
-                </label>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -565,6 +586,89 @@ export const InventarisRuangPage: React.FC = () => {
                   className="px-4 py-2 text-xs font-semibold text-white bg-blue-700 rounded-lg hover:bg-blue-800 shadow-sm transition-colors"
                 >
                   Simpan Ruangan Baru
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Ruang */}
+      {editingRoom && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-slate-200">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-800">Edit Ruang: {editingRoom.code}</h3>
+              <button onClick={() => setEditingRoom(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEditRoom} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Kode Ruang</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingRoom.code}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, code: e.target.value })}
+                    className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Kapasitas</label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={300}
+                    required
+                    value={editingRoom.capacity}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, capacity: Number(e.target.value) })}
+                    className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Nama Ruang</label>
+                <input
+                  type="text"
+                  required
+                  value={editingRoom.name}
+                  onChange={(e) => setEditingRoom({ ...editingRoom, name: e.target.value })}
+                  className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Gedung</label>
+                  <select
+                    value={editingRoom.building}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, building: e.target.value })}
+                    className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-lg"
+                  >
+                    <option value="Gedung H">Gedung H</option>
+                    <option value="Gedung G">Gedung G</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Lantai</label>
+                  <select
+                    value={editingRoom.floor}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, floor: Number(e.target.value) })}
+                    className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-lg"
+                  >
+                    <option value={1}>Lantai 1</option>
+                    <option value={2}>Lantai 2</option>
+                    <option value={3}>Lantai 3</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingRoom(null)} className="px-3.5 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">
+                  Batal
+                </button>
+                <button type="submit" className="px-4 py-2 text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 rounded-lg">
+                  Simpan Perubahan
                 </button>
               </div>
             </form>
